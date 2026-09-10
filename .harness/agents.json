@@ -1,0 +1,25 @@
+{
+  "$schema": "https://example.invalid/vue-harness/agents.schema.json",
+  "providers": {
+    "claude": {
+      "command": "node",
+      "args": ["scripts/harness/claude-adapter.mjs"]
+    }
+  },
+  "planner": {
+    "mode": "external",
+    "provider": "claude"
+  },
+  "coder": {
+    "mode": "external",
+    "provider": "claude"
+  },
+  "tester": {
+    "mode": "external",
+    "provider": "claude"
+  },
+  "reviewer": {
+    "mode": "external",
+    "provider": "claude"
+  }
+}

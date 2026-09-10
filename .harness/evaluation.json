@@ -1,0 +1,11 @@
+{
+  "$schema": "https://example.invalid/vue-harness/evaluation.schema.json",
+  "passThreshold": 80,
+  "gates": [
+    { "id": "contract", "description": "Input and output contracts are satisfied.", "required": true },
+    { "id": "type-check", "description": "Vue and TypeScript checks pass.", "required": true },
+    { "id": "build", "description": "The production build passes.", "required": true },
+    { "id": "scope", "description": "Changes stay within the requested scope.", "required": true },
+    { "id": "review", "description": "A reviewer finds no high-confidence defects.", "required": true }
+  ]
+}

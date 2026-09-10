@@ -1,0 +1,22 @@
+name: Harness verification
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run harness:verify
+      - run: npm run type-check
+      - run: npm run test:unit
+      - run: npm run build
