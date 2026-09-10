@@ -1,4 +1,4 @@
-# Vue Harness Demo
+# Pedyc-Harness：我的harness工程实践
 
 这是一个 Vue 3 + TypeScript + Vite 的 Agent Harness 示例项目，目标是让 LLM
 能够按照输入契约、执行策略和质量门禁，自主完成“计划 → 实现 → 验证 → 审查”的任务闭环。
