@@ -1,14 +1,18 @@
 {
-  "name": "vue-harness-demo",
+  "name": "pedyc-harness",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
+  "packageManager": "pnpm@10.15.0",
+  "bin": {
+    "pedyc-harness": "scripts/harness/cli.mjs"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
     "type-check": "vue-tsc --noEmit",
-    "harness:verify": "node .github/harness/verify-config.mjs",
-    "harness:run": "node scripts/harness/run.mjs",
+    "harness:verify": "node scripts/harness/cli.mjs verify",
+    "harness:run": "node scripts/harness/cli.mjs run",
     "test:unit": "vitest run"
   },
   "devDependencies": {

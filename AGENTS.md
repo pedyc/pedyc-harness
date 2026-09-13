@@ -26,16 +26,19 @@ Do not place agent orchestration, schemas, or harness runtime code in `src/`.
 Run these commands after product or harness changes:
 
 ```bash
-npm run harness:verify
-npm run type-check
-npm run build
+pnpm run harness:verify
+pnpm run type-check
+pnpm run build
 ```
 
 To run the orchestrator in a safe preview mode:
 
 ```bash
-npm run harness:run -- --input .harness/task.example.json --dry-run --json
+pnpm run harness:run -- --input .harness/task.example.json --dry-run --json
 ```
+
+This repository uses pnpm `10.15.0`, declared in `package.json`. Target projects generated
+by the CLI may use npm, pnpm, or yarn.
 
 The default coder adapter is intentionally external. Configure
 `.harness/agents.json` with a command that accepts one JSON payload on stdin

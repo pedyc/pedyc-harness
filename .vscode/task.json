@@ -1,0 +1,17 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Harness: verify",
+      "type": "shell",
+      "command": "npm run harness:verify",
+      "problemMatcher": []
+    },
+    {
+      "label": "Harness: dry run",
+      "type": "shell",
+      "command": "npm run harness:run -- --input .harness/task.example.json --dry-run --json",
+      "problemMatcher": []
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
-const defaultChecks = ['npm run harness:verify', 'npm run type-check', 'npm run test:unit', 'npm run build']
+const defaultChecks = ['pnpm run harness:verify', 'pnpm run type-check', 'pnpm run test:unit', 'pnpm run build']
 
 export const normalizeTask = (task) => {
   const normalized = {

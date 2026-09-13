@@ -1,5 +1,5 @@
 {
-  "$schema": "https://example.invalid/vue-harness/evaluation.schema.json",
+  "$schema": "https://pedyc.dev/harness/evaluation.schema.json",
   "passThreshold": 80,
   "gates": [
     { "id": "contract", "description": "Input and output contracts are satisfied.", "required": true },

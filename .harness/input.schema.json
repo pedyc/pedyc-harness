@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.invalid/vue-harness/input.schema.json",
+  "$id": "https://pedyc.dev/harness/input.schema.json",
   "title": "Harness task input",
   "type": "object",
   "additionalProperties": false,

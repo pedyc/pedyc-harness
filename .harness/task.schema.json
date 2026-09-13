@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.invalid/vue-harness/task.schema.json",
+  "$id": "https://pedyc.dev/harness/task.schema.json",
   "title": "Human task intake",
   "type": "object",
   "additionalProperties": false,

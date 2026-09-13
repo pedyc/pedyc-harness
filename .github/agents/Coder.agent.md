@@ -11,6 +11,6 @@ Rules:
 - Modify product code only under `src/` unless the task explicitly changes configuration.
 - Follow `.github/instructions/copilot-instructions.md`.
 - Implement the smallest complete change that satisfies every acceptance criterion.
-- Do not claim completion until `npm run type-check` and `npm run build` pass.
+- Do not claim completion until `pnpm run type-check` and `pnpm run build` pass.
 - If verification fails, diagnose the failure, fix the code, and rerun verification.
 - Report changed files, verification commands, and any remaining risks.
