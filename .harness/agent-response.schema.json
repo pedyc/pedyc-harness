@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.invalid/vue-harness/agent-response.schema.json",
+  "$id": "https://pedyc.dev/harness/agent-response.schema.json",
   "title": "Harness agent response",
   "type": "object",
   "additionalProperties": true,

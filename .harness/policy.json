@@ -1,5 +1,5 @@
 {
-  "$schema": "https://example.invalid/vue-harness/policy.schema.json",
+  "$schema": "https://pedyc.dev/harness/policy.schema.json",
   "maxIterations": 3,
   "protectedPaths": [".github/", ".claude/", ".agents/", ".harness/", "scripts/"],
   "requiredChecks": ["harness:verify", "type-check", "test:unit", "build"],

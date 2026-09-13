@@ -118,6 +118,24 @@
 | `.github/` | GitHub Agent、Instructions、CI 和配置校验 |
 | `.agents/skills/` | 可复用的任务技能 |
 | `.harness/` | 输入/输出契约、策略、评估、Agent 配置和运行记录 |
+
+## 通用化与 npm CLI
+
+本项目现在同时提供可复用的 CLI 入口。安装到其他项目后，可以使用：
+
+```bash
+npm install --save-dev pedyc-harness
+npx pedyc-harness init --preset generic
+npx pedyc-harness verify
+npx pedyc-harness run --input .harness/task.json --dry-run --json
+```
+
+`generic` Preset 只生成通用契约和安全策略；`vue` Preset 额外生成 Vue 约束。运行时通过
+`--root` 将 Harness 指向目标项目，Provider 和项目规则仍保存在目标项目中并纳入版本控制。
+详细设计见 [`docs/`](D:/Workspace/pedyc/pedyc-harness/docs)。
+
+本仓库使用 pnpm 管理依赖，目标项目仍兼容 npm、pnpm 和 yarn。Harness Runtime 会根据
+锁文件选择验证命令对应的包管理器。
 | `scripts/harness/` | Harness 编排器和 Provider Adapter |
 | `.claude/` | Claude Code 入口和权限相关配置 |
 | `tests/` | 产品组件和 Harness 配置测试 |

@@ -15,15 +15,15 @@ Agent 规则、技能、契约和验证入口分别位于：
 复杂任务必须遵循 Planner → Coder → Tester → Reviewer，并通过：
 
 ```bash
-npm run harness:verify
-npm run type-check
-npm run build
+pnpm run harness:verify
+pnpm run type-check
+pnpm run build
 ```
 
 安全预览编排器：
 
 ```bash
-npm run harness:run -- --input .harness/task.example.json --dry-run --json
+pnpm run harness:run -- --input .harness/task.example.json --dry-run --json
 ```
 
 非 dry-run 模式需要在 `.harness/agents.json` 配置 Coder 外部适配器。

@@ -1,5 +1,9 @@
 import { existsSync, readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 
+const args = process.argv.slice(2)
+const rootIndex = args.indexOf('--root')
+const root = resolve(rootIndex >= 0 ? args[rootIndex + 1] ?? process.cwd() : process.cwd())
 const requiredFiles = [
   'AGENTS.md',
   '.github/AGENTS.md',
@@ -25,14 +29,14 @@ const requiredFiles = [
   '.vscode/task.json',
 ]
 
-const missingFiles = requiredFiles.filter((file) => !existsSync(file))
+const missingFiles = requiredFiles.filter((file) => !existsSync(resolve(root, file)))
 
 if (missingFiles.length > 0) {
   console.error(`Harness configuration is incomplete:\n${missingFiles.join('\n')}`)
   process.exit(1)
 }
 
-const instructions = readFileSync('.github/instructions/copilot-instructions.md', 'utf8')
+const instructions = readFileSync(resolve(root, '.github/instructions/copilot-instructions.md'), 'utf8')
 if (!instructions.includes('src/') || !instructions.includes('产品演示代码')) {
   console.error('Harness instructions must define the src/ product boundary.')
   process.exit(1)
@@ -49,15 +53,15 @@ const jsonFiles = [
 
 for (const file of jsonFiles) {
   try {
-    JSON.parse(readFileSync(file, 'utf8'))
+    JSON.parse(readFileSync(resolve(root, file), 'utf8'))
   } catch (error) {
     console.error(`Invalid JSON in ${file}: ${error instanceof Error ? error.message : 'unknown error'}`)
     process.exit(1)
   }
 }
 
-const policy = JSON.parse(readFileSync('.harness/policy.json', 'utf8'))
-const packageJson = JSON.parse(readFileSync('package.json', 'utf8'))
+const policy = JSON.parse(readFileSync(resolve(root, '.harness/policy.json'), 'utf8'))
+const packageJson = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'))
 const scripts = packageJson.scripts ?? {}
 const missingChecks = policy.requiredChecks.filter((check) => !scripts[check])
 
@@ -76,7 +80,7 @@ if (!Number.isInteger(policy.maxIterations) || policy.maxIterations < 1 || polic
   process.exit(1)
 }
 
-const agents = JSON.parse(readFileSync('.harness/agents.json', 'utf8'))
+const agents = JSON.parse(readFileSync(resolve(root, '.harness/agents.json'), 'utf8'))
 if (!agents.providers || typeof agents.providers !== 'object') {
   console.error('Harness agents must define a providers object.')
   process.exit(1)
@@ -100,7 +104,7 @@ for (const name of ['planner', 'coder', 'tester', 'reviewer']) {
 
 const agentFiles = requiredFiles.filter((file) => file.endsWith('.agent.md'))
 for (const file of agentFiles) {
-  const content = readFileSync(file, 'utf8')
+  const content = readFileSync(resolve(root, file), 'utf8')
   for (const field of ['name:', 'description:', 'tools:']) {
     if (!content.includes(field)) {
       console.error(`${file} is missing frontmatter field ${field}`)

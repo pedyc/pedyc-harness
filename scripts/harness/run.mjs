@@ -5,14 +5,16 @@ import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { normalizeTask, readTaskFile } from './intake.mjs'
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const args = process.argv.slice(2)
 const readArg = (name, fallback = null) => {
   const index = args.indexOf(name)
   return index >= 0 ? args[index + 1] ?? fallback : fallback
 }
+const root = resolve(readArg('--root', process.cwd()))
 const hasFlag = (name) => args.includes(name)
-const positionalInput = args.find((arg) => !arg.startsWith('-'))
+const positionalInput = args.find((arg, index) =>
+  !arg.startsWith('-') && args[index - 1] !== '--root' && args[index - 1] !== '--input',
+)
 const inputPath = resolve(root, readArg('--input', positionalInput ?? '.harness/task.json'))
 const taskPath = readArg('--task')
 const prompt = readArg('--prompt')
@@ -110,6 +112,17 @@ const normalizeCommand = (command) => {
     return `${command}.cmd`
   }
   return command
+}
+
+const detectPackageManager = () => {
+  if (existsSync(join(root, 'pnpm-lock.yaml'))) return { command: 'pnpm', args: ['run'] }
+  if (existsSync(join(root, 'yarn.lock'))) return { command: 'yarn', args: [] }
+  return { command: 'npm', args: ['run'] }
+}
+
+const runPackageScript = (script) => {
+  const packageManager = detectPackageManager()
+  return runCommand(packageManager.command, [...packageManager.args, script])
 }
 
 const runCommand = (command, commandArgs = [], stdin = null) => new Promise((resolvePromise) => {
@@ -252,9 +265,10 @@ for (let iteration = 1; iteration <= maxIterations && issues.length === 0; itera
   recordPhase('tester', 'running', 'Running required verification gates.', iteration)
   const verification = []
   for (const script of policy.requiredChecks) {
-    const commandResult = await runCommand(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', script])
+    const packageManager = detectPackageManager()
+    const commandResult = await runPackageScript(script)
     verification.push({
-      command: `npm run ${script}`,
+      command: `${packageManager.command} ${packageManager.args.join(' ')} ${script}`.trim(),
       result: commandResult.code === 0 ? 'pass' : 'fail',
       details: commandResult.code === 0 ? 'Command completed successfully.' : commandResult.stderr.trim() || 'Command failed.',
     })
@@ -279,6 +293,12 @@ for (let iteration = 1; iteration <= maxIterations && issues.length === 0; itera
     break
   }
   if (!testerOk) continue
+
+  if (dryRun) {
+    recordPhase('reviewer', 'passed', 'Dry run: reviewer execution skipped because no product files were changed.', iteration)
+    completed = true
+    break
+  }
 
   recordPhase('reviewer', 'running', 'Checking scope, output contract, and acceptance criteria.', iteration)
   const outOfScopeChanges = fileChanges.filter(({ file }) =>
