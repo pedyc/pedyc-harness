@@ -25,6 +25,14 @@ Preset
 └── generic, vue, react, node, python, or a project-owned preset
 ```
 
+## 包边界
+
+仓库使用 pnpm workspace 管理可发布包：
+
+- `packages/core`：`@pedyc/harness-core`，提供 Runtime 可复用的 Node API。
+- `packages/cli`：`pedyc-harness`，提供 CLI 发布入口并依赖 Core。
+- 根目录：Vue 示例和集成测试宿主，短期保留兼容脚本。
+
 ## 运行时边界
 
 `scripts/harness/run.mjs` 使用 `--root` 或当前工作目录作为目标项目根目录，不依赖

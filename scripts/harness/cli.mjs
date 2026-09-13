@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import { detectPackageManager } from './package-manager.mjs'
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const projectRoot = resolve(process.cwd())
@@ -61,6 +62,13 @@ const writeJson = (path, value) => {
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
 }
 
+const writeIfMissing = (path, content, force) => {
+  if (!force && existsSync(path)) return false
+  mkdirSync(dirname(path), { recursive: true })
+  writeFileSync(path, content, 'utf8')
+  return true
+}
+
 const run = (script, scriptArgs = []) => {
   const result = spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', script, ...scriptArgs], {
     cwd: projectRoot,
@@ -78,18 +86,21 @@ const init = () => {
     process.exit(1)
   }
   const harnessRoot = join(projectRoot, '.harness')
+  const force = args.includes('--force')
   mkdirSync(harnessRoot, { recursive: true })
-  writeJson(join(harnessRoot, 'policy.json'), preset.policy)
-  writeJson(join(harnessRoot, 'agents.json'), preset.agents)
+  const writePresetJson = (name, value) => {
+    const path = join(harnessRoot, name)
+    if (force || !existsSync(path)) writeJson(path, value)
+  }
+  writePresetJson('policy.json', preset.policy)
+  writePresetJson('agents.json', preset.agents)
   for (const schema of schemas) {
     const source = join(packageRoot, '.harness', schema)
-    writeFileSync(join(harnessRoot, schema), readFileSync(source, 'utf8'), 'utf8')
+    writeIfMissing(join(harnessRoot, schema), readFileSync(source, 'utf8'), force)
   }
   const instructionPath = join(projectRoot, 'AGENTS.md')
-  if (!existsSync(instructionPath) || args.includes('--force')) {
-    writeFileSync(instructionPath, preset.instruction, 'utf8')
-  }
-  console.log(`Initialized pedyc-harness with the '${presetName}' preset in ${projectRoot}`)
+  writeIfMissing(instructionPath, preset.instruction, force)
+  console.log(`Initialized pedyc-harness with the '${presetName}' preset in ${projectRoot}${force ? ' (forced)' : ''}`)
 }
 
 const verify = () => {
@@ -142,8 +153,10 @@ else if (command === 'run') {
   })
   process.exit(result.status ?? 1)
 } else if (command === 'doctor') {
+  const packageManager = detectPackageManager(projectRoot)
   console.log(`Project root: ${projectRoot}`)
   console.log(`Configuration: ${existsSync(join(projectRoot, '.harness')) ? 'found' : 'missing (.harness)'}`)
+  console.log(`Package manager: ${packageManager.name}`)
   console.log(`Node.js: ${process.version}`)
 } else {
   console.log('Usage: pedyc-harness <init|verify|run|doctor> [options]')

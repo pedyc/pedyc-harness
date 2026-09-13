@@ -1,9 +1,11 @@
-import Ajv2020 from 'ajv/dist/2020.js'
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
-import { spawn } from 'node:child_process'
-import { fileURLToPath } from 'node:url'
 import { normalizeTask, readTaskFile } from './intake.mjs'
+import { detectPackageManager } from './package-manager.mjs'
+import { runCommand } from '@pedyc/harness-core/command'
+import { changedFiles, snapshotFiles } from '@pedyc/harness-core/snapshots'
+import { loadSchemas, createValidators, validationDetails } from '@pedyc/harness-core/schema'
+import { parseAgentResponse, validateStageResponse } from '@pedyc/harness-core/agent'
 
 const args = process.argv.slice(2)
 const readArg = (name, fallback = null) => {
@@ -49,15 +51,9 @@ const emit = (result) => {
   if (jsonOnly || !outputPath) process.stdout.write(serialized)
 }
 
-const inputSchema = readJson(join(root, '.harness/input.schema.json'))
-const outputSchema = readJson(join(root, '.harness/output.schema.json'))
-const agentResponseSchema = readJson(join(root, '.harness/agent-response.schema.json'))
+const validators = createValidators(loadSchemas(root))
 const policy = readJson(join(root, '.harness/policy.json'))
 const agents = readJson(join(root, '.harness/agents.json'))
-const ajv = new Ajv2020({ allErrors: true, strict: false })
-const validateInput = ajv.compile(inputSchema)
-const validateOutput = ajv.compile(outputSchema)
-const validateAgentResponse = ajv.compile(agentResponseSchema)
 
 if (taskPath && !existsSync(resolve(root, taskPath))) {
   emit(fail(`Human task was not found: ${taskPath}`, 'intake'))
@@ -85,8 +81,8 @@ try {
   process.exit(1)
 }
 
-if (!validateInput(input)) {
-  emit(fail(`Task input violates input.schema.json: ${ajv.errorsText(validateInput.errors)}`))
+if (!validators.input(input)) {
+  emit(fail(`Task input violates input.schema.json: ${validationDetails(validators.ajv, validators.input)}`))
   process.exit(1)
 }
 
@@ -103,85 +99,9 @@ const implementationPlan = [
   'Run configured verification gates and review the result before reporting completion.',
 ]
 
-const normalizeCommand = (command) => {
-  if (
-    process.platform === 'win32'
-    && ['npm', 'npx', 'pnpm', 'yarn'].includes(command)
-    && !command.endsWith('.cmd')
-  ) {
-    return `${command}.cmd`
-  }
-  return command
-}
-
-const detectPackageManager = () => {
-  if (existsSync(join(root, 'pnpm-lock.yaml'))) return { command: 'pnpm', args: ['run'] }
-  if (existsSync(join(root, 'yarn.lock'))) return { command: 'yarn', args: [] }
-  return { command: 'npm', args: ['run'] }
-}
-
 const runPackageScript = (script) => {
-  const packageManager = detectPackageManager()
-  return runCommand(packageManager.command, [...packageManager.args, script])
-}
-
-const runCommand = (command, commandArgs = [], stdin = null) => new Promise((resolvePromise) => {
-  const child = spawn(normalizeCommand(command), commandArgs, {
-    cwd: root,
-    shell: process.platform === 'win32',
-    windowsHide: true,
-  })
-  let stdout = ''
-  let stderr = ''
-  child.stdout.on('data', (chunk) => { stdout += chunk })
-  child.stderr.on('data', (chunk) => { stderr += chunk })
-  child.on('close', (code) => resolvePromise({ code: code ?? 1, stdout, stderr }))
-  child.on('error', (error) => resolvePromise({ code: 1, stdout, stderr: error.message }))
-  if (stdin !== null) child.stdin.write(`${JSON.stringify(stdin)}\n`)
-  child.stdin.end()
-})
-
-const listFiles = (directory, result = []) => {
-  if (!existsSync(directory)) return result
-  for (const entry of readdirSync(directory)) {
-    if (directory === root && ['node_modules', 'dist', '.git'].includes(entry)) continue
-    const path = join(directory, entry)
-    if (statSync(path).isDirectory()) listFiles(path, result)
-    else result.push(relative(root, path).replaceAll('\\', '/'))
-  }
-  return result
-}
-
-const snapshotFiles = () => new Map(
-  listFiles(root).map((file) => [file, readFileSync(join(root, file), 'utf8')]),
-)
-
-const parseAgentResponse = (name, stdout) => {
-  const trimmed = stdout.trim()
-  if (!trimmed) return { ok: true, details: `${name} completed without a response payload.`, payload: {} }
-  try {
-    const payload = JSON.parse(trimmed)
-    if (!validateAgentResponse(payload)) {
-      return { ok: false, details: `${name} returned an invalid response: ${ajv.errorsText(validateAgentResponse.errors)}`, payload: {} }
-    }
-    return { ok: true, details: payload.details ?? `${name} returned a structured response.`, payload }
-  } catch {
-    return { ok: false, details: `${name} must return one JSON object on stdout.`, payload: {} }
-  }
-}
-
-const validateStageResponse = (name, payload) => {
-  if (name === 'planner' && (!Array.isArray(payload.implementationPlan) || payload.implementationPlan.length === 0)) {
-    return 'planner must return a non-empty implementationPlan.'
-  }
-  if (name === 'tester') {
-    if (typeof payload.approved !== 'boolean') return 'tester must return a boolean approved field.'
-    if (!Array.isArray(payload.evidence) || payload.evidence.length === 0) return 'tester must return non-empty evidence.'
-  }
-  if (name === 'reviewer' && typeof payload.approved !== 'boolean') {
-    return 'reviewer must return a boolean approved field.'
-  }
-  return null
+  const packageManager = detectPackageManager(root)
+  return runCommand(root, packageManager.command, [...packageManager.args, script])
 }
 
 const runAgent = async (name, payload) => {
@@ -199,11 +119,11 @@ const runAgent = async (name, payload) => {
   if (policy.allowedAgentCommands?.length && !policy.allowedAgentCommands.includes(provider.command)) {
     return { ok: false, details: `${name} provider command is not in policy.allowedAgentCommands.`, payload: {} }
   }
-  const result = await runCommand(provider.command, provider.args, { ...payload, provider: config.provider })
+  const result = await runCommand(root, provider.command, provider.args, { ...payload, provider: config.provider })
   if (result.code !== 0) {
     return { ok: false, details: result.stderr.trim() || `${name} exited with code ${result.code}.`, payload: {} }
   }
-  const response = parseAgentResponse(name, result.stdout)
+  const response = parseAgentResponse(name, result.stdout, validators.agentResponse, validators.ajv)
   if (!response.ok) return response
   const stageError = validateStageResponse(name, response.payload)
   return stageError
@@ -237,7 +157,7 @@ let lastVerification = []
 let completed = false
 
 for (let iteration = 1; iteration <= maxIterations && issues.length === 0; iteration += 1) {
-  const before = snapshotFiles()
+  const before = snapshotFiles(root)
   recordPhase('coder', 'running', 'Applying the approved implementation plan.', iteration)
   const coder = dryRun
     ? { ok: true, details: 'Dry run: coder execution skipped; no product files were changed.', payload: {} }
@@ -250,12 +170,9 @@ for (let iteration = 1; iteration <= maxIterations && issues.length === 0; itera
       })
   phases[phases.length - 1] = { name: 'coder', iteration, status: coder.ok ? 'passed' : 'failed', details: coder.details }
 
-  const after = snapshotFiles()
-  const changedFiles = new Set([...before.keys(), ...after.keys()])
-  for (const file of changedFiles) {
-    if (!before.has(file) || !after.has(file) || before.get(file) !== after.get(file)) {
+  const after = snapshotFiles(root)
+  for (const file of changedFiles(before, after)) {
       fileChanges.push({ file, change: `Changed during coder iteration ${iteration}.` })
-    }
   }
   if (!coder.ok) {
     issues.push(coder.details)
@@ -265,7 +182,7 @@ for (let iteration = 1; iteration <= maxIterations && issues.length === 0; itera
   recordPhase('tester', 'running', 'Running required verification gates.', iteration)
   const verification = []
   for (const script of policy.requiredChecks) {
-    const packageManager = detectPackageManager()
+    const packageManager = detectPackageManager(root)
     const commandResult = await runPackageScript(script)
     verification.push({
       command: `${packageManager.command} ${packageManager.args.join(' ')} ${script}`.trim(),
@@ -352,8 +269,8 @@ const result = {
   dryRun,
 }
 
-if (!validateOutput(result)) {
-  emit(fail(`Harness output violates output.schema.json: ${ajv.errorsText(validateOutput.errors)}`, 'output'))
+if (!validators.output(result)) {
+  emit(fail(`Harness output violates output.schema.json: ${validationDetails(validators.ajv, validators.output)}`, 'output'))
   process.exit(1)
 }
 

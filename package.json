@@ -1,9 +1,12 @@
 {
-  "name": "pedyc-harness",
+  "name": "pedyc-harness-workspace",
   "private": true,
   "version": "1.0.0",
   "type": "module",
   "packageManager": "pnpm@10.15.0",
+  "workspaces": [
+    "packages/*"
+  ],
   "bin": {
     "pedyc-harness": "scripts/harness/cli.mjs"
   },
@@ -25,6 +28,8 @@
   },
   "dependencies": {
     "@vitejs/plugin-vue": "^6.0.8",
+    "@pedyc/harness-core": "workspace:*",
+    "pedyc-harness": "workspace:*",
     "ajv": "^8.20.0",
     "vue": "^3.5.42"
   }

@@ -8,6 +8,20 @@
 4. 将 generic 与 Vue 的差异放入 Preset 初始化模板。
 5. 将架构、Provider、Preset 和 CLI 设计记录在 `docs/`。
 
+## 拆包第一阶段
+
+当前仓库已启用 pnpm workspace，并建立两个包边界：
+
+```text
+packages/
+├── core/   @pedyc/harness-core：Runtime 可复用的包管理器和命令原语
+└── cli/    pedyc-harness：CLI 发布入口，当前兼容调用旧入口
+```
+
+根目录 Vue Demo 暂时保留作为集成宿主。`scripts/harness/package-manager.mjs` 通过
+workspace 导出复用 Core，确保现有 Harness 流程与新包使用相同实现。下一步应将
+`run.mjs` 的 Schema、Policy、Provider 和执行流程逐步迁入 Core，再移除兼容入口。
+
 ## 后续阶段
 
 ### 第二阶段：抽出独立 Core
