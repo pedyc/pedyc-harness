@@ -4,6 +4,7 @@ import { dirname, join, resolve } from 'node:path'
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { detectPackageManager } from '../../scripts/harness/package-manager.mjs'
+import { availablePresets, getPreset } from '../../packages/cli/src/presets.mjs'
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const cliPath = join(projectRoot, 'scripts/harness/cli.mjs')
@@ -42,6 +43,26 @@ describe('pedyc-harness CLI', () => {
     const result = await runCli(root, 'init', '--preset', 'generic', '--force')
     expect(result.code).toBe(0)
     expect(await readFile(policyPath, 'utf8')).toContain('"allowedProductPaths"')
+  })
+
+  it('initializes the Vue preset with Vue-specific checks and instructions', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'pedyc-harness-vue-'))
+    await writeFile(join(root, 'package.json'), '{}')
+
+    const result = await runCli(root, 'init', '--preset', 'vue')
+
+    expect(result.code).toBe(0)
+    expect(await readFile(join(root, '.harness/policy.json'), 'utf8')).toContain('"type-check"')
+    expect(await readFile(join(root, 'AGENTS.md'), 'utf8')).toContain('Vue 3')
+  })
+})
+
+describe('preset registry', () => {
+  it('exposes independent generic and Vue presets', () => {
+    expect(availablePresets()).toEqual(['generic', 'vue'])
+    expect(getPreset('generic').name).toBe('generic')
+    expect(getPreset('vue').name).toBe('vue')
+    expect(getPreset('unknown')).toBeUndefined()
   })
 })
 

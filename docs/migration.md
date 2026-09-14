@@ -36,8 +36,8 @@ Schema、Policy、Provider、文件边界和 Planner/Coder/Tester/Reviewer 编�
 
 ### 第四阶段：增加 Preset 包
 
-在 React、Node、Python 等 Preset 有实际需求后，再发布独立 Preset 包。每个 Preset
-应通过同一配置和模板接口接入，不复制 Runtime。
+generic 和 Vue Preset 已拆为独立 workspace 包，并通过 CLI Preset Registry 接入。
+后续 React、Node、Python 等 Preset 应通过同一配置和模板接口接入，不复制 Runtime。
 
 ## 兼容性原则
 

@@ -1,0 +1,15 @@
+{
+  "name": "@pedyc/harness-preset-vue",
+  "version": "1.0.0",
+  "description": "Vue project preset for pedyc-harness",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.mjs"
+  },
+  "files": [
+    "src"
+  ],
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -11,6 +11,12 @@ importers:
       '@pedyc/harness-core':
         specifier: workspace:*
         version: link:packages/core
+      '@pedyc/harness-preset-generic':
+        specifier: workspace:*
+        version: link:packages/preset-generic
+      '@pedyc/harness-preset-vue':
+        specifier: workspace:*
+        version: link:packages/preset-vue
       '@vitejs/plugin-vue':
         specifier: ^6.0.8
         version: 6.0.8(vite@8.3.0)(vue@3.5.42(typescript@6.0.3))
@@ -48,12 +54,22 @@ importers:
       '@pedyc/harness-core':
         specifier: workspace:*
         version: link:../core
+      '@pedyc/harness-preset-generic':
+        specifier: workspace:*
+        version: link:../preset-generic
+      '@pedyc/harness-preset-vue':
+        specifier: workspace:*
+        version: link:../preset-vue
 
   packages/core:
     dependencies:
       ajv:
         specifier: ^8.20.0
         version: 8.20.0
+
+  packages/preset-generic: {}
+
+  packages/preset-vue: {}
 
 packages:
 

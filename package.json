@@ -29,6 +29,8 @@
   "dependencies": {
     "@vitejs/plugin-vue": "^6.0.8",
     "@pedyc/harness-core": "workspace:*",
+    "@pedyc/harness-preset-generic": "workspace:*",
+    "@pedyc/harness-preset-vue": "workspace:*",
     "pedyc-harness": "workspace:*",
     "ajv": "^8.20.0",
     "vue": "^3.5.42"

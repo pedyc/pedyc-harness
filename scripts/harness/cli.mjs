@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import { availablePresets, getPreset } from 'pedyc-harness'
 import { detectPackageManager } from './package-manager.mjs'
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
@@ -13,47 +14,6 @@ const command = args[0] ?? 'help'
 const valueAfter = (name, fallback = null) => {
   const index = args.indexOf(name)
   return index >= 0 ? args[index + 1] ?? fallback : fallback
-}
-
-const templates = {
-  generic: {
-    policy: {
-      maxIterations: 3,
-      protectedPaths: ['.github/', '.claude/', '.agents/', '.harness/', 'scripts/'],
-      requiredChecks: [],
-      forbiddenCommands: ['git reset --hard', 'git checkout --', 'npm publish'],
-      allowedAgentCommands: [],
-      allowedProductPaths: ['src/'],
-      agentTimeoutMs: 300000,
-    },
-    agents: {
-      providers: {},
-      planner: { mode: 'internal' },
-      coder: { mode: 'external', provider: 'custom' },
-      tester: { mode: 'external', provider: 'custom' },
-      reviewer: { mode: 'external', provider: 'custom' },
-    },
-    instruction: '# Harness project instructions\n\nDefine project-specific rules here. Product changes must stay within the configured product paths.\n',
-  },
-  vue: {
-    policy: {
-      maxIterations: 3,
-      protectedPaths: ['.github/', '.claude/', '.agents/', '.harness/', 'scripts/'],
-      requiredChecks: ['harness:verify', 'type-check', 'test:unit', 'build'],
-      forbiddenCommands: ['git reset --hard', 'git checkout --', 'npm publish'],
-      allowedAgentCommands: [],
-      allowedProductPaths: ['src/'],
-      agentTimeoutMs: 300000,
-    },
-    agents: {
-      providers: { claude: { command: 'node', args: ['scripts/harness/claude-adapter.mjs'] } },
-      planner: { mode: 'external', provider: 'claude' },
-      coder: { mode: 'external', provider: 'claude' },
-      tester: { mode: 'external', provider: 'claude' },
-      reviewer: { mode: 'external', provider: 'claude' },
-    },
-    instruction: '# Harness project instructions\n\n- Use Vue 3 `<script setup lang="ts">`.\n- Keep product changes under `src/`.\n- Keep component props explicitly typed.\n',
-  },
 }
 
 const schemas = ['input.schema.json', 'output.schema.json', 'agent-response.schema.json']
@@ -80,9 +40,9 @@ const run = (script, scriptArgs = []) => {
 
 const init = () => {
   const presetName = valueAfter('--preset', 'generic')
-  const preset = templates[presetName]
+  const preset = getPreset(presetName)
   if (!preset) {
-    console.error(`Unknown preset '${presetName}'. Available presets: ${Object.keys(templates).join(', ')}`)
+    console.error(`Unknown preset '${presetName}'. Available presets: ${availablePresets().join(', ')}`)
     process.exit(1)
   }
   const harnessRoot = join(projectRoot, '.harness')

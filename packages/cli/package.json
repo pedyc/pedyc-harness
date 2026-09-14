@@ -10,7 +10,9 @@
     ".": "./src/index.mjs"
   },
   "dependencies": {
-    "@pedyc/harness-core": "workspace:*"
+    "@pedyc/harness-core": "workspace:*",
+    "@pedyc/harness-preset-generic": "workspace:*",
+    "@pedyc/harness-preset-vue": "workspace:*"
   },
   "engines": {
     "node": ">=20"
