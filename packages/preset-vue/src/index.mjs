@@ -1,5 +1,9 @@
 export const vuePreset = {
   name: 'vue',
+  detection: { requiredFiles: ['vite.config.ts'], requiredDependencies: ['vue'] },
+  defaultProductPaths: ['src/'],
+  verificationScripts: ['harness:verify', 'type-check', 'test:unit', 'build'],
+  skills: [],
   policy: {
     maxIterations: 3,
     protectedPaths: ['.github/', '.claude/', '.agents/', '.harness/', 'scripts/'],

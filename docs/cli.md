@@ -7,6 +7,8 @@ npx pedyc-harness init --preset generic
 npx pedyc-harness init --preset vue
 npx pedyc-harness verify
 npx pedyc-harness doctor
+npx pedyc-harness diff --preset generic
+npx pedyc-harness update --preset generic
 npx pedyc-harness run --input .harness/task.json --dry-run --json
 ```
 
@@ -24,6 +26,10 @@ npx pedyc-harness run --input .harness/task.json --dry-run --json
 ```bash
 npx pedyc-harness init --preset vue --force
 ```
+
+`diff` 比较当前项目与 Preset 的受管模板文件，输出 `missing`、`unchanged` 或
+`modified` 状态，不会修改文件。`update` 只补充缺失文件，并默认跳过已经修改的
+文件；传入 `--force` 才会覆盖已修改的模板。
 
 ## 发布建议
 

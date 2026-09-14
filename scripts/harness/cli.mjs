@@ -29,6 +29,55 @@ const writeIfMissing = (path, content, force) => {
   return true
 }
 
+const templateFiles = (preset) => {
+  const files = new Map([
+    ['.harness/policy.json', `${JSON.stringify(preset.policy, null, 2)}\n`],
+    ['.harness/agents.json', `${JSON.stringify(preset.agents, null, 2)}\n`],
+    ['AGENTS.md', preset.instruction],
+  ])
+  for (const schema of schemas) {
+    files.set(`.harness/${schema}`, readFileSync(join(packageRoot, '.harness', schema), 'utf8'))
+  }
+  return files
+}
+
+const resolvePreset = () => {
+  const presetName = valueAfter('--preset', 'generic')
+  const preset = getPreset(presetName)
+  if (!preset) {
+    console.error(`Unknown preset '${presetName}'. Available presets: ${availablePresets().join(', ')}`)
+    process.exit(1)
+  }
+  return preset
+}
+
+const printTemplateDiff = (preset) => {
+  const statuses = []
+  for (const [relativePath, expected] of templateFiles(preset)) {
+    const path = join(projectRoot, relativePath)
+    if (!existsSync(path)) statuses.push({ relativePath, status: 'missing' })
+    else if (readFileSync(path, 'utf8') === expected) statuses.push({ relativePath, status: 'unchanged' })
+    else statuses.push({ relativePath, status: 'modified' })
+  }
+  for (const { relativePath, status } of statuses) console.log(`${status}\t${relativePath}`)
+  return statuses
+}
+
+const syncTemplates = (preset, force) => {
+  const statuses = printTemplateDiff(preset)
+  let written = 0
+  for (const { relativePath, status } of statuses) {
+    if (status === 'unchanged' || (status === 'modified' && !force)) continue
+    const path = join(projectRoot, relativePath)
+    const content = templateFiles(preset).get(relativePath)
+    mkdirSync(dirname(path), { recursive: true })
+    writeFileSync(path, content, 'utf8')
+    written += 1
+  }
+  const skipped = statuses.filter(({ status }) => status === 'modified' && !force).length
+  console.log(`Updated ${written} template file(s); skipped ${skipped} modified file(s).`)
+}
+
 const run = (script, scriptArgs = []) => {
   const result = spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', script, ...scriptArgs], {
     cwd: projectRoot,
@@ -40,11 +89,7 @@ const run = (script, scriptArgs = []) => {
 
 const init = () => {
   const presetName = valueAfter('--preset', 'generic')
-  const preset = getPreset(presetName)
-  if (!preset) {
-    console.error(`Unknown preset '${presetName}'. Available presets: ${availablePresets().join(', ')}`)
-    process.exit(1)
-  }
+  const preset = resolvePreset()
   const harnessRoot = join(projectRoot, '.harness')
   const force = args.includes('--force')
   mkdirSync(harnessRoot, { recursive: true })
@@ -61,6 +106,16 @@ const init = () => {
   const instructionPath = join(projectRoot, 'AGENTS.md')
   writeIfMissing(instructionPath, preset.instruction, force)
   console.log(`Initialized pedyc-harness with the '${presetName}' preset in ${projectRoot}${force ? ' (forced)' : ''}`)
+}
+
+const diff = () => {
+  const preset = resolvePreset()
+  printTemplateDiff(preset)
+}
+
+const update = () => {
+  const preset = resolvePreset()
+  syncTemplates(preset, args.includes('--force'))
 }
 
 const verify = () => {
@@ -118,8 +173,14 @@ else if (command === 'run') {
   console.log(`Configuration: ${existsSync(join(projectRoot, '.harness')) ? 'found' : 'missing (.harness)'}`)
   console.log(`Package manager: ${packageManager.name}`)
   console.log(`Node.js: ${process.version}`)
+} else if (command === 'diff') {
+  diff()
+} else if (command === 'update') {
+  update()
 } else {
-  console.log('Usage: pedyc-harness <init|verify|run|doctor> [options]')
+  console.log('Usage: pedyc-harness <init|verify|run|doctor|diff|update> [options]')
   console.log('  init --preset generic|vue [--force]')
+  console.log('  diff --preset generic|vue')
+  console.log('  update --preset generic|vue [--force]')
   console.log('  run --input .harness/task.json [--dry-run] [--json]')
 }

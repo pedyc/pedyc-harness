@@ -37,7 +37,9 @@ Schema、Policy、Provider、文件边界和 Planner/Coder/Tester/Reviewer 编�
 ### 第四阶段：增加 Preset 包
 
 generic 和 Vue Preset 已拆为独立 workspace 包，并通过 CLI Preset Registry 接入。
-后续 React、Node、Python 等 Preset 应通过同一配置和模板接口接入，不复制 Runtime。
+`diff` 和 `update` 已支持受管模板的显式同步，默认不会覆盖项目对配置和说明文件的
+修改。后续 React、Node、Python 等 Preset 应通过同一配置和模板接口接入，不复制
+Runtime。
 
 ## 兼容性原则
 

@@ -13,6 +13,10 @@ Preset 是技术栈差异的载体，不负责实现任务编排。每个 Preset
 - `generic`：只生成通用契约和安全策略，适合非 Node 或自定义项目。
 - `vue`：增加 Vue 3、TypeScript 和 Vite 约定。
 
+当前 Preset 接口字段包括 `name`、`detection`、`defaultProductPaths`、
+`verificationScripts`、`policy`、`agents`、`instruction` 和 `skills`。CLI Registry
+负责发现 Preset，Core 不依赖任何具体技术栈。
+
 ```bash
 npx pedyc-harness init --preset generic
 npx pedyc-harness init --preset vue

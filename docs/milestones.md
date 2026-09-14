@@ -11,7 +11,7 @@
 | M1 | 建立通用 CLI 和项目初始化能力 | 已完成 |
 | M2 | 完成 pnpm workspace 与 Core/CLI 初步拆包 | 已完成 |
 | M3 | 将完整 Runtime 迁入 Core | 已完成 |
-| M4 | 完善 Preset 和项目生成模板 | 进行中 |
+| M4 | 完善 Preset 和项目生成模板 | 已完成 |
 | M5 | 建立外部项目样例和兼容性验证 | 计划中 |
 | M6 | 完成 npm 发布准备和 v1.0 发布 | 计划中 |
 
@@ -113,7 +113,7 @@ packages/
 - 现有 Vue 项目的四阶段 dry-run 结果与迁移前一致。
 - Core 测试覆盖输入失败、Provider 失败、越权变更和命令失败场景。
 
-## M4：Preset 和项目生成模板（进行中）
+## M4：Preset 和项目生成模板（已完成）
 
 ### 目标
 
@@ -124,9 +124,10 @@ packages/
 - 已将 generic Preset 和 Vue Preset 抽取为独立 workspace 包。
 - 已建立 CLI Preset Registry，CLI 不再硬编码技术栈规则。
 - 统一 Preset 接口：检测、默认路径、验证命令、Instructions 和 Skills。
-- 增加 `diff` 命令。
-- 增加 `update` 命令，并保留用户对配置的修改。
-- 完善 generic 项目的最小完整验证骨架。
+- 增加 `diff` 命令，报告受管模板文件状态。
+- 增加 `update` 命令，默认保留用户对配置的修改。
+- 支持 `update --force` 显式覆盖受管模板。
+- generic 和 Vue Preset 均有独立初始化与 Registry 测试。
 
 ### 验收标准
 
