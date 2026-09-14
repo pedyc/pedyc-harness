@@ -22,6 +22,22 @@ export const runOrchestrator = async ({
     `Implement the objective while satisfying ${input.acceptanceCriteria.length} acceptance criteria.`,
     'Run configured verification gates and review the result before reporting completion.',
   ]
+
+  if (dryRun) {
+    // A dry run is a safe preview: no Agent Provider is invoked, no verification
+    // gate is executed, and no product file can change. Report the same four
+    // phases so callers can consume the result with the regular output contract.
+    for (const [name, details] of [
+      ['planner', 'Dry run: planner execution skipped; no agent provider was invoked.'],
+      ['coder', 'Dry run: coder execution skipped; no product files were changed.'],
+      ['tester', 'Dry run: tester execution skipped; no verification gates were executed.'],
+      ['reviewer', 'Dry run: reviewer execution skipped; no product files were changed.'],
+    ]) {
+      phases.push({ name, iteration: 1, status: 'passed', details })
+    }
+    return { completed: true, implementationPlan, fileChanges, verification: [], issues, phases, iterations: 1 }
+  }
+
   const recordPhase = (name, status, details, iteration) => {
     const phase = { name, status, details }
     if (iteration) phase.iteration = iteration
@@ -42,9 +58,7 @@ export const runOrchestrator = async ({
   for (let iteration = 1; iteration <= maxIterations && issues.length === 0; iteration += 1) {
     const before = snapshot()
     recordPhase('coder', 'running', 'Applying the approved implementation plan.', iteration)
-    const coder = dryRun
-      ? { ok: true, details: 'Dry run: coder execution skipped; no product files were changed.', payload: {} }
-      : await runAgent('coder', { phase: 'coder', input, implementationPlan, iteration, previousVerification: lastVerification })
+    const coder = await runAgent('coder', { phase: 'coder', input, implementationPlan, iteration, previousVerification: lastVerification })
     phases[phases.length - 1] = { name: 'coder', iteration, status: coder.ok ? 'passed' : 'failed', details: coder.details }
 
     for (const file of changedFiles(before, snapshot())) {
@@ -76,12 +90,6 @@ export const runOrchestrator = async ({
       break
     }
     if (!testerOk) continue
-
-    if (dryRun) {
-      recordPhase('reviewer', 'passed', 'Dry run: reviewer execution skipped because no product files were changed.', iteration)
-      completed = true
-      break
-    }
 
     recordPhase('reviewer', 'running', 'Checking scope, output contract, and acceptance criteria.', iteration)
     const outOfScopeChanges = findOutOfScopeChanges(fileChanges.map(({ file }) => file), policy)

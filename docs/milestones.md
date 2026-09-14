@@ -13,7 +13,7 @@
 | M2 | 完成 pnpm workspace 与 Core/CLI 初步拆包 | 已完成 |
 | M3 | 将完整 Runtime 迁入 Core | 已完成 |
 | M4 | 完善 Preset 和项目生成模板 | 已完成 |
-| M5 | 建立外部项目样例和兼容性验证 | 计划中 |
+| M5 | 建立外部项目样例和兼容性验证 | 已完成 |
 | M6 | 完成 npm 发布准备和 v1.0 发布 | 计划中 |
 
 ## M0：固定 Vue Harness 基线
@@ -138,20 +138,31 @@ packages/
 - 模板更新不会静默覆盖用户配置。
 - 至少 generic 和 Vue 两个 Preset 有独立测试。
 
-## M5：外部项目样例和兼容性验证
+## M5：外部项目样例和兼容性验证（已完成）
 
 ### 目标
 
 用真实的最小项目证明 Harness 不依赖 Vue 目录和命令。
 
-### 计划样例
+### 已交付
 
 ```text
 examples/
-├── generic-project/
-├── vue-project/
-└── node-project/
+├── README.md
+├── generic-project/   （generic Preset，pnpm-lock.yaml）
+├── vue-project/       （vue Preset，yarn.lock）
+└── node-project/      （generic Preset，package-lock.json）
 ```
+
+- 每个样例提交了 `init` 生成的 `.harness/` 配置、`AGENTS.md` 和合法的 `.harness/task.json`。
+- `pnpm run verify:examples`（`scripts/harness/verify-examples.mjs`）对每个样例依次执行
+  `init`、`verify`、`doctor` 和 `run --dry-run --json`，检查退出码、结构化输出、锁文件识别
+  和 dry-run 不修改产品文件。
+- 样例覆盖 pnpm、yarn、npm 三种锁文件，`doctor` 分别报告检测结果。
+- 测试覆盖无效配置、缺失 Provider、缺失验证脚本的结构化失败，以及一个非 Vue 项目通过外部
+  Provider 完成完整四阶段运行的用例。
+- 为使 dry-run 成为真正的安全预览，Core 的 dry-run 现在不调用任何 Agent Provider、不执行
+  验证命令，只返回结构化的 `passed` 结果（见「兼容性原则」）。
 
 ### 验收标准
 
@@ -169,6 +180,16 @@ pnpm exec pedyc-harness run --dry-run --json
 - Windows 和 Linux 命令入口。
 - Node.js 20 及以上版本。
 - 缺失 Provider、缺失脚本和无效配置的错误输出。
+
+### 验收证据
+
+```bash
+pnpm run verify:examples
+pnpm run test:unit
+```
+
+`verify:examples` 在三个样例上共 30 项检查全部通过；`test:unit` 覆盖 dry-run 不调用
+Provider、锁文件识别和上述错误路径。
 
 ## M6：npm 发布准备与 v1.0
 
@@ -201,6 +222,13 @@ pnpm exec pedyc-harness run --dry-run --json
 - 保留 Provider 的 stdin/stdout JSON 协议。
 - 保留 `requiredChecks`、`protectedPaths` 和 `allowedProductPaths` 的显式策略。
 - 任何默认行为变化都必须通过 Preset 或版本升级明确表达。
+
+### dry-run 契约
+
+`run --dry-run` 是安全预览：不调用任何 Agent Provider、不执行 `requiredChecks`、不修改产品
+文件，只返回 `status: passed` 和四个阶段的结构化结果。M5 之前 dry-run 仍会调用 Planner 和
+Tester Provider，导致没有配置 Provider 的项目无法预览。该变化只影响 dry-run，非 dry-run
+的四阶段流程和输出契约不变。
 
 ## 推进规则
 

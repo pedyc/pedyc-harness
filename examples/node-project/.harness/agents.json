@@ -1,0 +1,18 @@
+{
+  "providers": {},
+  "planner": {
+    "mode": "internal"
+  },
+  "coder": {
+    "mode": "external",
+    "provider": "custom"
+  },
+  "tester": {
+    "mode": "external",
+    "provider": "custom"
+  },
+  "reviewer": {
+    "mode": "external",
+    "provider": "custom"
+  }
+}

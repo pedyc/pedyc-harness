@@ -1,0 +1,17 @@
+{
+  "feature": "Add a title header component",
+  "objective": "Render a typed title prop inside the Vue host application.",
+  "constraints": [
+    "Use Vue 3 script setup with TypeScript",
+    "Keep product changes under src/"
+  ],
+  "acceptanceCriteria": [
+    "The component accepts a typed title prop",
+    "The component renders the title"
+  ],
+  "testHints": [
+    "yarn type-check",
+    "yarn build"
+  ],
+  "maxIterations": 2
+}

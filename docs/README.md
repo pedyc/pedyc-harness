@@ -27,7 +27,9 @@
 - `@pedyc/harness-preset-vue`（`packages/preset-vue`）：Vue 3 + TypeScript + Vite 约定。
 
 根目录的 Vue 示例同时是集成测试宿主，`scripts/harness/` 保留运行器和 Provider Adapter。
+`examples/` 提供三个最小外部项目，用于验证 Harness 不依赖 Vue 目录和命令；运行
+`pnpm run verify:examples` 可以复现验收结果。
 
 CLI 目前仍处于过渡阶段：`packages/cli/src/bin.mjs` 会转发到根目录的
 `scripts/harness/cli.mjs`，`package.json` 的 `bin` 也仍指向根目录入口。把 CLI 完全迁入
-`packages/cli`、补齐包元数据并发布，属于 [里程碑路线](./milestones.md) 中 M5、M6 的范围。
+`packages/cli`、补齐包元数据并发布，属于 [里程碑路线](./milestones.md) 中 M6 的范围。

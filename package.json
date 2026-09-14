@@ -16,6 +16,7 @@
     "type-check": "vue-tsc --noEmit",
     "harness:verify": "node scripts/harness/cli.mjs verify",
     "harness:run": "node scripts/harness/cli.mjs run",
+    "verify:examples": "node scripts/harness/verify-examples.mjs",
     "test:unit": "vitest run"
   },
   "devDependencies": {

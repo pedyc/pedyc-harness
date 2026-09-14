@@ -1,0 +1,16 @@
+{
+  "feature": "Add a reusable greeting helper",
+  "objective": "Provide a typed greeting helper that other modules can import without adding framework dependencies.",
+  "constraints": [
+    "Keep product changes under src/",
+    "Do not add runtime dependencies"
+  ],
+  "acceptanceCriteria": [
+    "The module exports the greeting helper",
+    "The check script passes"
+  ],
+  "testHints": [
+    "pnpm run check"
+  ],
+  "maxIterations": 2
+}

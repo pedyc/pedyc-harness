@@ -99,7 +99,7 @@
 - [ ] 增加越权修改、无修改任务和命令失败场景测试
 - [ ] 增加 ESLint
 - [ ] 增加 Prettier
-- [ ] 在 CI 中执行 Harness dry-run 和更多失败路径测试
+- [x] 在 CI 中执行 Harness dry-run 和更多失败路径测试
 - [ ] 增加多任务、并发和长任务场景验证
 
 ### 优先级 P2：多 Agent 和扩展能力
@@ -118,6 +118,11 @@
 | `.github/` | GitHub Agent、Instructions、CI 和配置校验 |
 | `.agents/skills/` | 可复用的任务技能 |
 | `.harness/` | 输入/输出契约、策略、评估、Agent 配置和运行记录 |
+| `packages/` | Core、CLI 和 Preset 的 workspace 包 |
+| `scripts/harness/` | Harness 编排器和 Provider Adapter |
+| `examples/` | 外部项目样例和兼容性验收项目 |
+| `.claude/` | Claude Code 入口和权限相关配置 |
+| `tests/` | 产品组件和 Harness 配置测试 |
 
 ## 通用化与 npm CLI
 
@@ -136,15 +141,18 @@ npx pedyc-harness run --input .harness/task.json --dry-run --json
 
 本仓库使用 pnpm 管理依赖，目标项目仍兼容 npm、pnpm 和 yarn。Harness Runtime 会根据
 锁文件选择验证命令对应的包管理器。
-| `scripts/harness/` | Harness 编排器和 Provider Adapter |
-| `.claude/` | Claude Code 入口和权限相关配置 |
-| `tests/` | 产品组件和 Harness 配置测试 |
+
+`examples/` 中的 `generic-project`、`vue-project` 和 `node-project` 用真实的最小项目验证
+这一点，可执行 `npm run verify:examples` 复现。
 
 ## 常用命令
 
 ```powershell
 # 配置完整性检查
 npm run harness:verify
+
+# 外部项目样例验收（init、verify、dry-run、doctor）
+npm run verify:examples
 
 # 单元测试
 npm run test:unit
@@ -155,7 +163,7 @@ npm run type-check
 # 构建
 npm run build
 
-# 安全预览，不修改产品代码
+# 安全预览：不调用 Provider、不执行验证命令、不修改产品代码
 node scripts/harness/run.mjs --input .harness/task.example.json --dry-run --json
 
 # 运行真实 Harness

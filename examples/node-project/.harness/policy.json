@@ -1,0 +1,21 @@
+{
+  "maxIterations": 3,
+  "protectedPaths": [
+    ".github/",
+    ".claude/",
+    ".agents/",
+    ".harness/",
+    "scripts/"
+  ],
+  "requiredChecks": [],
+  "forbiddenCommands": [
+    "git reset --hard",
+    "git checkout --",
+    "npm publish"
+  ],
+  "allowedAgentCommands": [],
+  "allowedProductPaths": [
+    "src/"
+  ],
+  "agentTimeoutMs": 300000
+}

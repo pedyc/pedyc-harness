@@ -37,6 +37,8 @@ Preset
 - `packages/preset-generic`：`@pedyc/harness-preset-generic`，通用契约和安全策略。
 - `packages/preset-vue`：`@pedyc/harness-preset-vue`，Vue 3 + TypeScript + Vite 约定。
 - 根目录：Vue 示例和集成测试宿主，保留兼容脚本；`scripts/harness/cli.mjs` 仍是当前实际入口。
+- `examples/`：不参与 workspace 安装的独立最小项目，用于验证 Harness 不依赖 Vue 目录和命令；
+  由 `pnpm run verify:examples` 执行 `init`、`verify`、`run --dry-run` 和 `doctor` 验收。
 
 ## 提示词分层
 

@@ -20,6 +20,10 @@ npx pedyc-harness run --input .harness/task.json --dry-run --json
 `run` 也可以从任意目录调用，CLI 会把当前目录作为目标项目 root；底层脚本支持显式的
 `--root <path>`。
 
+`run --dry-run` 是安全预览：不调用任何 Agent Provider、不执行 `requiredChecks`、不修改产品
+文件，只返回 `status: passed` 的结构化结果。它可以在还没有配置 Provider 的项目中直接运行，
+用于确认配置和输入契约是否可用。
+
 规划中：
 
 - `list-presets`：列出可用 Preset，避免让用户记忆 Preset 名称。
@@ -51,6 +55,20 @@ pnpm add --save-dev pedyc-harness
 
 CLI 负责生成项目级配置，Runtime 负责执行。配置和提示词进入项目版本库后，Harness 升级可以
 通过 `init`、`diff` 或 `update` 显式完成，而不是隐式改变 CI 行为。
+
+## 外部项目样例
+
+`examples/` 提供 `generic-project`、`vue-project` 和 `node-project` 三个最小项目，分别使用
+pnpm、yarn 和 npm 锁文件。它们用于验证 Harness 不依赖当前仓库的 Vue 目录结构：
+
+```bash
+cd examples/generic-project
+pnpm exec pedyc-harness init
+pnpm exec pedyc-harness verify
+pnpm exec pedyc-harness run --dry-run --json
+```
+
+在仓库根目录执行 `pnpm run verify:examples` 会对三个样例运行完整验收命令。
 
 ## 包管理器兼容
 
