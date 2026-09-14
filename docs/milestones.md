@@ -1,7 +1,8 @@
-# Harness 迁移与重构里程碑
+# 迁移、重构与发布里程碑
 
-本项目的通用化、拆包和发布工作按里程碑推进。每个里程碑都必须满足明确的
-交付物和验证标准后，才能进入下一阶段。
+本文件是 [项目目标](./项目目标.md) 的进度记录：把「从 Vue 示例迁移到通用 Harness」的路线
+图与阶段性验收标准合并在一起。原文的迁移阶段和里程碑描述高度重叠，现已收敛为本文件，
+每个里程碑都必须满足明确的交付物和验证标准后，才能进入下一阶段。
 
 ## 里程碑总览
 
@@ -46,11 +47,13 @@ pnpm run build
 
 ### 已交付
 
-- `pedyc-harness init --preset generic|vue`
+- 运行器不再把自身目录作为唯一 root，支持 `--root`。
+- `package.json` 暴露 `pedyc-harness` bin 入口。
+- `pedyc-harness init --preset generic|vue`。
 - `verify`、`run` 和 `doctor` 命令。
-- `--root` 目标项目支持。
 - `init` 默认幂等，`--force` 才覆盖模板文件。
 - 根据锁文件选择 npm、pnpm 或 yarn 执行验证命令。
+- generic 与 Vue 的差异放入 Preset 初始化模板。
 
 ### 验收标准
 
@@ -75,7 +78,9 @@ packages/
 
 - 根目录启用 `pnpm-workspace.yaml`。
 - Core 提供包管理器检测和验证命令原语。
-- CLI 提供独立的发布入口，并兼容当前旧 CLI。
+- `scripts/harness/package-manager.mjs` 通过 workspace 导出复用 Core，确保现有 Harness
+  流程与新包使用相同实现。
+- CLI 提供独立的发布入口，并暂时兼容根目录旧 CLI。
 - 根目录集成测试继续作为迁移安全网。
 
 ### 验收标准
@@ -99,10 +104,7 @@ packages/
 - 已抽取 Schema 加载/校验、Agent 响应解析和阶段响应校验模块。
 - 已抽取 Policy 校验和 Provider 调度模块。
 - 已抽取 Planner/Coder/Tester/Reviewer 运行编排模块。
-- 抽取任务 Intake 和标准化模块。
-- 抽取 Policy、路径边界和文件快照模块。
-- 抽取 Provider 调用和阶段响应校验模块。
-- 抽取验证命令执行、超时和结构化结果模块。
+- 已抽取验证命令执行、超时和结构化结果模块。
 - 为 Core API 增加 Node 单元测试。
 - 保留旧 CLI 参数和 `.harness/` 文件格式兼容。
 
@@ -190,6 +192,15 @@ pnpm exec pedyc-harness run --dry-run --json
 - 所有样例项目通过验证。
 - CI 使用 frozen lockfile。
 - 没有未解决的高风险安全问题。
+
+## 兼容性原则
+
+迁移过程中必须保持以下契约不变：
+
+- 保留 `.harness` 的 JSON Schema 和结构化输出契约。
+- 保留 Provider 的 stdin/stdout JSON 协议。
+- 保留 `requiredChecks`、`protectedPaths` 和 `allowedProductPaths` 的显式策略。
+- 任何默认行为变化都必须通过 Preset 或版本升级明确表达。
 
 ## 推进规则
 

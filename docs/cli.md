@@ -1,6 +1,11 @@
 # CLI 使用与生成规则
 
+CLI 是 [项目目标](./项目目标.md) 中的工具链入口：npm 包提供稳定的运行时和模板，CLI 把
+适配当前项目的配置、脚本和提示词生成到目标项目中。
+
 ## 命令
+
+已实现：
 
 ```bash
 npx pedyc-harness init --preset generic
@@ -12,14 +17,18 @@ npx pedyc-harness update --preset generic
 npx pedyc-harness run --input .harness/task.json --dry-run --json
 ```
 
-`run` 也可以从任意目录调用，Runtime 会把当前目录作为目标项目 root；底层脚本支持
-显式的 `--root <path>`。
+`run` 也可以从任意目录调用，CLI 会把当前目录作为目标项目 root；底层脚本支持显式的
+`--root <path>`。
+
+规划中：
+
+- `list-presets`：列出可用 Preset，避免让用户记忆 Preset 名称。
 
 ## 初始化行为
 
-`init` 创建 `.harness/policy.json`、`.harness/agents.json`、JSON Schema 和
-`AGENTS.md`。已有 JSON 配置不会被无条件合并或覆盖；已有 `AGENTS.md` 也只有在
-传入 `--force` 时才覆盖。这样初始化可以安全地重复执行。
+`init` 创建 `.harness/policy.json`、`.harness/agents.json`、JSON Schema 和 `AGENTS.md`。
+按 [项目目标](./项目目标.md) 第七节的原则，初始化必须可以安全地重复执行：已有 JSON 配置
+不会被无条件合并或覆盖；已有 `AGENTS.md` 也只有在传入 `--force` 时才覆盖。
 
 `--force` 会重新生成 Preset 管理的配置和入口说明，适合显式升级模板：
 
@@ -27,9 +36,9 @@ npx pedyc-harness run --input .harness/task.json --dry-run --json
 npx pedyc-harness init --preset vue --force
 ```
 
-`diff` 比较当前项目与 Preset 的受管模板文件，输出 `missing`、`unchanged` 或
-`modified` 状态，不会修改文件。`update` 只补充缺失文件，并默认跳过已经修改的
-文件；传入 `--force` 才会覆盖已修改的模板。
+`diff` 比较当前项目与 Preset 的受管模板文件，输出 `missing`、`unchanged` 或 `modified`
+状态，不会修改文件。`update` 只补充缺失文件，并默认跳过已经修改的文件；传入 `--force`
+才会覆盖已修改的模板。
 
 ## 发布建议
 
@@ -40,8 +49,8 @@ npm install --save-dev pedyc-harness
 pnpm add --save-dev pedyc-harness
 ```
 
-CLI 负责生成项目级配置，Runtime 负责执行。配置和提示词进入项目版本库后，Harness
-升级可以通过 `init`、模板 diff 或后续 `update` 命令显式完成，而不是隐式改变 CI 行为。
+CLI 负责生成项目级配置，Runtime 负责执行。配置和提示词进入项目版本库后，Harness 升级可以
+通过 `init`、`diff` 或 `update` 显式完成，而不是隐式改变 CI 行为。
 
 ## 包管理器兼容
 

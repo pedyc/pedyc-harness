@@ -1,7 +1,8 @@
 ## SOP：搭建可验证的前端 Agent Harness
 
 > 为 Vue 3 + TypeScript + Vite 项目建立受契约、权限和质量门禁约束的 Agent 开发闭环。
-> **问题溯源**：本 SOP 是 [[Q-如何让 LLM 稳定完成前端开发任务]] 的收敛成果——经过规则分层、阶段式 Agent、自动验证和多 Provider 方案对比与实践验证，固化为标准流程。
+> 本文以 Vue 为例；Harness 通用化后，技术栈规则由 [Preset](./preset-design.md) 注入，
+> 其他项目的接入方式见 [CLI 使用与生成规则](./cli.md)。
 
 ### 目标与边界
 
@@ -238,10 +239,10 @@ Intake 会自动补充默认测试命令和最大迭代次数；如果缺少任�
 #### 运行检查
 
 ```powershell
-npm run harness:verify
-npm run test:unit
-npm run type-check
-npm run build
+pnpm run harness:verify
+pnpm run test:unit
+pnpm run type-check
+pnpm run build
 ```
 
 #### 安全预览
@@ -299,59 +300,21 @@ node scripts/harness/run.mjs --input .harness/task.example.json --json
 - 🔧 **如果验证失败**，检查 `.harness/runs/<run-id>/iteration-<n>-verification.json` 的实际命令结果。
 - 🔧 **如果出现越权修改**，检查 `policy.json` 的 `allowedProductPaths` 和实际 diff。
 - 🔧 **如果 Claude 无法启动**，检查 CLI 安装、认证、Provider 命令和终端权限。
-- 🔧 **如果 npm 参数异常**，优先直接调用 `node scripts/harness/run.mjs`，不要依赖 npm 11 的参数转发。
+- 🔧 **如果包管理器参数转发异常**，优先直接调用 `node scripts/harness/run.mjs`；本仓库使用 pnpm，部分 npm 11 环境对 `npm run ... -- --input ...` 的参数转发不稳定。
 
 ---
 
-### 重构前后评估
+### 相关文档
 
-#### 重构前优点
+- [项目目标](./项目目标.md) — 产品形态、包拆分和架构原则的目标基准
+- [项目架构](./architecture.md) — 运行时、配置和包边界
+- [Preset 设计](./preset-design.md) — 技术栈差异如何注入
+- [Provider 设计](./provider-design.md) — Adapter 协议和安全要求
+- [CLI 使用与生成规则](./cli.md) — 安装、初始化和模板升级
 
-- 信息覆盖面广，包含架构、Schema、Agent 提示词、策略、实践和坑点；
-- 对实现细节描述充分，便于熟悉项目背景；
-- 已经包含多 Provider、证据链和实现边界等重要内容。
+实现参考：
 
-#### 重构前缺点
-
-- 设计目标、当前实现和未来规划混在一起，容易误判完成度；
-- 标题层级和信息粒度不统一，阅读路径不够明确；
-- Harness 五要素、Agent 四层治理、规则加载顺序和执行管道混在同一叙述中；
-- 原有流程图更偏概念图，没有清楚表达失败分支、重试上限和最终证据；
-- `evaluation.json` 的 `passThreshold` 容易被误解为已经存在的评分系统；
-- Provider 抽象、Tester 独立验证和错误分类没有成为主线。
-
-#### 重构后优点
-
-- 完全对齐 SOP 模板，读者可以按“目标 → 场景 → 流程 → 步骤 → 示例 → 坑点”阅读；
-- 明确区分目标、边界、已实现、当前限制和 Provider 规划；
-- 将规则治理流程、任务执行流程和证据链分开；
-- 将输入契约、输出契约、策略、评估、Adapter 和错误处理集中到核心步骤；
-- 如实采用方案 A，明确当前没有综合评分实现；
-- 将实际命令、运行记录、目录边界和阶段职责保留下来；
-- 使用错误分类表和可信度排序，降低误用风险。
-
-#### 重构后的代价与补偿
-
-- 为了符合模板，完整 JSON Schema 和四个 Agent 文件没有全部内嵌，细节需要回到仓库文件查看；
-- 原文的长提示词示例被压缩为职责和协议，适合 SOP，但不适合作为 Prompt 参考手册；
-- 未来应将详细 Schema、Provider 协议和故障案例拆成关联笔记，避免主 SOP 继续膨胀。
-
----
-
-### 知识图谱
-
-- **相关概念**：
-    - [[Harness]]
-    - [[Agent]]
-    - [[Provider Adapter]]
-    - [[Claude Code]]
-    - [[Copilot]]
-    - [[Vue]]
-    - [[提示词工程]]
-- **问题来源**：
-    - [[Q-如何让 LLM 稳定完成前端开发任务]] — 本 SOP 解决的核心问题来源
-- **实现参考**：
-    - [README.md](../README.md)
-    - [run.mjs](../scripts/harness/run.mjs)
-    - [claude-adapter.mjs](../scripts/harness/claude-adapter.mjs)
-    - [agents.json](../.harness/agents.json)
+- [README.md](../README.md)
+- [run.mjs](../scripts/harness/run.mjs)
+- [claude-adapter.mjs](../scripts/harness/claude-adapter.mjs)
+- [agents.json](../.harness/agents.json)
