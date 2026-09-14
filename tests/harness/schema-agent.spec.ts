@@ -1,4 +1,5 @@
 import { loadSchemas, createValidators, parseAgentResponse, validateStageResponse } from '@pedyc/harness-core'
+import { createProviderRunner, findOutOfScopeChanges, validatePolicy } from '@pedyc/harness-core'
 import { resolve } from 'node:path'
 
 const root = resolve(import.meta.dirname, '../..')
@@ -19,5 +20,32 @@ describe('core schema and agent contracts', () => {
   it('rejects invalid stage responses with actionable details', () => {
     expect(validateStageResponse('tester', { approved: true })).toContain('evidence')
     expect(validateStageResponse('reviewer', {})).toContain('approved')
+  })
+
+  it('validates policy and identifies out-of-scope files', () => {
+    const policy = {
+      maxIterations: 3,
+      protectedPaths: ['.harness/'],
+      requiredChecks: [],
+      allowedProductPaths: ['src/'],
+    }
+    expect(validatePolicy(policy)).toBeNull()
+    expect(findOutOfScopeChanges(['src/App.vue', '.harness/policy.json'], policy))
+      .toEqual(['.harness/policy.json'])
+  })
+
+  it('keeps internal providers explicit and structured', async () => {
+    const runner = createProviderRunner({
+      root,
+      agents: { planner: { mode: 'internal' } },
+      policy: { allowedAgentCommands: [] },
+      validator: () => true,
+      ajv: { errorsText: () => '' },
+    })
+    await expect(runner('planner', {})).resolves.toEqual({
+      ok: true,
+      details: 'planner completed using the built-in stage.',
+      payload: {},
+    })
   })
 })

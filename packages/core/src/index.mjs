@@ -4,5 +4,8 @@ export { runCommand } from './command.mjs'
 export { changedFiles, snapshotFiles } from './snapshots.mjs'
 export { loadSchemas, createValidators, validationDetails } from './schema.mjs'
 export { parseAgentResponse, validateStageResponse } from './agent.mjs'
+export { validatePolicy, findOutOfScopeChanges, isCommandAllowed } from './policy.mjs'
+export { createProviderRunner } from './provider.mjs'
+export { runOrchestrator } from './orchestrator.mjs'
 
 export const harnessCoreVersion = '1.0.0'

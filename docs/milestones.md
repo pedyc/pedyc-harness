@@ -10,8 +10,8 @@
 | M0 | 固定当前 Vue Harness 基线 | 已完成 |
 | M1 | 建立通用 CLI 和项目初始化能力 | 已完成 |
 | M2 | 完成 pnpm workspace 与 Core/CLI 初步拆包 | 已完成 |
-| M3 | 将完整 Runtime 迁入 Core | 进行中 |
-| M4 | 完善 Preset 和项目生成模板 | 计划中 |
+| M3 | 将完整 Runtime 迁入 Core | 已完成 |
+| M4 | 完善 Preset 和项目生成模板 | 下一步 |
 | M5 | 建立外部项目样例和兼容性验证 | 计划中 |
 | M6 | 完成 npm 发布准备和 v1.0 发布 | 计划中 |
 
@@ -85,7 +85,7 @@ packages/
 - `pnpm exec pedyc-harness doctor` 成功。
 - 根目录全部 Harness、类型、测试和构建门禁通过。
 
-## M3：完整 Runtime 迁入 Core（进行中）
+## M3：完整 Runtime 迁入 Core（已完成）
 
 ### 目标
 
@@ -97,7 +97,8 @@ packages/
 - 已抽取任务 Intake、包管理器、命令执行和文件快照模块。
 - 根目录运行器已复用 Core 的上述模块。
 - 已抽取 Schema 加载/校验、Agent 响应解析和阶段响应校验模块。
-- 抽取 Policy 校验、Provider 调度和运行编排模块。
+- 已抽取 Policy 校验和 Provider 调度模块。
+- 已抽取 Planner/Coder/Tester/Reviewer 运行编排模块。
 - 抽取任务 Intake 和标准化模块。
 - 抽取 Policy、路径边界和文件快照模块。
 - 抽取 Provider 调用和阶段响应校验模块。

@@ -7,6 +7,7 @@ import {
   normalizeTask,
   packageScriptCommand,
   snapshotFiles,
+  runOrchestrator,
 } from '@pedyc/harness-core'
 
 describe('harness core', () => {
@@ -34,5 +35,21 @@ describe('harness core', () => {
     await writeFile(join(root, 'before.txt'), 'after')
     await writeFile(join(root, 'new.txt'), 'new')
     expect(changedFiles(before, snapshotFiles(root)).sort()).toEqual(['before.txt', 'new.txt'])
+  })
+
+  it('runs the planner, coder, tester and reviewer loop in dry-run mode', async () => {
+    const result = await runOrchestrator({
+      input: { feature: 'Feature', objective: 'Objective', acceptanceCriteria: ['Done'], maxIterations: 1 },
+      policy: { maxIterations: 1, allowedProductPaths: ['src/'] },
+      dryRun: true,
+      snapshot: () => new Map(),
+      changedFiles: () => [],
+      runAgent: async (name) => name === 'tester'
+        ? { ok: true, details: 'approved', payload: { approved: true, evidence: [{ command: 'check', result: 'pass', details: 'ok' }] } }
+        : { ok: true, details: 'ok', payload: {} },
+      runVerification: async () => [{ command: 'check', result: 'pass', details: 'ok' }],
+    })
+    expect(result.completed).toBe(true)
+    expect(result.phases.map(({ name }) => name)).toEqual(['planner', 'coder', 'tester', 'reviewer'])
   })
 })

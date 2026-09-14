@@ -19,15 +19,15 @@ packages/
 ```
 
 根目录 Vue Demo 暂时保留作为集成宿主。`scripts/harness/package-manager.mjs` 通过
-workspace 导出复用 Core，确保现有 Harness 流程与新包使用相同实现。下一步应将
-`run.mjs` 的 Schema、Policy、Provider 和执行流程逐步迁入 Core，再移除兼容入口。
+workspace 导出复用 Core，确保现有 Harness 流程与新包使用相同实现。Schema、Policy、
+Provider 和完整运行编排已迁入 Core，根目录脚本继续作为兼容入口。
 
 ## 后续阶段
 
 ### 第二阶段：抽出独立 Core
 
-将运行器中的 Schema、Policy、Provider 和文件边界逻辑拆为可测试的模块，并将 CLI
-变成薄包装层。保持 `.harness/` 文件格式兼容。
+Schema、Policy、Provider、文件边界和 Planner/Coder/Tester/Reviewer 编排已拆为可测试
+的 Core 模块。根目录脚本仍是兼容入口，保持 `.harness/` 文件格式兼容。
 
 ### 第三阶段：完善模板同步
 

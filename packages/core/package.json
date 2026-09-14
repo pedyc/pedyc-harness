@@ -10,7 +10,10 @@
     "./command": "./src/command.mjs",
     "./snapshots": "./src/snapshots.mjs",
     "./schema": "./src/schema.mjs",
-    "./agent": "./src/agent.mjs"
+    "./agent": "./src/agent.mjs",
+    "./policy": "./src/policy.mjs",
+    "./provider": "./src/provider.mjs",
+    "./orchestrator": "./src/orchestrator.mjs"
   },
   "engines": {
     "node": ">=20"
