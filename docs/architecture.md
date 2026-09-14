@@ -33,10 +33,12 @@ Preset
 仓库使用 pnpm workspace 管理可发布包：
 
 - `packages/core`：`@pedyc/harness-core`，提供 Runtime 可复用的 Node API。
-- `packages/cli`：`pedyc-harness`，提供 CLI 发布入口、Preset Registry 和验证命令辅助。
+- `packages/cli`：`pedyc-harness`，自包含 CLI 发布包，内含运行时、Preset Registry、通用校验
+  和 Schema 模板，不引用仓库内路径。
 - `packages/preset-generic`：`@pedyc/harness-preset-generic`，通用契约和安全策略。
 - `packages/preset-vue`：`@pedyc/harness-preset-vue`，Vue 3 + TypeScript + Vite 约定。
-- 根目录：Vue 示例和集成测试宿主，保留兼容脚本；`scripts/harness/cli.mjs` 仍是当前实际入口。
+- 根目录：Vue 示例和集成测试宿主；`scripts/harness/cli.mjs` 与 `scripts/harness/run.mjs` 是指向
+  发布包的薄封装，`claude-adapter.mjs` 是可选的本地 Adapter 示例。
 - `examples/`：不参与 workspace 安装的独立最小项目，用于验证 Harness 不依赖 Vue 目录和命令；
   由 `pnpm run verify:examples` 执行 `init`、`verify`、`run --dry-run` 和 `doctor` 验收。
 
@@ -56,9 +58,13 @@ Preset 负责生成技术栈相关的默认值，项目可以在生成后修改�
 
 ## 运行时边界
 
-`scripts/harness/run.mjs` 使用 `--root` 或当前工作目录作为目标项目根目录，不依赖
-Harness 包自身的安装目录。运行记录写入目标项目的 `.harness/runs/`。配置、提示词和
-策略在目标项目中生成并提交，因此 CI 可以审查每次规则变更。
+`run` 使用 `--root` 或当前工作目录作为目标项目根目录，不依赖 Harness 包自身的安装目录。
+运行记录写入目标项目的 `.harness/runs/`。配置、提示词和策略在目标项目中生成并提交，
+因此 CI 可以审查每次规则变更。
+
+`verify` 同样面向目标项目：先校验 `.harness/` 的通用契约，再在存在
+`.harness/verify.mjs` 时执行项目自定义的严格检查。仓库自身的完整检查（文件清单、
+`src/` 边界、Agent frontmatter）就放在这个钩子里，因此 CLI 不需要知道任何项目特有文件。
 
 ## 安全边界
 

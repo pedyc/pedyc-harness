@@ -118,8 +118,8 @@
 | `.github/` | GitHub Agent、Instructions、CI 和配置校验 |
 | `.agents/skills/` | 可复用的任务技能 |
 | `.harness/` | 输入/输出契约、策略、评估、Agent 配置和运行记录 |
-| `packages/` | Core、CLI 和 Preset 的 workspace 包 |
-| `scripts/harness/` | Harness 编排器和 Provider Adapter |
+| `packages/` | Core、CLI 和 Preset 的 workspace 发布包 |
+| `scripts/harness/` | 发布包的兼容入口（薄封装）、Provider Adapter、样例与发布校验脚本 |
 | `examples/` | 外部项目样例和兼容性验收项目 |
 | `.claude/` | Claude Code 入口和权限相关配置 |
 | `tests/` | 产品组件和 Harness 配置测试 |
@@ -137,7 +137,20 @@ npx pedyc-harness run --input .harness/task.json --dry-run --json
 
 `generic` Preset 只生成通用契约和安全策略；`vue` Preset 额外生成 Vue 约束。运行时通过
 `--root` 将 Harness 指向目标项目，Provider 和项目规则仍保存在目标项目中并纳入版本控制。
-详细设计见 [`docs/`](D:/Workspace/pedyc/pedyc-harness/docs)。
+
+发布包共有四个，全部为 `1.0.0`、同步发布：
+
+| 包 | 用途 |
+| --- | --- |
+| `pedyc-harness` | CLI，内含 Preset Registry 和 Schema 模板，可独立安装 |
+| `@pedyc/harness-core` | Runtime 原语，不依赖 Vue |
+| `@pedyc/harness-preset-generic` | 通用契约与安全策略 |
+| `@pedyc/harness-preset-vue` | Vue 3 + TypeScript + Vite 约定 |
+
+CLI 不假设用户安装或登录了任何 Agent CLI：生成的 `agents.json` 不含 Provider，
+`verify` 和 `run --dry-run` 无需 Provider 即可使用。
+
+详细设计见 [`docs/`](./docs/README.md)，发布规则见 [发布与版本规则](./docs/release.md)。
 
 本仓库使用 pnpm 管理依赖，目标项目仍兼容 npm、pnpm 和 yarn。Harness Runtime 会根据
 锁文件选择验证命令对应的包管理器。
@@ -153,6 +166,9 @@ npm run harness:verify
 
 # 外部项目样例验收（init、verify、dry-run、doctor）
 npm run verify:examples
+
+# 发布前检查：打包四个包并在临时消费者项目中跑通 CLI
+npm run release:check
 
 # 单元测试
 npm run test:unit
@@ -268,6 +284,8 @@ Planner → Coder → Tester → Reviewer
 
 ```powershell
 npm run harness:verify
+npm run verify:examples
+npm run release:check
 npm run type-check
 npm run test:unit
 npm run build

@@ -2,12 +2,35 @@
   "name": "pedyc-harness",
   "version": "1.0.0",
   "description": "Configuration-driven Agent Harness CLI",
+  "license": "MIT",
   "type": "module",
   "bin": {
     "pedyc-harness": "src/bin.mjs"
   },
   "exports": {
-    ".": "./src/index.mjs"
+    ".": "./src/index.mjs",
+    "./run": "./src/run.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pedyc/pedyc-harness.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/pedyc/pedyc-harness#readme",
+  "bugs": {
+    "url": "https://github.com/pedyc/pedyc-harness/issues"
+  },
+  "keywords": [
+    "agent",
+    "harness",
+    "cli",
+    "orchestration",
+    "planner",
+    "coder",
+    "reviewer"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "@pedyc/harness-core": "workspace:*",
@@ -18,6 +41,8 @@
     "node": ">=20"
   },
   "files": [
-    "src"
+    "src",
+    "templates",
+    "README.md"
   ]
 }

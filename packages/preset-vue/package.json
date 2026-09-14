@@ -1,15 +1,36 @@
 {
   "name": "@pedyc/harness-preset-vue",
   "version": "1.0.0",
-  "description": "Vue project preset for pedyc-harness",
+  "description": "Vue 3 project preset for pedyc-harness",
+  "license": "MIT",
   "type": "module",
   "exports": {
     ".": "./src/index.mjs"
   },
-  "files": [
-    "src"
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pedyc/pedyc-harness.git",
+    "directory": "packages/preset-vue"
+  },
+  "homepage": "https://github.com/pedyc/pedyc-harness#readme",
+  "bugs": {
+    "url": "https://github.com/pedyc/pedyc-harness/issues"
+  },
+  "keywords": [
+    "agent",
+    "harness",
+    "preset",
+    "vue",
+    "vite"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=20"
-  }
+  },
+  "files": [
+    "src",
+    "README.md"
+  ]
 }

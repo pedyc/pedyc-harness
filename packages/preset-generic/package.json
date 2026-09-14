@@ -2,14 +2,34 @@
   "name": "@pedyc/harness-preset-generic",
   "version": "1.0.0",
   "description": "Generic project preset for pedyc-harness",
+  "license": "MIT",
   "type": "module",
   "exports": {
     ".": "./src/index.mjs"
   },
-  "files": [
-    "src"
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pedyc/pedyc-harness.git",
+    "directory": "packages/preset-generic"
+  },
+  "homepage": "https://github.com/pedyc/pedyc-harness#readme",
+  "bugs": {
+    "url": "https://github.com/pedyc/pedyc-harness/issues"
+  },
+  "keywords": [
+    "agent",
+    "harness",
+    "preset",
+    "generic"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=20"
-  }
+  },
+  "files": [
+    "src",
+    "README.md"
+  ]
 }

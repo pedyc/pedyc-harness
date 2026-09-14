@@ -13,6 +13,7 @@
 - [Preset 设计](./preset-design.md)：generic、Vue 以及未来技术栈 Preset 的抽象。
 - [Provider 设计](./provider-design.md)：Planner、Coder、Tester、Reviewer 与外部 Agent 的适配协议。
 - [CLI 使用与生成规则](./cli.md)：安装、初始化、验证、运行和升级策略。
+- [发布与版本规则](./release.md)：发布单元、SemVer 策略、发布前检查清单、Provider 安全边界。
 - [里程碑路线](./milestones.md)：迁移、拆包、Preset 和发布的阶段目标与验收标准。
 - [SOP：搭建前端 Harness](./SOP-搭建前端Harness.md)：以 Vue 3 为例的落地步骤、证据链和常见坑点。
 - [Harness 设计权衡](./Harness设计权衡.md)：按风险分级决定流程深度，以及 Token 投入的取舍。
@@ -26,10 +27,12 @@
 - `@pedyc/harness-preset-generic`（`packages/preset-generic`）：通用契约与安全策略。
 - `@pedyc/harness-preset-vue`（`packages/preset-vue`）：Vue 3 + TypeScript + Vite 约定。
 
-根目录的 Vue 示例同时是集成测试宿主，`scripts/harness/` 保留运行器和 Provider Adapter。
+根目录的 Vue 示例同时是集成测试宿主，`scripts/harness/` 保留兼容入口、Provider Adapter
+和样例、发布校验脚本。
 `examples/` 提供三个最小外部项目，用于验证 Harness 不依赖 Vue 目录和命令；运行
 `pnpm run verify:examples` 可以复现验收结果。
 
-CLI 目前仍处于过渡阶段：`packages/cli/src/bin.mjs` 会转发到根目录的
-`scripts/harness/cli.mjs`，`package.json` 的 `bin` 也仍指向根目录入口。把 CLI 完全迁入
-`packages/cli`、补齐包元数据并发布，属于 [里程碑路线](./milestones.md) 中 M6 的范围。
+CLI 已经是自包含的发布包：`packages/cli/src/` 内含运行时、Preset Registry 和 Schema 模板，
+不引用仓库内路径。根目录 `scripts/harness/cli.mjs`、`scripts/harness/run.mjs` 只是指向
+`pedyc-harness` 的薄封装，保证仓库内命令与发布包行为一致。`pnpm run release:check`
+负责验证打包与安装，规则见 [发布与版本规则](./release.md)。

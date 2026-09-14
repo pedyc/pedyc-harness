@@ -2,6 +2,7 @@
   "name": "@pedyc/harness-core",
   "version": "1.0.0",
   "description": "Runtime primitives for Pedyc Harness",
+  "license": "MIT",
   "type": "module",
   "exports": {
     ".": "./src/index.mjs",
@@ -15,6 +16,24 @@
     "./provider": "./src/provider.mjs",
     "./orchestrator": "./src/orchestrator.mjs"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pedyc/pedyc-harness.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/pedyc/pedyc-harness#readme",
+  "bugs": {
+    "url": "https://github.com/pedyc/pedyc-harness/issues"
+  },
+  "keywords": [
+    "agent",
+    "harness",
+    "orchestration",
+    "runtime"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=20"
   },
@@ -22,6 +41,7 @@
     "ajv": "^8.20.0"
   },
   "files": [
-    "src"
+    "src",
+    "README.md"
   ]
 }

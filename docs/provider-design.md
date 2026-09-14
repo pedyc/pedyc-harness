@@ -25,6 +25,12 @@ Provider 描述如何调用 Agent。一个 Provider 可以服务多个角色，�
 }
 ```
 
+上面的 `claude` Provider 是仓库自带的本地示例。所有 Preset 生成的 `agents.json` 默认
+`providers` 为空，Planner 使用内置实现，Coder、Tester、Reviewer 指向尚未配置的
+`custom`：`verify` 和 `run --dry-run` 无需 Provider 即可运行，非 dry-run 运行会以
+「provider 'custom' is not configured」结构化失败，直到项目显式配置自己的 Adapter。
+发布包因此不携带任何供应商假设。
+
 ## Adapter 协议
 
 Adapter 从 stdin 接收一个 JSON 请求，只向 stdout 输出一个 JSON 响应；诊断信息写入
@@ -48,7 +54,8 @@ Git 工作区是否干净）仍在规划中。
 
 ## 内置 Provider 类型
 
-当前只有 `command` 类型，即调用本地可执行命令，Claude CLI Adapter 就属于这种。
+当前只有 `command` 类型，即调用本地可执行命令；仓库内的
+`scripts/harness/claude-adapter.mjs` 是这种类型的可选示例，不随 npm 包发布。
 [项目目标](./项目目标.md) 第六节列出的 `claude-cli`、`copilot-cli`、`openai-api`、
 `anthropic-api`、`custom-command` 属于规划方向。接入时应保持同一 stdin/stdout 契约，
 避免 Runtime 与某家供应商 SDK 耦合。

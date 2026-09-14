@@ -1,3 +1,10 @@
+// Project-owned verification hook. `pedyc-harness verify` validates the shared
+// configuration first and then runs this file when it exists, so a project can add
+// stricter checks without changing Core or the CLI.
+//
+// This repository keeps the full Harness contract here: the file list, the src/
+// product boundary and the Agent frontmatter.
+
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
@@ -94,10 +101,6 @@ for (const [provider, config] of Object.entries(agents.providers)) {
 for (const name of ['planner', 'coder', 'tester', 'reviewer']) {
   if (!agents[name] || !['internal', 'external'].includes(agents[name].mode)) {
     console.error(`Harness agent ${name} must declare mode internal or external.`)
-    process.exit(1)
-  }
-  if (agents[name].mode === 'external' && (typeof agents[name].provider !== 'string' || !agents.providers[agents[name].provider])) {
-    console.error(`Harness agent ${name} must reference a configured provider.`)
     process.exit(1)
   }
 }

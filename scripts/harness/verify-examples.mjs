@@ -25,6 +25,7 @@ const managedFiles = [
   '.harness/input.schema.json',
   '.harness/output.schema.json',
   '.harness/agent-response.schema.json',
+  '.harness/task.example.json',
 ]
 
 const runCli = (cwd, ...args) => {

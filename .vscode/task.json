@@ -12,6 +12,18 @@
       "type": "shell",
       "command": "npm run harness:run -- --input .harness/task.example.json --dry-run --json",
       "problemMatcher": []
+    },
+    {
+      "label": "Harness: verify examples",
+      "type": "shell",
+      "command": "npm run verify:examples",
+      "problemMatcher": []
+    },
+    {
+      "label": "Harness: release check",
+      "type": "shell",
+      "command": "npm run release:check",
+      "problemMatcher": []
     }
   ]
 }

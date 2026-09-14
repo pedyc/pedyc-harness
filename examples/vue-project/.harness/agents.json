@@ -1,8 +1,7 @@
 {
   "providers": {},
   "planner": {
-    "mode": "external",
-    "provider": "custom"
+    "mode": "internal"
   },
   "coder": {
     "mode": "external",

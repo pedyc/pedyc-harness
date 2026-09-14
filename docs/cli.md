@@ -24,6 +24,10 @@ npx pedyc-harness run --input .harness/task.json --dry-run --json
 文件，只返回 `status: passed` 的结构化结果。它可以在还没有配置 Provider 的项目中直接运行，
 用于确认配置和输入契约是否可用。
 
+`verify` 分两步：先做与项目无关的通用校验（契约文件存在且可解析、Policy 合法、Provider 命令
+形状正确、角色 mode 合法、`requiredChecks` 都能在 `package.json` 中找到对应脚本），再在项目
+存在 `.harness/verify.mjs` 时执行该钩子。项目特有规则写进钩子，不需要修改 Core 或 CLI。
+
 规划中：
 
 - `list-presets`：列出可用 Preset，避免让用户记忆 Preset 名称。
@@ -55,6 +59,10 @@ pnpm add --save-dev pedyc-harness
 
 CLI 负责生成项目级配置，Runtime 负责执行。配置和提示词进入项目版本库后，Harness 升级可以
 通过 `init`、`diff` 或 `update` 显式完成，而不是隐式改变 CI 行为。
+
+CLI 是自包含的发布包：运行时、Preset Registry 和 Schema 模板都在包内，不引用仓库路径。
+打包与安装验证由 `pnpm run release:check` 完成，版本与发布规则见
+[发布与版本规则](./release.md)。
 
 ## 外部项目样例
 

@@ -14,7 +14,7 @@
 | M3 | 将完整 Runtime 迁入 Core | 已完成 |
 | M4 | 完善 Preset 和项目生成模板 | 已完成 |
 | M5 | 建立外部项目样例和兼容性验证 | 已完成 |
-| M6 | 完成 npm 发布准备和 v1.0 发布 | 计划中 |
+| M6 | 完成 npm 发布准备和 v1.0 发布 | 已完成 |
 
 ## M0：固定 Vue Harness 基线
 
@@ -188,8 +188,8 @@ pnpm run verify:examples
 pnpm run test:unit
 ```
 
-`verify:examples` 在三个样例上共 30 项检查全部通过；`test:unit` 覆盖 dry-run 不调用
-Provider、锁文件识别和上述错误路径。
+`verify:examples` 在三个样例上共 33 项检查全部通过，每个样例管理 7 个模板文件；`test:unit`
+覆盖 dry-run 不调用 Provider、锁文件识别和上述错误路径。
 
 ## M6：npm 发布准备与 v1.0
 
@@ -197,14 +197,33 @@ Provider、锁文件识别和上述错误路径。
 
 将 Core、CLI 和 Preset 作为可审查、可安装、可升级的 npm 包发布。
 
-### 工作项
+### 已交付
 
-- 补全包元数据、README、许可证和仓库链接。
-- 配置 `files` 白名单，排除测试、运行记录和本地产品文件。
-- 使用 `pnpm pack --dry-run` 检查每个 tarball 内容。
-- 增加发布前 smoke test：临时目录安装 tarball 并执行 `init`、`verify`、`run`。
-- 建立 changelog 和版本升级规则。
-- 记录 Provider 安全边界与兼容性策略。
+- 四个可发布包（`@pedyc/harness-core`、`pedyc-harness`、`@pedyc/harness-preset-generic`、
+  `@pedyc/harness-preset-vue`）补齐 `description`、`license`、`repository`、`homepage`、
+  `bugs`、`keywords`、`engines` 和 `publishConfig`，并各自携带 `LICENSE` 与 `README.md`。
+- `files` 白名单只发布 `src`、`templates` 和 `README.md`，测试、样例和运行记录不进 tarball。
+- CLI 运行时迁入 `packages/cli/src/`，Schema 与 `task.example.json` 随包发布；根目录
+  `scripts/harness/cli.mjs` 和 `run.mjs` 变成指向发布包的薄封装。
+- 项目专属校验迁移为 `.harness/verify.mjs` 钩子：CLI 先做通用校验，再执行项目自定义检查。
+- `pnpm run release:check`：打包全部包、解包检查文件与 `workspace:` 残留，并在系统临时目录的
+  消费者项目中用 tarball 执行 `init --preset generic|vue`、`verify`、`doctor`、
+  `run --dry-run --json`。
+- [CHANGELOG.md](../CHANGELOG.md) 与 [发布与版本规则](./release.md)：SemVer 判定、同步版本
+  策略、发布步骤、Provider 安全边界和兼容性策略。
+- `tests/harness/release.spec.ts` 固定模板同步、包元数据一致性、CLI 自包含、薄封装和
+  Preset 无 Provider 约定。
+
+### 验收标准
+
+```bash
+pnpm run harness:verify
+pnpm run verify:examples
+pnpm run release:check
+pnpm run type-check
+pnpm run test:unit
+pnpm run build
+```
 
 ### 发布门槛
 
@@ -213,6 +232,16 @@ Provider、锁文件识别和上述错误路径。
 - 所有样例项目通过验证。
 - CI 使用 frozen lockfile。
 - 没有未解决的高风险安全问题。
+
+### 验收证据
+
+`release:check` 在临时消费者项目中运行 6 个 CLI 步骤和 1 项输出契约校验，全部通过；
+`test:unit` 覆盖上述发布约束。四个包均为 `1.0.0`，同步发布。
+
+### 遗留说明
+
+v1.0 的「发布」指仓库具备可发布状态并完成本地打包验证。实际推送到 npm registry 需要维护者
+凭据，按 [发布与版本规则](./release.md) 中的步骤执行。
 
 ## 兼容性原则
 
