@@ -19,6 +19,12 @@ npx pedyc-harness run --input .harness/task.json --dry-run --json
 `AGENTS.md`。已有 JSON 配置不会被无条件合并或覆盖；已有 `AGENTS.md` 也只有在
 传入 `--force` 时才覆盖。这样初始化可以安全地重复执行。
 
+`--force` 会重新生成 Preset 管理的配置和入口说明，适合显式升级模板：
+
+```bash
+npx pedyc-harness init --preset vue --force
+```
+
 ## 发布建议
 
 建议将 CLI 作为项目的开发依赖：
@@ -36,6 +42,7 @@ CLI 负责生成项目级配置，Runtime 负责执行。配置和提示词进�
 Harness 仓库使用 `packageManager` 字段固定 pnpm 版本，并在 CI 中使用
 `pnpm install --frozen-lockfile`。目标项目不要求使用 pnpm：Runtime 会优先检测
 `pnpm-lock.yaml`，其次检测 `yarn.lock`，否则使用 npm 执行 `requiredChecks`。
+`doctor` 会显示检测到的包管理器，便于确认项目接入环境。
 
 ## 非 npm 项目
 

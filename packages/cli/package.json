@@ -1,0 +1,23 @@
+{
+  "name": "pedyc-harness",
+  "version": "1.0.0",
+  "description": "Configuration-driven Agent Harness CLI",
+  "type": "module",
+  "bin": {
+    "pedyc-harness": "src/bin.mjs"
+  },
+  "exports": {
+    ".": "./src/index.mjs"
+  },
+  "dependencies": {
+    "@pedyc/harness-core": "workspace:*",
+    "@pedyc/harness-preset-generic": "workspace:*",
+    "@pedyc/harness-preset-vue": "workspace:*"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "src"
+  ]
+}

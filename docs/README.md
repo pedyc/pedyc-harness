@@ -10,3 +10,11 @@
 - [Preset 设计](./preset-design.md)：generic、Vue 以及未来技术栈 Preset 的抽象。
 - [CLI 使用与生成规则](./cli.md)：安装、初始化、验证、运行和升级策略。
 - [迁移路线](./migration.md)：从当前 Vue 示例迁移到通用 Harness 的阶段计划。
+- [里程碑路线](./milestones.md)：迁移、拆包、Preset 和发布的阶段目标与验收标准。
+
+## Workspace 包
+
+当前 pnpm workspace 已包含：
+
+- `@pedyc/harness-core`：可复用 Runtime 原语。
+- `pedyc-harness`：CLI 发布包的初始边界，现阶段兼容根目录旧入口。

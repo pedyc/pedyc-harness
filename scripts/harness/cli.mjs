@@ -4,6 +4,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import { availablePresets, getPreset } from 'pedyc-harness'
+import { detectPackageManager } from './package-manager.mjs'
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const projectRoot = resolve(process.cwd())
@@ -14,51 +16,17 @@ const valueAfter = (name, fallback = null) => {
   return index >= 0 ? args[index + 1] ?? fallback : fallback
 }
 
-const templates = {
-  generic: {
-    policy: {
-      maxIterations: 3,
-      protectedPaths: ['.github/', '.claude/', '.agents/', '.harness/', 'scripts/'],
-      requiredChecks: [],
-      forbiddenCommands: ['git reset --hard', 'git checkout --', 'npm publish'],
-      allowedAgentCommands: [],
-      allowedProductPaths: ['src/'],
-      agentTimeoutMs: 300000,
-    },
-    agents: {
-      providers: {},
-      planner: { mode: 'internal' },
-      coder: { mode: 'external', provider: 'custom' },
-      tester: { mode: 'external', provider: 'custom' },
-      reviewer: { mode: 'external', provider: 'custom' },
-    },
-    instruction: '# Harness project instructions\n\nDefine project-specific rules here. Product changes must stay within the configured product paths.\n',
-  },
-  vue: {
-    policy: {
-      maxIterations: 3,
-      protectedPaths: ['.github/', '.claude/', '.agents/', '.harness/', 'scripts/'],
-      requiredChecks: ['harness:verify', 'type-check', 'test:unit', 'build'],
-      forbiddenCommands: ['git reset --hard', 'git checkout --', 'npm publish'],
-      allowedAgentCommands: [],
-      allowedProductPaths: ['src/'],
-      agentTimeoutMs: 300000,
-    },
-    agents: {
-      providers: { claude: { command: 'node', args: ['scripts/harness/claude-adapter.mjs'] } },
-      planner: { mode: 'external', provider: 'claude' },
-      coder: { mode: 'external', provider: 'claude' },
-      tester: { mode: 'external', provider: 'claude' },
-      reviewer: { mode: 'external', provider: 'claude' },
-    },
-    instruction: '# Harness project instructions\n\n- Use Vue 3 `<script setup lang="ts">`.\n- Keep product changes under `src/`.\n- Keep component props explicitly typed.\n',
-  },
-}
-
 const schemas = ['input.schema.json', 'output.schema.json', 'agent-response.schema.json']
 const writeJson = (path, value) => {
   mkdirSync(dirname(path), { recursive: true })
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
+}
+
+const writeIfMissing = (path, content, force) => {
+  if (!force && existsSync(path)) return false
+  mkdirSync(dirname(path), { recursive: true })
+  writeFileSync(path, content, 'utf8')
+  return true
 }
 
 const run = (script, scriptArgs = []) => {
@@ -72,24 +40,27 @@ const run = (script, scriptArgs = []) => {
 
 const init = () => {
   const presetName = valueAfter('--preset', 'generic')
-  const preset = templates[presetName]
+  const preset = getPreset(presetName)
   if (!preset) {
-    console.error(`Unknown preset '${presetName}'. Available presets: ${Object.keys(templates).join(', ')}`)
+    console.error(`Unknown preset '${presetName}'. Available presets: ${availablePresets().join(', ')}`)
     process.exit(1)
   }
   const harnessRoot = join(projectRoot, '.harness')
+  const force = args.includes('--force')
   mkdirSync(harnessRoot, { recursive: true })
-  writeJson(join(harnessRoot, 'policy.json'), preset.policy)
-  writeJson(join(harnessRoot, 'agents.json'), preset.agents)
+  const writePresetJson = (name, value) => {
+    const path = join(harnessRoot, name)
+    if (force || !existsSync(path)) writeJson(path, value)
+  }
+  writePresetJson('policy.json', preset.policy)
+  writePresetJson('agents.json', preset.agents)
   for (const schema of schemas) {
     const source = join(packageRoot, '.harness', schema)
-    writeFileSync(join(harnessRoot, schema), readFileSync(source, 'utf8'), 'utf8')
+    writeIfMissing(join(harnessRoot, schema), readFileSync(source, 'utf8'), force)
   }
   const instructionPath = join(projectRoot, 'AGENTS.md')
-  if (!existsSync(instructionPath) || args.includes('--force')) {
-    writeFileSync(instructionPath, preset.instruction, 'utf8')
-  }
-  console.log(`Initialized pedyc-harness with the '${presetName}' preset in ${projectRoot}`)
+  writeIfMissing(instructionPath, preset.instruction, force)
+  console.log(`Initialized pedyc-harness with the '${presetName}' preset in ${projectRoot}${force ? ' (forced)' : ''}`)
 }
 
 const verify = () => {
@@ -142,8 +113,10 @@ else if (command === 'run') {
   })
   process.exit(result.status ?? 1)
 } else if (command === 'doctor') {
+  const packageManager = detectPackageManager(projectRoot)
   console.log(`Project root: ${projectRoot}`)
   console.log(`Configuration: ${existsSync(join(projectRoot, '.harness')) ? 'found' : 'missing (.harness)'}`)
+  console.log(`Package manager: ${packageManager.name}`)
   console.log(`Node.js: ${process.version}`)
 } else {
   console.log('Usage: pedyc-harness <init|verify|run|doctor> [options]')
