@@ -67,25 +67,67 @@ pnpm run build
 
 1. 对四个包执行 `pnpm pack`。
 2. 解包检查必需文件、泄漏文件（`tests/`、`examples/`、`scripts/`）和 `workspace:` 残留。
-3. 把 tarball 解压到临时消费者项目的 `node_modules/`，用包内 bin 入口执行
-   `init --preset generic|vue`、`verify`、`doctor` 和 `run --dry-run --json`。
-4. 校验 dry-run 输出的 JSON 结构。
+3. 在系统临时目录创建真实 npm 项目，用 `npm install` 安装四个 tarball。四个包必须在同一条
+   安装命令里，npm 才能用本地 tarball 满足 `@pedyc/harness-core@1.0.0` 这类跨包依赖。
+4. 通过 `node_modules/.bin/pedyc-harness` 驱动安装后的 CLI：
+   - `init --preset vue`；
+   - `verify` 在缺少门禁脚本时必须失败，补齐脚本后必须通过；
+   - `doctor` 必须报告 npm；
+   - `run --dry-run --json` 必须是四阶段预览；
+   - 配置一个离线 Provider 后跑完整四阶段闭环，四个门禁必须真实执行且全部通过。
 
 消费者目录位于系统临时目录，不会命中本仓库的 workspace 链接，因此「本地能跑、装上就坏」
-的问题会在这里暴露。
+的问题会在这里暴露。第 4 步的两向 `verify` 检查很关键：如果消费者项目没有 `package.json`，
+`requiredChecks` 校验会被跳过，`verify` 看起来通过其实什么都没验证。
 
 ## 发布步骤
 
-依赖顺序：先 Core，再 Preset，最后 CLI。
+前置条件（无法由脚本代替）：
+
+1. 拥有 npm 账号，并且该账号拥有 `@pedyc` scope 或有权在其下发布。用
+   `npm org ls pedyc --registry https://registry.npmjs.org/` 确认，输出应包含你的账号和
+   `owner`（或至少 `developer`）。
+2. `npm login --registry https://registry.npmjs.org/`。
+3. 解决 2FA。账号若启用了 `auth-and-writes`（用 `npm profile get --json` 查看 `tfa.mode`），
+   每次发布都需要一次性密码。推荐做法是在 `~/.npmrc` 中配置一个可绕过 2FA 的令牌：
+
+   ```
+   //registry.npmjs.org/:_authToken=<Automation token 或带 Bypass 2FA 的 Granular token>
+   ```
+
+   也可以用 `--otp <code>` 临时传入，但四个包是四次独立调用，30 秒窗口内很可能来不及。
+4. `pedyc-harness` 这个非 scoped 包名未被他人占用。
+
+### registry 陷阱
+
+npm 命令默认走 `.npmrc` 里的 `registry`。本机若指向 `registry.npmmirror.com`，会出现两类
+误导性错误：
+
+- `npm org ls` 报 404。该镜像**没有实现 org 接口**，对任何 org 都返回 404，包括确实存在的。
+- 发布打到镜像上，同样以 not found 收场。
+
+`release:publish` 已经显式传入 npmjs.org，不受影响；但手工排查时必须自己带上
+`--registry https://registry.npmjs.org/`。
+
+另外，npm 在权限不足时返回的是 **404 而不是 403**。所以「not found」既可能是资源不存在，
+也可能是你没权限看它——这是排查 npm 权限问题时最容易走弯路的地方。
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm run release:check
-pnpm --filter @pedyc/harness-core publish --access public --no-git-checks
-pnpm --filter @pedyc/harness-preset-generic publish --access public --no-git-checks
-pnpm --filter @pedyc/harness-preset-vue publish --access public --no-git-checks
-pnpm --filter pedyc-harness publish --access public --no-git-checks
+pnpm run release:publish -- --dry-run   # 预检：认证、版本占用、打包
+pnpm run release:publish                # 真正发布
 ```
+
+`release:publish` 按 Core → preset-generic → preset-vue → CLI 的依赖顺序发布，并在每一步之前
+拒绝执行：
+
+- 未登录，或登录账号无法访问目标 registry。
+- 四个包版本号不一致。
+- 目标 registry 上已存在同名同版本（npm 不允许覆盖，且部分发布最难收拾）。
+- `release:check` 未通过。可用 `--skip-preflight` 跳过，但不应在正式发布时使用。
+- 使用 `pnpm publish` 而非 `npm publish`：只有 pnpm 会把 `workspace:*` 改写成发布版本号。
+
+`--registry` 可覆盖目标 registry，默认 `https://registry.npmjs.org/`。
 
 发布后：
 

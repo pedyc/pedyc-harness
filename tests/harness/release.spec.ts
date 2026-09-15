@@ -113,6 +113,14 @@ describe('release configuration', () => {
 
     expect(scripts['release:check']).toBe('node scripts/harness/release-check.mjs')
     expect(exists('scripts/harness/release-check.mjs')).toBe(true)
+    expect(scripts['release:publish']).toBe('node scripts/harness/publish.mjs')
+    expect(exists('scripts/harness/publish.mjs')).toBe(true)
+
+    // Publishing is irreversible, so the precondition checks must stay in place.
+    const publish = read('scripts/harness/publish.mjs')
+    expect(publish).toContain('whoami')
+    expect(publish).toContain('registry.npmjs.org')
+    expect(publish).toContain('release:check')
 
     const workflow = read('.github/workflows/harness-verify.yml')
     expect(workflow).toContain('pnpm run release:check')

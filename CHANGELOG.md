@@ -21,8 +21,11 @@ v1.0 是 Pedyc Harness 的第一个公开发布版本，把 Harness 从单一 Vu
 - `@pedyc/harness-preset-generic` 和 `@pedyc/harness-preset-vue`：初始化模板与策略预设。
 - 项目级验证扩展点 `.harness/verify.mjs`：CLI 完成通用校验后，可以执行项目自定义的严格检查。
 - `examples/` 下的 generic、vue、node 三个最小外部项目，以及 `pnpm run verify:examples`。
-- `pnpm run release:check`：打包全部 workspace 包、检查 tarball 内容，并在临时消费者项目中
-  用 tarball 运行 `init`、`verify`、`doctor` 和 `run --dry-run`。
+- `pnpm run release:check`：打包全部 workspace 包、检查 tarball 内容，再用真实 `npm install`
+  装进一个临时 npm 项目，并通过 `node_modules/.bin/pedyc-harness` 跑通 `init`、双向 `verify`、
+  `doctor`、`run --dry-run` 以及一次完整的四阶段闭环（四个门禁真实执行）。
+- `pnpm run release:publish`：按依赖顺序发布四个包，发布前校验 npm 认证、registry、版本占用和
+  `release:check`，避免不可逆的部分发布。
 
 ### Changed
 

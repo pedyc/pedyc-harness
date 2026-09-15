@@ -24,6 +24,7 @@
     "harness:run": "node scripts/harness/cli.mjs run",
     "verify:examples": "node scripts/harness/verify-examples.mjs",
     "release:check": "node scripts/harness/release-check.mjs",
+    "release:publish": "node scripts/harness/publish.mjs",
     "test:unit": "vitest run"
   },
   "engines": {

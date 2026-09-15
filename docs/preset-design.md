@@ -1,7 +1,7 @@
 # Preset 设计
 
-Preset 是技术栈差异的载体，不负责实现任务编排。这是 [项目目标](./项目目标.md) 中
-「Harness 流程与技术栈解耦、技术栈规则通过 Preset 注入」的落地。每个 Preset 至少应提供：
+Preset 是技术栈差异的载体，不负责实现任务编排。这是 [项目目标](./项目目标.md) 第二节设计原则 6
+「流程与技术栈解耦、技术栈规则通过 Preset 注入」的落地。每个 Preset 至少应提供：
 
 - 项目检测规则（例如 `vue` 依赖或 `vite.config.ts`）。
 - 产品目录和受保护目录默认值。
@@ -20,7 +20,7 @@ Preset 是技术栈差异的载体，不负责实现任务编排。这是 [项�
 `verificationScripts`、`policy`、`agents`、`instruction` 和 `skills`，定义在
 `packages/preset-generic/src/index.mjs` 与 `packages/preset-vue/src/index.mjs`。
 
-[项目目标](./项目目标.md) 第三节曾列出顶层 `allowedProductPaths`、`requiredChecks` 以及
+[项目目标](./项目目标.md) 第六节曾列出顶层 `allowedProductPaths`、`requiredChecks` 以及
 `instructionTemplates`、`agentTemplates`、`skillTemplates` 等字段。实现时做了收敛：路径和
 检查命令等策略统一收进 `policy`，提示词模板收敛为单个 `instruction` 加 `skills` 数组。
 这样 CLI 只需要读取一个策略对象，不需要理解多套模板字段。
