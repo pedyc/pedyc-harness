@@ -6,6 +6,26 @@
 所有 workspace 包共享同一个版本号，同步发布。升级规则见 [发布与版本规则](./docs/release.md)。
 
 
+## [1.1.1] - 2026-09-16
+
+修复快照忽略规则在非根目录失效的问题。
+
+### Fixed
+
+- `snapshotFiles` 现在在**任意层级**跳过 `node_modules`、`dist` 与 `.git`。
+  `1.1.0` 及更早版本只在项目根层应用这份忽略列表，因此在 monorepo 中
+  （`backend/node_modules`、`frontend/node_modules`、`backend/dist`、`frontend/dist`）
+  会把全部依赖与构建产物逐文件读进快照。实测在一个双包子仓库上：
+  单趟快照从 **13,420 个文件 / 158 秒**降到 **59 个文件 / 43 毫秒**。
+  这不只是性能问题——编排器在每轮 Coder 前后各拍一次快照，任何写入嵌套
+  `dist/` 或 `node_modules/.vite` 的命令都会被 `findOutOfScopeChanges` 判为越界。
+  文件内既有的注释（"Build output and installed dependencies are never part of a
+  product change"）本来就声明了这个语义，此次是对实现与声明不一致的修正。
+
+单包项目的行为不变：原先就在根层被忽略的目录依然被忽略，本次只是把同一规则
+推广到所有深度。
+
+
 ## [1.1.0] - 2026-09-15
 
 Harness 运行时从零类型标注的 ESM `.mjs` 迁移到 TypeScript，由 `tsc` 编译到 `dist/` 发布。

@@ -1,4 +1,4 @@
-import { mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -35,6 +35,17 @@ describe('harness core', () => {
     await writeFile(join(root, 'before.txt'), 'after')
     await writeFile(join(root, 'new.txt'), 'new')
     expect(changedFiles(before, snapshotFiles(root)).sort()).toEqual(['before.txt', 'new.txt'])
+  })
+
+  it('ignores dependency and build directories below the root', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'pedyc-core-'))
+    await mkdir(join(root, 'backend/node_modules'), { recursive: true })
+    await mkdir(join(root, 'backend/dist'), { recursive: true })
+    await mkdir(join(root, 'backend/src'), { recursive: true })
+    await writeFile(join(root, 'backend/node_modules/dependency.js'), 'dependency')
+    await writeFile(join(root, 'backend/dist/bundle.js'), 'bundle')
+    await writeFile(join(root, 'backend/src/real.ts'), 'real')
+    expect([...snapshotFiles(root).keys()]).toEqual(['backend/src/real.ts'])
   })
 
   it('runs the planner, coder, tester and reviewer loop in dry-run mode', async () => {

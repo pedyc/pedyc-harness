@@ -4,13 +4,16 @@ import { join, relative } from 'node:path'
 /** File contents keyed by repository-relative POSIX path. */
 export type FileSnapshot = Map<string, string>
 
-// Build output and installed dependencies are never part of a product change.
-const ignoredAtRoot = ['node_modules', 'dist', '.git']
+// Build output and installed dependencies are never part of a product change,
+// so these directories are skipped at every depth. Restricting the check to the
+// root would make a monorepo snapshot every dependency under `pkg/node_modules`
+// and every build artifact under `pkg/dist`.
+const ignoredDirectories = ['node_modules', 'dist', '.git']
 
 const listFiles = (root: string, directory: string = root, result: string[] = []): string[] => {
   if (!existsSync(directory)) return result
   for (const entry of readdirSync(directory)) {
-    if (directory === root && ignoredAtRoot.includes(entry)) continue
+    if (ignoredDirectories.includes(entry)) continue
     const path = join(directory, entry)
     if (statSync(path).isDirectory()) listFiles(root, path, result)
     else result.push(relative(root, path).replaceAll('\\', '/'))
