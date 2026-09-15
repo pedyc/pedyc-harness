@@ -1,6 +1,6 @@
 {
   "name": "@pedyc/harness-preset-vue",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Vue 3 project preset for pedyc-harness",
   "license": "MIT",
   "type": "module",

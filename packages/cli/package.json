@@ -1,6 +1,6 @@
 {
   "name": "pedyc-harness",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Configuration-driven Agent Harness CLI",
   "license": "MIT",
   "type": "module",

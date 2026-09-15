@@ -103,13 +103,19 @@ const consumerScripts = {
   build: 'node -e "process.exit(0)"',
 }
 
+// Maps a package name to the tarball filename pnpm pack produces:
+//   @pedyc/harness-core -> pedyc-harness-core-<version>.tgz
+//   pedyc-harness       -> pedyc-harness-<version>.tgz
+const tarballNameOf = (name, version) => `${name.replace('@pedyc/', 'pedyc-')}-${version}.tgz`
+
 const writeConsumerManifest = (consumerDir, withScripts) => {
+  const corePkg = JSON.parse(readFileSync(join(root, 'packages/core/package.json'), 'utf-8'))
   const manifest = {
     name: 'pedyc-release-consumer',
     version: '0.0.0',
     private: true,
     dependencies: Object.fromEntries(
-      packages.map(({ name }) => [name, `file:../tarballs/${name.replace('@pedyc/', 'pedyc-')}-1.0.0.tgz`]),
+      packages.map(({ name }) => [name, `file:../tarballs/${tarballNameOf(name, corePkg.version)}`]),
     ),
   }
   if (withScripts) manifest.scripts = consumerScripts
@@ -160,9 +166,16 @@ try {
     ok(`packed ${pkg.name}`)
   }
 
-  // 2. Inspect tarball contents.
+  // 2. Inspect tarball contents. Each package is checked against its own tarball,
+  //    named from its own manifest version, so a version bump never leaves a stale
+  //    hardcoded filename behind.
   for (const pkg of packages) {
-    const tarball = join(tarballDir, `${pkg.name.replace('@pedyc/', 'pedyc-')}-1.0.0.tgz`)
+    const manifest = JSON.parse(readFileSync(join(root, pkg.dir, 'package.json'), 'utf8'))
+    const tarball = join(tarballDir, tarballNameOf(pkg.name, manifest.version))
+    if (!existsSync(tarball)) {
+      fail(`missing tarball for ${pkg.name} at ${tarball}`)
+      continue
+    }
     const entries = readTarGz(tarball)
 
     const missing = pkg.require.filter((entry) => !entries.has(entry))
@@ -176,12 +189,12 @@ try {
     if (leaked.length > 0) fail(`${pkg.name} leaks workspace files: ${leaked.slice(0, 3).join(', ')}`)
     else ok(`${pkg.name} ships no test or example files`)
 
-    const manifest = entries.get('package/package.json')
-    if (!manifest) {
+    const packedManifest = entries.get('package/package.json')
+    if (!packedManifest) {
       fail(`${pkg.name} has no package.json in its tarball`)
       continue
     }
-    const ranges = Object.values(JSON.parse(manifest.toString('utf8')).dependencies ?? {})
+    const ranges = Object.values(JSON.parse(packedManifest.toString('utf8')).dependencies ?? {})
     const unresolved = ranges.filter((range) => String(range).startsWith('workspace:'))
     if (unresolved.length > 0) fail(`${pkg.name} still declares workspace ranges: ${unresolved.join(', ')}`)
     else ok(`${pkg.name} resolves every workspace dependency to a published range`)

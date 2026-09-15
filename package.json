@@ -1,7 +1,7 @@
 {
   "name": "pedyc-harness-workspace",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Vue 3 product demo and configuration-driven Agent Harness workspace",
   "license": "MIT",
   "type": "module",

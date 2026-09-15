@@ -7,6 +7,27 @@
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-09-15
+
+首次推送到 npm registry 的版本。四个包同步发布，其中 `pedyc-harness` 是首次可用版本。
+
+### Added
+
+- 四个包发布到 npm registry：`pedyc-harness`、`@pedyc/harness-core`、
+  `@pedyc/harness-preset-generic`、`@pedyc/harness-preset-vue`，版本 `1.0.1`。
+- 安装入口为 `npm install --save-dev pedyc-harness@1.0.1`。
+
+### Notes
+
+- **四个包的发布内容相对 `1.0.0` 没有任何代码变更**，只调整了版本号。仓库内的
+  `release:check` 有一处修复：tarball 文件名改为从 manifest 读取版本，不再硬编码 `1.0.0`。
+  该脚本不在发布包内，不影响上面这条结论。`1.0.0` 是一次未完成的发布：
+  三个 scoped 包已经上线，`pedyc-harness@1.0.0` 从未发布，因此不存在依赖它的版本。
+  registry 上的 `@pedyc/harness-core@1.0.0`、`@pedyc/harness-preset-generic@1.0.0`、
+  `@pedyc/harness-preset-vue@1.0.0` 没有任何消费者，可以忽略。
+- 本次发布以 [发布与版本规则](./docs/release.md) 的手工流程执行，未走
+  `pnpm run release:publish`，因此没有触发该脚本的依赖顺序发布与部分失败保护。
+
 ## [1.0.0] - 2026-09-15
 
 v1.0 是 Pedyc Harness 的第一个公开发布版本，把 Harness 从单一 Vue 项目脚本拆分为
