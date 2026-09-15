@@ -1,3 +1,5 @@
+import { createRequire } from 'node:module'
+
 export { detectPackageManager, packageScriptCommand } from './package-manager.mjs'
 export { normalizeTask, readTaskFile } from './intake.mjs'
 export { runCommand } from './command.mjs'
@@ -8,4 +10,6 @@ export { validatePolicy, findOutOfScopeChanges, isCommandAllowed } from './polic
 export { createProviderRunner } from './provider.mjs'
 export { runOrchestrator } from './orchestrator.mjs'
 
-export const harnessCoreVersion = '1.0.0'
+// Read from the manifest rather than repeating the literal here: a hardcoded copy silently
+// kept reporting the previous release after the version was bumped.
+export const harnessCoreVersion = createRequire(import.meta.url)('../package.json').version

@@ -68,7 +68,7 @@ pnpm run build
 1. 对四个包执行 `pnpm pack`。
 2. 解包检查必需文件、泄漏文件（`tests/`、`examples/`、`scripts/`）和 `workspace:` 残留。
 3. 在系统临时目录创建真实 npm 项目，用 `npm install` 安装四个 tarball。四个包必须在同一条
-   安装命令里，npm 才能用本地 tarball 满足 `@pedyc/harness-core@1.0.0` 这类跨包依赖。
+   安装命令里，npm 才能用本地 tarball 满足 `@pedyc/harness-core` 这类跨包依赖。
 4. 通过 `node_modules/.bin/pedyc-harness` 驱动安装后的 CLI：
    - `init --preset vue`；
    - `verify` 在缺少门禁脚本时必须失败，补齐脚本后必须通过；

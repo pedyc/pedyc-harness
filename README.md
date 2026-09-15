@@ -131,7 +131,7 @@ npx pedyc-harness run --input .harness/task.json --dry-run --json
 `generic` Preset 只生成通用契约和安全策略；`vue` Preset 额外生成 Vue 约束。运行时通过
 `--root` 将 Harness 指向目标项目，Provider 和项目规则仍保存在目标项目中并纳入版本控制。
 
-发布包共有四个，全部为 `1.0.0`、同步发布：
+发布包共有四个，全部为 `1.0.1`、同步发布：
 
 | 包 | 用途 |
 | --- | --- |

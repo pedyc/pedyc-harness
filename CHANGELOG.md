@@ -7,6 +7,17 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `@pedyc/harness-core` 导出的 `harnessCoreVersion` 不再硬编码版本号，改为读取自身
+  `package.json`。`1.0.1` 中该常量仍返回 `1.0.0`；仓库内没有任何调用方，所以没有测试
+  能发现这处漂移，registry 上已发布的 `1.0.1` 产物同样保持原值。
+
+### Changed
+
+- README、里程碑和发布规则中残留的 `1.0.0` 版本引用改为当前版本，或去掉具体版本号，
+  避免下次升版再次过期。
+
 ## [1.0.1] - 2026-09-15
 
 首次推送到 npm registry 的版本。四个包同步发布，其中 `pedyc-harness` 是首次可用版本。
