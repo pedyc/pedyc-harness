@@ -1,7 +1,17 @@
 # Pedyc-Harness：我的harness工程实践
 
-这是一个 Vue 3 + TypeScript + Vite 的 Agent Harness 示例项目，目标是让 LLM
-能够按照输入契约、执行策略和质量门禁，自主完成“计划 → 实现 → 验证 → 审查”的任务闭环。
+> **Run AI agents under explicit contracts, policies, and verification gates.**
+>
+> 让 Agent 在契约、策略和独立验证的约束下可靠执行任务。
+
+这是一个 **Agent 治理层**（Agent Harness）项目：它不实现 Agent 自身的推理能力，
+Claude Code、Codex 这类 Coding Agent 是它接入并约束的执行组件。Harness 回答的是
+「这次任务允许 Agent 干什么」和「干完之后凭什么算数」，因此核心资产是契约、策略、
+独立验证、证据和审计，而不是模型能力。**Agent 越强，Harness 越重要。**
+
+仓库同时包含一个 Vue 3 + TypeScript + Vite 产品演示项目，作为第一个集成宿主。
+定位、设计原则、能力优先级和**明确不做**的方向见 [项目目标](./docs/项目目标.md)；
+已经做到哪一步见 [里程碑路线](./docs/milestones.md)。
 
 ## 当前完成情况
 
@@ -53,7 +63,7 @@
   - [x] 未启用 `--dangerously-skip-permissions`
 - [x] 多 Provider Adapter 配置抽象
   - [x] Agent 角色通过 `provider` 路由到具体 Adapter
-  - [x] Claude CLI 作为默认 Provider
+  - [x] 生成配置默认不启用任何 Provider（v1.0 起，`verify` 与 `run --dry-run` 无需 Provider）
   - [x] 可在 `.harness/agents.json` 增加 Copilot 或其他 Provider
 - [x] 真实 Coder 闭环验证
   - [x] Planner、Coder、Tester、Reviewer 流程成功跑通
@@ -65,50 +75,33 @@
 
 ## 待办清单
 
-### 优先级 P0：提高闭环可信度
+完整的工作项与验收标准见 [里程碑路线](./docs/milestones.md)，这里只保留当前进度，
+避免同一份计划在多个文件里各自漂移。**明确不做**的方向见
+[项目目标](./docs/项目目标.md) 第四节，不列在此处。
 
-- [x] 将 Planner 接入真实 Claude Adapter，而不是使用内置 fallback
-- [x] 将 Tester 接入真实 Claude Adapter
-- [x] 将 Reviewer 接入真实 Claude Adapter
-- [x] Tester 独立执行并记录命令结果，不信任 Coder 自报的验证结果
-- [x] 为 Planner、Tester、Reviewer 增加阶段专用响应校验
-- [x] Reviewer 强制返回结构化 `approved`、问题列表和验收证据
-- [x] 增加输入失败场景测试，验证结构化失败输出
+### 第二阶段：治理能力（M7–M11）
+
+- [ ] M7 让策略真正可执行：`protectedPaths` 和 `forbiddenCommands` 当前只是声明性字段，
+      无任何拦截效果
+- [ ] M8 独立验证与证据链：每条门禁的退出码、耗时和输出摘要写入 `output.json`
+- [ ] M9 执行轨迹与审计：事件流、阶段耗时、`runs list/show`、运行记录保留策略
+- [ ] M10 审批门：高风险任务的可选人工节点
+- [ ] M11 发布 v1.1.0
+
+### 尚未排期
+
 - [ ] 在允许 Claude CLI 执行后验证四阶段真实闭环成功
+- [ ] 完整提示词分层：把 core + preset + AGENTS.md 显式注入每次请求
 
-### 优先级 P1：实时执行和可观测性
+### 工程质量
 
-- [ ] 将阶段开始、结束、命令执行和错误实时输出到终端
-- [ ] 转发验证命令的 stdout/stderr 摘要
-- [ ] 显示每个 Agent 阶段的耗时
-- [ ] 增加命令级超时和取消机制
-- [ ] 增加运行记录索引和更易读的汇总报告
-- [ ] 增加运行记录清理策略
-
-### 优先级 P1：安全和策略治理
-
-- [ ] 将 `allowedAgentCommands` 配置为明确的非空白名单
-- [ ] 对 Agent 的命令参数进行更严格的校验
-- [ ] 增加符号链接、路径穿越和删除文件场景的安全测试
-- [ ] 对 Claude 返回的文件修改声明与实际 diff 做一致性检查
-- [ ] 增加敏感信息扫描
-
-### 优先级 P2：测试和工程质量
-
-- [ ] 增加 Playwright E2E 测试
 - [ ] 增加越权修改、无修改任务和命令失败场景测试
+- [ ] 增加符号链接、路径穿越和删除文件场景的安全测试
+- [ ] 增加多任务、并发和长任务场景验证
+- [ ] 增加 Playwright E2E 测试
 - [ ] 增加 ESLint
 - [ ] 增加 Prettier
-- [ ] 在 CI 中执行 Harness dry-run 和更多失败路径测试
-- [ ] 增加多任务、并发和长任务场景验证
-
-### 优先级 P2：多 Agent 和扩展能力
-
-- [ ] 支持按任务选择不同 Agent Adapter
-- [ ] 支持多个 Coder 子 Agent 的分工和结果合并
-- [ ] 支持人工审批节点作为可选策略
-- [ ] 支持任务取消后恢复
-- [ ] 支持 Anthropic API 等非 CLI Adapter
+- [x] 在 CI 中执行 Harness dry-run 和更多失败路径测试
 
 ## 目录职责
 
@@ -118,6 +111,11 @@
 | `.github/` | GitHub Agent、Instructions、CI 和配置校验 |
 | `.agents/skills/` | 可复用的任务技能 |
 | `.harness/` | 输入/输出契约、策略、评估、Agent 配置和运行记录 |
+| `packages/` | Core、CLI 和 Preset 的 workspace 发布包 |
+| `scripts/harness/` | 发布包的兼容入口（薄封装）、Provider Adapter、样例与发布校验脚本 |
+| `examples/` | 外部项目样例和兼容性验收项目 |
+| `.claude/` | Claude Code 入口和权限相关配置 |
+| `tests/` | 产品组件和 Harness 配置测试 |
 
 ## 通用化与 npm CLI
 
@@ -132,19 +130,38 @@ npx pedyc-harness run --input .harness/task.json --dry-run --json
 
 `generic` Preset 只生成通用契约和安全策略；`vue` Preset 额外生成 Vue 约束。运行时通过
 `--root` 将 Harness 指向目标项目，Provider 和项目规则仍保存在目标项目中并纳入版本控制。
-详细设计见 [`docs/`](D:/Workspace/pedyc/pedyc-harness/docs)。
+
+发布包共有四个，全部为 `1.0.1`、同步发布：
+
+| 包 | 用途 |
+| --- | --- |
+| `pedyc-harness` | CLI，内含 Preset Registry 和 Schema 模板，可独立安装 |
+| `@pedyc/harness-core` | Runtime 原语，不依赖 Vue |
+| `@pedyc/harness-preset-generic` | 通用契约与安全策略 |
+| `@pedyc/harness-preset-vue` | Vue 3 + TypeScript + Vite 约定 |
+
+CLI 不假设用户安装或登录了任何 Agent CLI：生成的 `agents.json` 不含 Provider，
+`verify` 和 `run --dry-run` 无需 Provider 即可使用。
+
+详细设计见 [`docs/`](./docs/README.md)，发布规则见 [发布与版本规则](./docs/release.md)。
 
 本仓库使用 pnpm 管理依赖，目标项目仍兼容 npm、pnpm 和 yarn。Harness Runtime 会根据
 锁文件选择验证命令对应的包管理器。
-| `scripts/harness/` | Harness 编排器和 Provider Adapter |
-| `.claude/` | Claude Code 入口和权限相关配置 |
-| `tests/` | 产品组件和 Harness 配置测试 |
+
+`examples/` 中的 `generic-project`、`vue-project` 和 `node-project` 用真实的最小项目验证
+这一点，可执行 `npm run verify:examples` 复现。
 
 ## 常用命令
 
 ```powershell
 # 配置完整性检查
 npm run harness:verify
+
+# 外部项目样例验收（init、verify、dry-run、doctor）
+npm run verify:examples
+
+# 发布前检查：打包四个包并在临时消费者项目中跑通 CLI
+npm run release:check
 
 # 单元测试
 npm run test:unit
@@ -155,7 +172,7 @@ npm run type-check
 # 构建
 npm run build
 
-# 安全预览，不修改产品代码
+# 安全预览：不调用 Provider、不执行验证命令、不修改产品代码
 node scripts/harness/run.mjs --input .harness/task.example.json --dry-run --json
 
 # 运行真实 Harness
@@ -260,15 +277,18 @@ Planner → Coder → Tester → Reviewer
 
 ```powershell
 npm run harness:verify
+npm run verify:examples
+npm run release:check
 npm run type-check
 npm run test:unit
 npm run build
 ```
 
-核心原则：
+核心原则（完整列表见 [项目目标](./docs/项目目标.md) 第二节）：
 
-1. Agent 只能修改 `src/` 产品目录。
-2. `.github/`、`.agents/`、`.harness/`、`.claude/` 和 `scripts/` 默认受保护。
-3. 最终结果必须满足输出契约。
+1. **不能把 Agent 的自我描述当作独立验证证据**——所有门禁由 Tester 独立执行并记录证据。
+2. Agent 只能修改 `src/` 产品目录，这条由 `allowedProductPaths` 强制执行。
+3. `.github/`、`.agents/`、`.harness/`、`.claude/` 和 `scripts/` 在 `policy.json` 中列为
+   `protectedPaths`，但**当前尚未强制拦截**，属于 M7 的工作。
 4. 所有必要验证命令通过后，Reviewer 才能批准任务。
-5. 不能把 Agent 的自我描述当作独立验证证据。
+5. 最终结果必须满足输出契约。

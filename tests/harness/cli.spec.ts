@@ -55,6 +55,33 @@ describe('pedyc-harness CLI', () => {
     expect(await readFile(join(root, '.harness/policy.json'), 'utf8')).toContain('"type-check"')
     expect(await readFile(join(root, 'AGENTS.md'), 'utf8')).toContain('Vue 3')
   })
+
+  it('reports template differences and updates only missing files by default', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'pedyc-harness-sync-'))
+    await writeFile(join(root, 'package.json'), '{}')
+    await runCli(root, 'init', '--preset', 'generic')
+    const policyPath = join(root, '.harness/policy.json')
+    await writeFile(policyPath, '{"custom":true}\n')
+    const diffResult = await runCli(root, 'diff', '--preset', 'generic')
+    expect(diffResult.code).toBe(0)
+    expect(diffResult.stdout).toContain('modified\t.harness/policy.json')
+    expect(diffResult.stdout).toContain('unchanged\t.harness/agents.json')
+
+    await runCli(root, 'update', '--preset', 'generic')
+    expect(await readFile(policyPath, 'utf8')).toBe('{"custom":true}\n')
+  })
+
+  it('updates modified templates only with --force', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'pedyc-harness-force-'))
+    await writeFile(join(root, 'package.json'), '{}')
+    await runCli(root, 'init', '--preset', 'generic')
+    const policyPath = join(root, '.harness/policy.json')
+    await writeFile(policyPath, '{"custom":true}\n')
+
+    const result = await runCli(root, 'update', '--preset', 'generic', '--force')
+    expect(result.code).toBe(0)
+    expect(await readFile(policyPath, 'utf8')).toContain('"allowedProductPaths"')
+  })
 })
 
 describe('preset registry', () => {
@@ -63,6 +90,7 @@ describe('preset registry', () => {
     expect(getPreset('generic').name).toBe('generic')
     expect(getPreset('vue').name).toBe('vue')
     expect(getPreset('unknown')).toBeUndefined()
+    expect(getPreset('vue').verificationScripts).toContain('build')
   })
 })
 

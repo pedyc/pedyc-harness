@@ -1,0 +1,21 @@
+{
+  "name": "harness-example-vue",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "type-check": "vue-tsc --noEmit",
+    "test:unit": "vitest run",
+    "harness:verify": "pedyc-harness verify"
+  },
+  "dependencies": {
+    "vue": "^3.5.42"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.8",
+    "vite": "^8.2.2",
+    "vue-tsc": "^3.3.11"
+  }
+}

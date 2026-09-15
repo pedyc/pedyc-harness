@@ -1,0 +1,16 @@
+{
+  "feature": "Add a user profile card",
+  "objective": "Display a typed user name, avatar, and role in a reusable Vue component.",
+  "constraints": [
+    "Use Vue 3 script setup with TypeScript",
+    "Keep product changes under src/"
+  ],
+  "acceptanceCriteria": [
+    "The component accepts typed user data through props",
+    "The component renders name, avatar, and role",
+    "npm run type-check passes",
+    "npm run build passes"
+  ],
+  "testHints": ["npm run type-check", "npm run build"],
+  "maxIterations": 3
+}

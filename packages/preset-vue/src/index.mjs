@@ -1,5 +1,9 @@
 export const vuePreset = {
   name: 'vue',
+  detection: { requiredFiles: ['vite.config.ts'], requiredDependencies: ['vue'] },
+  defaultProductPaths: ['src/'],
+  verificationScripts: ['harness:verify', 'type-check', 'test:unit', 'build'],
+  skills: [],
   policy: {
     maxIterations: 3,
     protectedPaths: ['.github/', '.claude/', '.agents/', '.harness/', 'scripts/'],
@@ -10,11 +14,11 @@ export const vuePreset = {
     agentTimeoutMs: 300000,
   },
   agents: {
-    providers: { claude: { command: 'node', args: ['scripts/harness/claude-adapter.mjs'] } },
-    planner: { mode: 'external', provider: 'claude' },
-    coder: { mode: 'external', provider: 'claude' },
-    tester: { mode: 'external', provider: 'claude' },
-    reviewer: { mode: 'external', provider: 'claude' },
+    providers: {},
+    planner: { mode: 'internal' },
+    coder: { mode: 'external', provider: 'custom' },
+    tester: { mode: 'external', provider: 'custom' },
+    reviewer: { mode: 'external', provider: 'custom' },
   },
   instruction: '# Harness project instructions\n\n- Use Vue 3 `<script setup lang="ts">`.\n- Keep product changes under `src/`.\n- Keep component props explicitly typed.\n',
 }

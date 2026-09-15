@@ -44,9 +44,11 @@ The default coder adapter is intentionally external. Configure
 `.harness/agents.json` with a command that accepts one JSON payload on stdin
 before running a non-dry execution. The adapter must only change `src/`.
 
-The repository includes a Claude Code adapter at
-`scripts/harness/claude-adapter.mjs`. It requires the `claude` CLI to be
-installed and authenticated, uses structured JSON output, and never enables
+The Claude Code adapter at `scripts/harness/claude-adapter.mjs` is an optional
+repository-local example, not part of any published package. Presets generate an
+`agents.json` without providers, so `verify` and `run --dry-run` work before an
+adapter is configured. The adapter requires the `claude` CLI to be installed and
+authenticated, uses structured JSON output, and never enables
 `--dangerously-skip-permissions`.
 
 If a command fails, fix the cause and rerun the failed command. Do not report

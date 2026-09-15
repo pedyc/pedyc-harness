@@ -52,4 +52,30 @@ describe('harness core', () => {
     expect(result.completed).toBe(true)
     expect(result.phases.map(({ name }) => name)).toEqual(['planner', 'coder', 'tester', 'reviewer'])
   })
+
+  it('never invokes a provider or gate during a dry run', async () => {
+    let agentCalls = 0
+    let gateCalls = 0
+    const result = await runOrchestrator({
+      input: { feature: 'Feature', objective: 'Objective', acceptanceCriteria: ['Done'], maxIterations: 1 },
+      policy: { maxIterations: 1, allowedProductPaths: ['src/'] },
+      dryRun: true,
+      snapshot: () => new Map(),
+      changedFiles: () => [],
+      runAgent: async () => {
+        agentCalls += 1
+        throw new Error('dry run must not call an agent provider')
+      },
+      runVerification: async () => {
+        gateCalls += 1
+        throw new Error('dry run must not execute verification gates')
+      },
+    })
+
+    expect(result.completed).toBe(true)
+    expect(result.issues).toEqual([])
+    expect(result.verification).toEqual([])
+    expect(agentCalls).toBe(0)
+    expect(gateCalls).toBe(0)
+  })
 })

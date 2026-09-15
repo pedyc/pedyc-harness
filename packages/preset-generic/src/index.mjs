@@ -1,5 +1,9 @@
 export const genericPreset = {
   name: 'generic',
+  detection: { requiredFiles: [], requiredDependencies: [] },
+  defaultProductPaths: ['src/'],
+  verificationScripts: [],
+  skills: [],
   policy: {
     maxIterations: 3,
     protectedPaths: ['.github/', '.claude/', '.agents/', '.harness/', 'scripts/'],

@@ -1,29 +1,52 @@
 # CLI 使用与生成规则
 
+CLI 是 [项目目标](./项目目标.md) 中的工具链入口：npm 包提供稳定的运行时和模板，CLI 把
+适配当前项目的配置、脚本和提示词生成到目标项目中。
+
 ## 命令
+
+已实现：
 
 ```bash
 npx pedyc-harness init --preset generic
 npx pedyc-harness init --preset vue
 npx pedyc-harness verify
 npx pedyc-harness doctor
+npx pedyc-harness diff --preset generic
+npx pedyc-harness update --preset generic
 npx pedyc-harness run --input .harness/task.json --dry-run --json
 ```
 
-`run` 也可以从任意目录调用，Runtime 会把当前目录作为目标项目 root；底层脚本支持
-显式的 `--root <path>`。
+`run` 也可以从任意目录调用，CLI 会把当前目录作为目标项目 root；底层脚本支持显式的
+`--root <path>`。
+
+`run --dry-run` 是安全预览：不调用任何 Agent Provider、不执行 `requiredChecks`、不修改产品
+文件，只返回 `status: passed` 的结构化结果。它可以在还没有配置 Provider 的项目中直接运行，
+用于确认配置和输入契约是否可用。
+
+`verify` 分两步：先做与项目无关的通用校验（契约文件存在且可解析、Policy 合法、Provider 命令
+形状正确、角色 mode 合法、`requiredChecks` 都能在 `package.json` 中找到对应脚本），再在项目
+存在 `.harness/verify.mjs` 时执行该钩子。项目特有规则写进钩子，不需要修改 Core 或 CLI。
+
+规划中：
+
+- `list-presets`：列出可用 Preset，避免让用户记忆 Preset 名称。
 
 ## 初始化行为
 
-`init` 创建 `.harness/policy.json`、`.harness/agents.json`、JSON Schema 和
-`AGENTS.md`。已有 JSON 配置不会被无条件合并或覆盖；已有 `AGENTS.md` 也只有在
-传入 `--force` 时才覆盖。这样初始化可以安全地重复执行。
+`init` 创建 `.harness/policy.json`、`.harness/agents.json`、JSON Schema 和 `AGENTS.md`。
+按 [项目目标](./项目目标.md) 第七节的原则，初始化必须可以安全地重复执行：已有 JSON 配置
+不会被无条件合并或覆盖；已有 `AGENTS.md` 也只有在传入 `--force` 时才覆盖。
 
 `--force` 会重新生成 Preset 管理的配置和入口说明，适合显式升级模板：
 
 ```bash
 npx pedyc-harness init --preset vue --force
 ```
+
+`diff` 比较当前项目与 Preset 的受管模板文件，输出 `missing`、`unchanged` 或 `modified`
+状态，不会修改文件。`update` 只补充缺失文件，并默认跳过已经修改的文件；传入 `--force`
+才会覆盖已修改的模板。
 
 ## 发布建议
 
@@ -34,8 +57,26 @@ npm install --save-dev pedyc-harness
 pnpm add --save-dev pedyc-harness
 ```
 
-CLI 负责生成项目级配置，Runtime 负责执行。配置和提示词进入项目版本库后，Harness
-升级可以通过 `init`、模板 diff 或后续 `update` 命令显式完成，而不是隐式改变 CI 行为。
+CLI 负责生成项目级配置，Runtime 负责执行。配置和提示词进入项目版本库后，Harness 升级可以
+通过 `init`、`diff` 或 `update` 显式完成，而不是隐式改变 CI 行为。
+
+CLI 是自包含的发布包：运行时、Preset Registry 和 Schema 模板都在包内，不引用仓库路径。
+打包与安装验证由 `pnpm run release:check` 完成，版本与发布规则见
+[发布与版本规则](./release.md)。
+
+## 外部项目样例
+
+`examples/` 提供 `generic-project`、`vue-project` 和 `node-project` 三个最小项目，分别使用
+pnpm、yarn 和 npm 锁文件。它们用于验证 Harness 不依赖当前仓库的 Vue 目录结构：
+
+```bash
+cd examples/generic-project
+pnpm exec pedyc-harness init
+pnpm exec pedyc-harness verify
+pnpm exec pedyc-harness run --dry-run --json
+```
+
+在仓库根目录执行 `pnpm run verify:examples` 会对三个样例运行完整验收命令。
 
 ## 包管理器兼容
 

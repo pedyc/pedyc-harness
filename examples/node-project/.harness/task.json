@@ -1,0 +1,16 @@
+{
+  "feature": "Add a pure greeting helper",
+  "objective": "Expose a small pure function that formats a greeting.",
+  "constraints": [
+    "Keep product changes under src/",
+    "Use Node.js ESM"
+  ],
+  "acceptanceCriteria": [
+    "The helper returns the expected greeting",
+    "The check script passes"
+  ],
+  "testHints": [
+    "npm run check"
+  ],
+  "maxIterations": 2
+}
