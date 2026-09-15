@@ -43,7 +43,14 @@ not need to change.
 
 A Provider is a local command that receives one JSON request on stdin and writes one
 JSON response to stdout. Diagnostics go to stderr. See the repository
-[Provider design](https://github.com/pedyc/pedyc-harness/blob/main/docs/provider-design.md).
+[Provider design](https://github.com/pedyc/pedyc-harness/blob/main/docs/Provider%E8%AE%BE%E8%AE%A1.md).
+
+## Changelog
+
+All four Harness packages share one version number and are released together, so
+release notes for this package live in the repository changelog:
+
+https://github.com/pedyc/pedyc-harness/blob/main/CHANGELOG.md
 
 ## License
 

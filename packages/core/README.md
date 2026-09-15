@@ -43,6 +43,13 @@ import { runOrchestrator } from '@pedyc/harness-core/orchestrator'
 `runOrchestrator({ dryRun: true })` skips every Agent Provider and verification gate
 and returns a structured passing result.
 
+## Changelog
+
+All four Harness packages share one version number and are released together, so
+release notes for this package live in the repository changelog:
+
+https://github.com/pedyc/pedyc-harness/blob/main/CHANGELOG.md
+
 ## License
 
 MIT

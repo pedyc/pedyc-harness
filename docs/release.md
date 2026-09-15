@@ -428,32 +428,59 @@ bug fix
 
 # 12. Package Version Relationship
 
-四个 package 不要求每次发布都同步版本。
-
-例如：
+四个 package **共享同一个版本号，同步发布**：
 
 ```text
-@pedyc/harness-core       0.4.0
-pedyc-harness              0.4.0
-@pedyc/harness-preset-generic 0.3.0
-@pedyc/harness-preset-vue 0.2.0
+@pedyc/harness-core           1.1.0
+pedyc-harness                 1.1.0
+@pedyc/harness-preset-generic 1.1.0
+@pedyc/harness-preset-vue     1.1.0
 ```
 
-可以独立演进。
+这不是靠约定维持的，而是被工具链强制的。三条独立的原因：
 
-但是如果发生跨 package API 变化，需要明确升级依赖。
+**1. 发布脚本拒绝版本不一致。** `scripts/harness/publish.ts` 在发布前收集四个
+manifest 的版本，只要不全都相同就直接退出，一个包都不发。
 
-例如：
+**2. `workspace:*` 改写成精确版本，不是 caret。** 跨包依赖声明为 `workspace:*`，
+`pnpm publish` 会把它改写成精确锁定版本：
 
 ```text
-Core API changed
-    ↓
-CLI depends on new Core API
-    ↓
-CLI dependency version updated
+package.json 中          发布后 package.json 中
+workspace:*      →       1.1.0        （不是 ^1.1.0）
 ```
 
-不能只修改代码而不更新 package dependency。
+所以单独发布 `@pedyc/harness-core` 的新版本**不会传递给任何已有消费者**：
+依赖它的 CLI 和两个 preset 仍然精确锁定旧版本，除非它们也重新发布。
+
+**3. 依赖是菱形闭包。** 任何一条边上的改动都会波及全部四个包：
+
+```text
+pedyc-harness                  → @pedyc/harness-core
+pedyc-harness                  → @pedyc/harness-preset-generic
+pedyc-harness                  → @pedyc/harness-preset-vue
+@pedyc/harness-preset-generic  → @pedyc/harness-core
+@pedyc/harness-preset-vue      → @pedyc/harness-core
+```
+
+因此同步发布是唯一自洽的方式。发布入口只有根目录的 `pnpm run release:publish`，
+它按 `core → preset-generic → preset-vue → cli` 的依赖顺序推送四个包。
+
+## 升级规则
+
+一次发布只产生一个版本号，取四个包中变更的**最高**语义级别：
+
+```text
+四个包都只有向后兼容修复   → PATCH
+任一个包新增向后兼容能力   → MINOR
+任一个包有不兼容变化       → MAJOR
+```
+
+各等级的具体判定标准见上一节。
+
+> 如果将来确实需要让四个包独立演进，必须同时改三处：把依赖从 `workspace:*`
+> 改为 `workspace:^`、移除 `publish.ts` 中的版本一致性检查、并修订本节。
+> 只改其中一处会导致"发布了但消费者装不到"这类静默故障。
 
 ---
 
