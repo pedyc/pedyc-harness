@@ -1,6 +1,6 @@
 ---
 name: Tester
-description: Verify product changes and diagnose failures.
+description: Verify harness changes and diagnose failures.
 argument-hint: Describe the completed change and its acceptance criteria.
 tools: ['vscode', 'execute', 'read', 'search']
 ---
@@ -8,7 +8,14 @@ tools: ['vscode', 'execute', 'read', 'search']
 Verify the implementation against its acceptance criteria.
 
 Run:
-- `npm run type-check`
-- `npm run build`
+- `pnpm run build`
+- `pnpm run type-check`
+- `pnpm run test:unit`
+- `pnpm run harness:verify`
 
-Inspect the diff for missing states, invalid props, accessibility regressions, and unrelated changes. If a check fails, return the exact failure and the smallest fix needed.
+`build` runs first because the packages compile to `dist/` and the Harness
+resolves them through their published entry points.
+
+Inspect the diff for missing branches, unhandled error paths, contract or schema
+drift, and unrelated changes. If a check fails, return the exact failure and the
+smallest fix needed.

@@ -1,20 +1,57 @@
 {
   "name": "@pedyc/harness-core",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Runtime primitives for Pedyc Harness",
   "license": "MIT",
   "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
   "exports": {
-    ".": "./src/index.mjs",
-    "./package-manager": "./src/package-manager.mjs",
-    "./intake": "./src/intake.mjs",
-    "./command": "./src/command.mjs",
-    "./snapshots": "./src/snapshots.mjs",
-    "./schema": "./src/schema.mjs",
-    "./agent": "./src/agent.mjs",
-    "./policy": "./src/policy.mjs",
-    "./provider": "./src/provider.mjs",
-    "./orchestrator": "./src/orchestrator.mjs"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package-manager": {
+      "types": "./dist/core/package-manager.d.ts",
+      "default": "./dist/core/package-manager.js"
+    },
+    "./intake": {
+      "types": "./dist/core/intake.d.ts",
+      "default": "./dist/core/intake.js"
+    },
+    "./command": {
+      "types": "./dist/core/command.d.ts",
+      "default": "./dist/core/command.js"
+    },
+    "./snapshots": {
+      "types": "./dist/core/diff-inspector.d.ts",
+      "default": "./dist/core/diff-inspector.js"
+    },
+    "./schema": {
+      "types": "./dist/core/validator.d.ts",
+      "default": "./dist/core/validator.js"
+    },
+    "./agent": {
+      "types": "./dist/core/agent.d.ts",
+      "default": "./dist/core/agent.js"
+    },
+    "./policy": {
+      "types": "./dist/core/policy-engine.d.ts",
+      "default": "./dist/core/policy-engine.js"
+    },
+    "./provider": {
+      "types": "./dist/adapters/provider-runner.d.ts",
+      "default": "./dist/adapters/provider-runner.js"
+    },
+    "./orchestrator": {
+      "types": "./dist/core/executor.d.ts",
+      "default": "./dist/core/executor.js"
+    },
+    "./contracts": {
+      "types": "./dist/contracts/index.d.ts",
+      "default": "./dist/contracts/index.js"
+    }
   },
   "repository": {
     "type": "git",
@@ -41,7 +78,7 @@
     "ajv": "^8.20.0"
   },
   "files": [
-    "src",
+    "dist",
     "README.md"
   ]
 }

@@ -1,0 +1,12 @@
+{
+  // The repository's own tooling. It compiles to `scripts/dist/`, which sits at
+  // the same depth as the `scripts/harness/` sources it replaces, so every
+  // `resolve(..., '../..')` that walks up to the repository root keeps working.
+  // Emitting one level deeper would silently point those at `scripts/` instead.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "scripts/harness",
+    "outDir": "scripts/dist"
+  },
+  "include": ["scripts/harness/**/*.ts"]
+}

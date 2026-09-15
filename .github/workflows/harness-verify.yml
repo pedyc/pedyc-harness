@@ -19,9 +19,13 @@ jobs:
           node-version: 20
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # Build first: the Harness resolves the workspace packages through their
+      # published entry points, so `dist/` must exist before any gate runs.
+      - run: pnpm run build
       - run: pnpm run harness:verify
+      # The derived schema copies must match schemas/ before anything ships.
+      - run: pnpm run schemas:check
       - run: pnpm run verify:examples
       - run: pnpm run release:check
       - run: pnpm run type-check
       - run: pnpm run test:unit
-      - run: pnpm run build

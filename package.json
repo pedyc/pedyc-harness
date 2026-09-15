@@ -1,8 +1,8 @@
 {
   "name": "pedyc-harness-workspace",
   "private": true,
-  "version": "1.0.1",
-  "description": "Vue 3 product demo and configuration-driven Agent Harness workspace",
+  "version": "1.1.0",
+  "description": "Configuration-driven Agent Harness workspace",
   "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@10.15.0",
@@ -14,37 +14,34 @@
     "packages/*"
   ],
   "bin": {
-    "pedyc-harness": "packages/cli/src/bin.mjs"
+    "pedyc-harness": "packages/cli/dist/bin.js"
   },
   "scripts": {
-    "dev": "vite",
-    "build": "vue-tsc --noEmit && vite build",
-    "type-check": "vue-tsc --noEmit",
+    "build": "pnpm -r --if-present run build && tsc -p tsconfig.scripts.json",
+    "prepare": "pnpm run build",
+    "type-check": "tsc --noEmit -p tsconfig.json",
+    "schemas:sync": "node scripts/dist/schemas-sync.js",
+    "schemas:check": "node scripts/dist/schemas-sync.js --check",
     "harness:verify": "node scripts/harness/cli.mjs verify",
     "harness:run": "node scripts/harness/cli.mjs run",
-    "verify:examples": "node scripts/harness/verify-examples.mjs",
-    "release:check": "node scripts/harness/release-check.mjs",
-    "release:publish": "node scripts/harness/publish.mjs",
-    "test:unit": "vitest run"
+    "verify:examples": "node scripts/dist/verify-examples.js",
+    "release:check": "node scripts/dist/release-check.js",
+    "release:publish": "node scripts/dist/publish.js",
+    "test:unit": "pnpm run build && vitest run"
   },
   "engines": {
     "node": ">=20"
   },
   "devDependencies": {
-    "@vue/test-utils": "^2.5.0",
-    "jsdom": "^29.1.1",
+    "@types/node": "^22.10.2",
     "typescript": "~6.0.2",
-    "vite": "^8.2.2",
-    "vitest": "^5.0.0",
-    "vue-tsc": "^3.3.11"
+    "vitest": "^5.0.0"
   },
   "dependencies": {
-    "@vitejs/plugin-vue": "^6.0.8",
     "@pedyc/harness-core": "workspace:*",
     "@pedyc/harness-preset-generic": "workspace:*",
     "@pedyc/harness-preset-vue": "workspace:*",
     "pedyc-harness": "workspace:*",
-    "ajv": "^8.20.0",
-    "vue": "^3.5.42"
+    "ajv": "^8.20.0"
   }
 }

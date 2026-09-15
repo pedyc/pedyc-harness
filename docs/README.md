@@ -32,8 +32,8 @@
 - `@pedyc/harness-preset-generic`（`packages/preset-generic`）：通用契约与安全策略。
 - `@pedyc/harness-preset-vue`（`packages/preset-vue`）：Vue 3 + TypeScript + Vite 约定。
 
-根目录的 Vue 示例同时是集成测试宿主，`scripts/harness/` 保留兼容入口、Provider Adapter
-和样例、发布校验脚本。
+根目录是 pnpm workspace 的集成宿主，`tests/` 保存 Harness 集成测试，`scripts/harness/` 保留
+兼容入口、Provider Adapter 和样例、发布校验脚本。
 `examples/` 提供三个最小外部项目，用于验证 Harness 不依赖 Vue 目录和命令；运行
 `pnpm run verify:examples` 可以复现验收结果。
 

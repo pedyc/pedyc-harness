@@ -42,7 +42,7 @@ Agent Provider，也不执行验证命令。`doctor` 显示检测到的包管理
 ```
 
 `vue-project` 提交的 `.harness/agents.json` 使用空 `providers`，而不是 `init --preset vue`
-生成的 `scripts/harness/claude-adapter.mjs`。后者是本仓库内部的 Claude Code 适配器，
+生成的 `scripts/dist/claude-adapter.js`。后者是本仓库内部的 Claude Code 适配器，
 外部项目需要替换成自己的适配器，样例因此显式覆盖为未配置状态。
 
 ## 限制

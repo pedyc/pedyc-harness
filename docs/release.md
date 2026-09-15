@@ -1,159 +1,789 @@
-# 发布与版本规则
+# Release 设计
 
-本文说明 Pedyc Harness 的发布单元、版本策略、发布前检查和 Provider 安全边界。
-里程碑背景见 [里程碑路线](./milestones.md)，命令细节见 [CLI 使用与生成规则](./cli.md)。
+> Release 文档定义 pedyc-harness 多 package 项目的构建、版本、发布和发布前验证规则。
+>
+> Release 是工程交付流程，不属于 Harness Runtime。
 
-## 发布单元
+---
 
-四个包同步发布，共享同一个版本号：
+## 1. 发布目标
 
-| 包 | 目录 | 说明 |
-| --- | --- | --- |
-| `@pedyc/harness-core` | `packages/core` | Runtime 原语，无 Vue 依赖 |
-| `pedyc-harness` | `packages/cli` | 自包含 CLI 与 Preset Registry |
-| `@pedyc/harness-preset-generic` | `packages/preset-generic` | 通用契约与安全策略 |
-| `@pedyc/harness-preset-vue` | `packages/preset-vue` | Vue 3 约定 |
+pedyc-harness 当前由多个 npm package 组成：
 
-根目录 `pedyc-harness-workspace` 是 `private: true` 的集成宿主，不发布。
-
-版本号固定同步，是因为 CLI 声明了对 Core 和两个 Preset 的精确依赖。允许各包独立
-演进会让用户遇到「CLI 1.x 需要 Core 2.x」这类矩阵组合问题，而对当前规模来说，
-同步版本带来的可预测性远大于收益。
-
-## 版本策略
-
-遵循 SemVer，按对外可见的契约判断：
-
-- **MAJOR**：破坏 `.harness/` 的 JSON Schema、结构化输出字段、CLI 命令或参数语义、
-  Provider 请求/响应协议。
-- **MINOR**：新增 Preset、新增命令或参数、新增可选配置字段、新增导出 API。
-- **PATCH**：修复缺陷、调整文案、内部重构且不改变对外契约。
-
-`.harness/` 契约是版本策略的核心。以下内容一旦发布即视为稳定接口：
-
-- `.harness/input.schema.json`、`.harness/output.schema.json`、
-  `.harness/agent-response.schema.json` 定义的字段。
-- Provider 协议：stdin 读一个 JSON 请求、stdout 写一个 JSON 响应、stderr 记录诊断。
-- `run --dry-run --json` 的结构化结果：`status`、`dryRun`、`phases`。
-- `policy.json` 的字段含义，以及 `protectedPaths`、`allowedProductPaths` 的判定方式。
-
-CLI 渲染到终端的文字不属于稳定契约，可以随时调整。
-
-## 依赖与打包规则
-
-- workspace 内部依赖一律写 `workspace:*`。`pnpm pack` 会在打包时改写成发布版本号，
-  `pnpm run release:check` 会校验 tarball 中不再残留 `workspace:` 范围。
-- 每个包通过 `files` 白名单只发布 `src`（Core 另含子路径导出）`templates`、`README.md`。
-  `LICENSE` 和 `README.md` 由 npm 自动收录。
-- `LICENSE` 在各包目录内各存一份，tarball 不依赖仓库根目录。
-- Scoped 包声明 `publishConfig.access: public`。
-- 发布包不得引用仓库内路径。CLI 曾通过 `../../..` 反向调用根目录脚本，这类写法会被
-  `release:check` 的临时消费者测试拦下。
-- 外部运行时依赖只有 `ajv`。
-
-## 发布前检查清单
-
-```bash
-pnpm install --frozen-lockfile
-pnpm run harness:verify     # 仓库 Harness 契约（22 个文件、4 个门禁）
-pnpm run verify:examples    # 三个外部样例项目
-pnpm run release:check      # 打包、tarball 内容、消费者 smoke test
-pnpm run type-check
-pnpm run test:unit
-pnpm run build
+```text
+@pedyc/harness-core
+pedyc-harness
+@pedyc/harness-preset-generic
+@pedyc/harness-preset-vue
 ```
 
-`release:check` 会：
+各 package 具有明确职责：
 
-1. 对四个包执行 `pnpm pack`。
-2. 解包检查必需文件、泄漏文件（`tests/`、`examples/`、`scripts/`）和 `workspace:` 残留。
-3. 在系统临时目录创建真实 npm 项目，用 `npm install` 安装四个 tarball。四个包必须在同一条
-   安装命令里，npm 才能用本地 tarball 满足 `@pedyc/harness-core` 这类跨包依赖。
-4. 通过 `node_modules/.bin/pedyc-harness` 驱动安装后的 CLI：
-   - `init --preset vue`；
-   - `verify` 在缺少门禁脚本时必须失败，补齐脚本后必须通过；
-   - `doctor` 必须报告 npm；
-   - `run --dry-run --json` 必须是四阶段预览；
-   - 配置一个离线 Provider 后跑完整四阶段闭环，四个门禁必须真实执行且全部通过。
+```text
+@pedyc/harness-core
+    ↓
+Runtime / Domain
 
-消费者目录位于系统临时目录，不会命中本仓库的 workspace 链接，因此「本地能跑、装上就坏」
-的问题会在这里暴露。第 4 步的两向 `verify` 检查很关键：如果消费者项目没有 `package.json`，
-`requiredChecks` 校验会被跳过，`verify` 看起来通过其实什么都没验证。
+pedyc-harness
+    ↓
+CLI / User Entry
 
-## 发布步骤
+@pedyc/harness-preset-generic
+    ↓
+Generic Preset
 
-前置条件（无法由脚本代替）：
-
-1. 拥有 npm 账号，并且该账号拥有 `@pedyc` scope 或有权在其下发布。用
-   `npm org ls pedyc --registry https://registry.npmjs.org/` 确认，输出应包含你的账号和
-   `owner`（或至少 `developer`）。
-2. `npm login --registry https://registry.npmjs.org/`。
-3. 解决 2FA。账号若启用了 `auth-and-writes`（用 `npm profile get --json` 查看 `tfa.mode`），
-   每次发布都需要一次性密码。推荐做法是在 `~/.npmrc` 中配置一个可绕过 2FA 的令牌：
-
-   ```
-   //registry.npmjs.org/:_authToken=<Automation token 或带 Bypass 2FA 的 Granular token>
-   ```
-
-   也可以用 `--otp <code>` 临时传入，但四个包是四次独立调用，30 秒窗口内很可能来不及。
-4. `pedyc-harness` 这个非 scoped 包名未被他人占用。
-
-### registry 陷阱
-
-npm 命令默认走 `.npmrc` 里的 `registry`。本机若指向 `registry.npmmirror.com`，会出现两类
-误导性错误：
-
-- `npm org ls` 报 404。该镜像**没有实现 org 接口**，对任何 org 都返回 404，包括确实存在的。
-- 发布打到镜像上，同样以 not found 收场。
-
-`release:publish` 已经显式传入 npmjs.org，不受影响；但手工排查时必须自己带上
-`--registry https://registry.npmjs.org/`。
-
-另外，npm 在权限不足时返回的是 **404 而不是 403**。所以「not found」既可能是资源不存在，
-也可能是你没权限看它——这是排查 npm 权限问题时最容易走弯路的地方。
-
-```bash
-pnpm install --frozen-lockfile
-pnpm run release:publish -- --dry-run   # 预检：认证、版本占用、打包
-pnpm run release:publish                # 真正发布
+@pedyc/harness-preset-vue
+    ↓
+Vue Preset
 ```
 
-`release:publish` 按 Core → preset-generic → preset-vue → CLI 的依赖顺序发布，并在每一步之前
-拒绝执行：
+Release 流程需要保证：
 
-- 未登录，或登录账号无法访问目标 registry。
-- 四个包版本号不一致。
-- 目标 registry 上已存在同名同版本（npm 不允许覆盖，且部分发布最难收拾）。
-- `release:check` 未通过。可用 `--skip-preflight` 跳过，但不应在正式发布时使用。
-- 使用 `pnpm publish` 而非 `npm publish`：只有 pnpm 会把 `workspace:*` 改写成发布版本号。
+1. package 可以独立构建；
+2. package 的依赖关系正确；
+3. 发布内容只包含必要文件；
+4. 类型声明与运行时代码保持一致；
+5. 发布前必须通过项目验证；
+6. package 版本变化具有明确语义。
 
-`--registry` 可覆盖目标 registry，默认 `https://registry.npmjs.org/`。
+---
 
-发布后：
+# 2. Package 与发布边界
 
-- 更新 `CHANGELOG.md`，把 `Unreleased` 段落归入新版本号。
-- 在干净目录执行 `npx pedyc-harness@<version> verify`，确认 registry 安装可用。
-- 给仓库打 `v<version>` tag。
+每个 workspace package 都是独立 npm 发布单元。
 
-## Provider 安全边界
+```text
+packages/
+├── core/
+├── cli/
+├── preset-generic/
+└── preset-vue/
+```
 
-- 发布包不假设用户机器上安装或登录了任何 Agent CLI。Preset 生成的 `agents.json`
-  不含 Provider，`verify` 和 `run --dry-run` 在无 Provider 时即可使用。
-- 非 dry-run 运行必须由用户在 `.harness/agents.json` 中显式配置 Provider 命令。
-  Harness 只按约定传入标准输入并读取标准输出，不代替用户做鉴权决策。
-- 仓库自带的 `scripts/harness/claude-adapter.mjs` 是可选的本地适配器示例，
-  默认不启用。它不会传递 `--dangerously-skip-permissions` 或任何跳过确认的参数。
-- 写入范围由 `policy.json` 约束：`protectedPaths` 拒绝修改，`allowedProductPaths`
-  限定产品代码范围。越界改动会在 Tester 阶段被报告。
-- CLI 不执行网络请求。所有命令都在目标项目内本地完成。
+对应：
 
-## 兼容性策略
+```text
+core
+→ @pedyc/harness-core
 
-- Node.js >= 20，包声明 `engines.node`。
-- Windows 与 Linux 均受支持：包管理器通过锁文件探测，命令入口同时提供可执行脚本
-  与 `node <path>` 方式；`release:check` 在两个平台都可运行，CI 在 `ubuntu-latest` 执行。
-- 包管理器支持 npm、pnpm、yarn，按锁文件优先级 `pnpm-lock.yaml` → `yarn.lock` → `package-lock.json` 选择。
-- `verify` 先做通用校验，再执行可选的 `.harness/verify.mjs` 项目钩子，因此项目可以
-  在不修改 Core 的前提下追加严格检查。
-- 升级既有项目配置用 `pedyc-harness diff` 预览、`pedyc-harness update` 应用；
-  `update` 默认跳过已修改文件，只有 `--force` 才覆盖。
+cli
+→ pedyc-harness
+
+preset-generic
+→ @pedyc/harness-preset-generic
+
+preset-vue
+→ @pedyc/harness-preset-vue
+```
+
+Root package 不等于 npm 发布 package。
+
+Root 的职责主要是：
+
+```text
+Workspace
+Build
+Test
+Typecheck
+Release orchestration
+```
+
+而不是承载 Runtime。
+
+---
+
+# 3. 依赖方向
+
+发布前必须保持依赖方向：
+
+```text
+preset
+   ↓
+CLI
+   ↓
+Core
+```
+
+更准确地说：
+
+```text
+@pedyc/harness-preset-*
+          ↓
+   pedyc-harness
+          ↓
+@pedyc/harness-core
+```
+
+Core 不应该反向依赖：
+
+```text
+CLI
+Preset
+Vue
+具体 Provider
+```
+
+尤其不能因为发布方便而形成循环依赖。
+
+---
+
+# 4. Build
+
+每个 package 都必须能够独立构建。
+
+基本流程：
+
+```text
+src/
+  ↓
+TypeScript
+  ↓
+Build
+  ↓
+dist/
+```
+
+例如：
+
+```text
+packages/core/
+├── src/
+├── dist/
+├── package.json
+└── tsconfig.json
+```
+
+发布包应该使用构建后的：
+
+```text
+dist/*.js
+dist/*.d.ts
+```
+
+而不是直接依赖 `src/*.ts` 作为正式发布产物。
+
+---
+
+# 5. TypeScript
+
+TypeScript 项目至少需要区分：
+
+```text
+Typecheck
+Build
+Test
+```
+
+推荐：
+
+```bash
+pnpm typecheck
+pnpm test
+pnpm build
+```
+
+其中：
+
+### Typecheck
+
+验证类型系统：
+
+```bash
+tsc --noEmit
+```
+
+### Test
+
+验证运行行为：
+
+```bash
+vitest
+```
+
+### Build
+
+生成正式发布产物：
+
+```text
+dist/
+```
+
+三者职责不同，不应该互相替代。
+
+---
+
+# 6. 发布前验证
+
+正式发布前必须执行完整验证：
+
+```text
+Typecheck
+    ↓
+Test
+    ↓
+Build
+    ↓
+Package inspection
+```
+
+推荐统一命令：
+
+```bash
+pnpm verify
+```
+
+概念上：
+
+```json
+{
+  "scripts": {
+    "verify": "pnpm typecheck && pnpm test && pnpm build"
+  }
+}
+```
+
+任何一个阶段失败，都不应该继续发布。
+
+---
+
+# 7. Package Contents
+
+发布前需要检查 npm package 实际包含的文件。
+
+目标：
+
+```text
+包含：
+
+dist/
+package.json
+README.md
+LICENSE
+必要的 metadata
+```
+
+避免：
+
+```text
+不应该发布：
+
+src/
+tests/
+内部开发脚本
+本地配置
+临时文件
+开发环境日志
+```
+
+具体包含哪些文件由 package 的：
+
+```text
+files
+exports
+main
+module
+types
+```
+
+等配置共同决定。
+
+原则：
+
+> npm package 应该是最小可运行发布物，而不是整个 Repository 的压缩包。
+
+---
+
+# 8. Exports
+
+Package 应明确公开 API。
+
+例如 Core：
+
+```json
+{
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  }
+}
+```
+
+不要让用户依赖：
+
+```text
+@pedyc/harness-core/dist/xxx
+```
+
+这样的内部路径。
+
+内部模块可以变化，但公开 API 应保持稳定。
+
+---
+
+# 9. CLI Package
+
+CLI package：
+
+```text
+pedyc-harness
+```
+
+是用户安装和执行 Harness 的入口。
+
+因此需要正确配置：
+
+```json
+{
+  "bin": {
+    "pedyc-harness": "./dist/cli.js"
+  }
+}
+```
+
+发布前必须验证：
+
+```bash
+pedyc-harness --help
+pedyc-harness doctor
+```
+
+以及核心命令：
+
+```bash
+pedyc-harness init
+pedyc-harness run
+pedyc-harness verify
+```
+
+---
+
+# 10. Preset Package
+
+Preset package 的发布物主要包括：
+
+```text
+Preset implementation
+Templates
+Preset metadata
+Type declarations
+```
+
+例如：
+
+```text
+@pedyc/harness-preset-vue
+```
+
+安装 Preset 不应该要求用户直接依赖其内部源码路径。
+
+CLI 通过 Preset Registry 或对应的 package resolve Preset。
+
+---
+
+# 11. Versioning
+
+每个 package 使用 SemVer：
+
+```text
+MAJOR.MINOR.PATCH
+```
+
+基本规则：
+
+### PATCH
+
+向后兼容的修复：
+
+```text
+bug fix
+内部实现修复
+不会改变公开 API 的修正
+```
+
+### MINOR
+
+向后兼容的新能力：
+
+```text
+新增 API
+新增 Preset 能力
+新增 CLI 命令
+新增可选配置
+```
+
+### MAJOR
+
+不兼容变化：
+
+```text
+删除公开 API
+修改已有 API 语义
+修改配置协议导致旧项目无法工作
+修改 CLI 行为导致现有脚本失效
+```
+
+---
+
+# 12. Package Version Relationship
+
+四个 package 不要求每次发布都同步版本。
+
+例如：
+
+```text
+@pedyc/harness-core       0.4.0
+pedyc-harness              0.4.0
+@pedyc/harness-preset-generic 0.3.0
+@pedyc/harness-preset-vue 0.2.0
+```
+
+可以独立演进。
+
+但是如果发生跨 package API 变化，需要明确升级依赖。
+
+例如：
+
+```text
+Core API changed
+    ↓
+CLI depends on new Core API
+    ↓
+CLI dependency version updated
+```
+
+不能只修改代码而不更新 package dependency。
+
+---
+
+# 13. Pre-release
+
+在 API 尚未稳定时，可以使用：
+
+```text
+0.x.y
+```
+
+表示项目仍处于快速演进阶段。
+
+如果需要测试版本：
+
+```text
+0.5.0-beta.1
+0.5.0-beta.2
+```
+
+Pre-release 的目的：
+
+> 在正式稳定 API 前验证 package 之间的兼容性。
+
+---
+
+# 14. Changelog
+
+每次 Release 应记录：
+
+```text
+Added
+Changed
+Fixed
+Breaking Changes
+```
+
+例如：
+
+```md
+## 0.5.0
+
+### Added
+
+- Added independent verification evidence.
+- Added `verify` command.
+
+### Changed
+
+- Updated AgentAdapter protocol.
+
+### Fixed
+
+- Fixed policy path matching.
+
+### Breaking Changes
+
+- None.
+```
+
+Changelog 应面向使用者，而不是记录所有内部 commit。
+
+---
+
+# 15. Release 流程
+
+标准 Release 流程：
+
+```text
+代码变更
+   ↓
+Typecheck
+   ↓
+Test
+   ↓
+Build
+   ↓
+Inspect package
+   ↓
+Version
+   ↓
+Changelog
+   ↓
+Publish
+   ↓
+Install smoke test
+```
+
+其中：
+
+```text
+Publish
+```
+
+不是流程终点。
+
+发布后必须验证：
+
+```text
+从 npm 安装
+    ↓
+实际 import
+    ↓
+实际执行 CLI
+    ↓
+验证 package 能正常工作
+```
+
+---
+
+# 16. Publish 前 Smoke Test
+
+建议在发布后使用临时目录：
+
+```text
+/tmp/pedyc-harness-release-test/
+```
+
+安装：
+
+```bash
+npm install pedyc-harness
+```
+
+然后验证：
+
+```bash
+pedyc-harness --help
+pedyc-harness doctor
+```
+
+Core 可以验证：
+
+```ts
+import { ... } from "@pedyc/harness-core"
+```
+
+Preset 可以验证：
+
+```ts
+import { ... } from "@pedyc/harness-preset-vue"
+```
+
+目标是确认：
+
+> Repository 中能运行 ≠ npm package 安装后一定能运行。
+
+---
+
+# 17. Workspace 与 Published Package
+
+开发环境中的：
+
+```text
+workspace dependency
+```
+
+不能完全代表：
+
+```text
+npm published dependency
+```
+
+例如：
+
+```text
+pnpm workspace:
+@pedyc/harness-core
+```
+
+本地可以正常 resolve，并不意味着发布后的 package metadata 正确。
+
+因此发布前必须检查：
+
+```text
+package.json
+dependencies
+peerDependencies
+exports
+files
+dist
+```
+
+---
+
+# 18. Release 与 Runtime 的关系
+
+Release 不属于 Harness Runtime。
+
+Runtime 负责：
+
+```text
+Task
+Contract
+Policy
+Agent
+Verification
+Diff
+Review
+RunResult
+```
+
+Release 负责：
+
+```text
+Build
+Version
+Package
+Publish
+Distribution
+```
+
+两者边界：
+
+```text
+Development / Release
+        ↓
+npm package
+        ↓
+Installed Project
+        ↓
+Harness Runtime
+```
+
+---
+
+# 19. 安全原则
+
+发布前禁止将以下内容带入 package：
+
+```text
+API Token
+Private Key
+Local Path
+Personal Configuration
+Debug Logs
+Credentials
+```
+
+特别需要检查：
+
+```text
+.env
+.env.*
+credentials
+logs
+.tmp
+coverage
+```
+
+发布流程应该尽量自动化检查敏感文件。
+
+---
+
+# 20. Release Automation
+
+未来可以使用 CI 自动执行：
+
+```text
+Pull Request
+    ↓
+Typecheck
+    ↓
+Test
+    ↓
+Build
+    ↓
+Package Check
+```
+
+进入 Release：
+
+```text
+Tag
+ ↓
+CI
+ ↓
+Verify
+ ↓
+Build
+ ↓
+Publish npm
+```
+
+但自动 Publish 必须建立在：
+
+```text
+稳定版本策略
+可信 CI
+明确 npm 权限
+```
+
+之上。
+
+---
+
+# 21. 当前阶段
+
+当前项目已经完成：
+
+```text
+TypeScript migration
+Four-package split
+Core / CLI / Preset separation
+```
+
+因此当前 Release 阶段重点不是复杂的 Release Infrastructure，而是：
+
+1. 保证四个 package 可以稳定独立构建；
+2. 明确 package exports；
+3. 明确 package dependency；
+4. 建立统一 verify；
+5. 验证 npm 安装后的真实运行；
+6. 建立基本 SemVer / Changelog 规则。
+
+---
+
+# 22. Release 原则
+
+最终遵循：
+
+```text
+Build reproducible
+Test before publish
+Package minimal
+API explicit
+Version meaningful
+Published package must be tested
+```
+
+核心原则：
+
+> **发布的是可验证的运行单元，而不是 Repository 的源码快照。**

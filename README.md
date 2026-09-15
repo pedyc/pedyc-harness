@@ -1,294 +1,596 @@
-# Pedyc-Harness：我的harness工程实践
+# pedyc-harness
 
-> **Run AI agents under explicit contracts, policies, and verification gates.**
->
-> 让 Agent 在契约、策略和独立验证的约束下可靠执行任务。
+> A policy-driven runtime for reliable AI agents.
 
-这是一个 **Agent 治理层**（Agent Harness）项目：它不实现 Agent 自身的推理能力，
-Claude Code、Codex 这类 Coding Agent 是它接入并约束的执行组件。Harness 回答的是
-「这次任务允许 Agent 干什么」和「干完之后凭什么算数」，因此核心资产是契约、策略、
-独立验证、证据和审计，而不是模型能力。**Agent 越强，Harness 越重要。**
+**pedyc-harness** 是一个面向 Coding Agent 的控制与治理层（Harness）。
 
-仓库同时包含一个 Vue 3 + TypeScript + Vite 产品演示项目，作为第一个集成宿主。
-定位、设计原则、能力优先级和**明确不做**的方向见 [项目目标](./docs/项目目标.md)；
-已经做到哪一步见 [里程碑路线](./docs/milestones.md)。
+它不负责替代 Claude Code、Codex 等 Coding Agent，而是负责在 Agent 执行任务之前、执行过程中以及执行之后，对 **任务契约、执行策略、代码变更、独立验证和最终结果** 进行约束与审计。
 
-## 当前完成情况
+```text
+Task
+  ↓
+Contract
+  ↓
+Policy
+  ↓
+Agent Runtime
+  ↓
+Changes
+  ↓
+Independent Verification
+  ↓
+Review / Gate
+  ↓
+Result / Audit
+```
 
-### 已完成
+> **Agent 负责执行，Harness 负责治理。**
 
-- [x] Vue 3 + TypeScript + Vite 产品演示项目骨架
-- [x] `UserInfo.vue` 示例组件
-  - [x] `<script setup lang="ts">`
-  - [x] 类型化 Props
-  - [x] 姓名、头像、角色展示
-  - [x] 组件单元测试
-- [x] 分层 Agent 配置
-  - [x] Planner
-  - [x] Coder
-  - [x] Tester
-  - [x] Reviewer
-- [x] 根级和目录级 `AGENTS.md` 规则
-- [x] `.github/` 中的 Agent、Instructions 和 CI 配置
-- [x] `.agents/skills/` 可复用任务技能
-- [x] Harness 输入契约
-- [x] 三层输入入口
-  - [x] 自然语言或简化任务输入
-  - [x] Intake 完整性检查
-  - [x] 标准化机器任务契约
-- [x] Harness 输出契约
-- [x] Agent 响应契约
-- [x] JSON Schema 运行时校验（Ajv 2020-12）
-- [x] Harness 策略配置
-  - [x] 最大迭代次数
-  - [x] 产品目录白名单
-  - [x] 受保护目录
-  - [x] 必须执行的验证命令
-  - [x] 禁止命令
-- [x] 自动执行器
-  - [x] Planner → Coder → Tester → Reviewer
-  - [x] 失败重试
-  - [x] 文件变更检测
-  - [x] 越权目录变更检查
-  - [x] dry-run 模式
-  - [x] 结构化 JSON 输出
-  - [x] 运行记录保存到 `.harness/runs/`
-- [x] Claude Code CLI Adapter
-  - [x] Windows `claude.cmd` 启动兼容
-  - [x] 通过 stdin 传递任务 JSON
-  - [x] Claude 结构化 JSON 响应解析
-  - [x] Coder 使用 `acceptEdits`
-  - [x] 只读阶段使用 `plan`
-  - [x] 限制允许的工具和工作目录
-  - [x] 未启用 `--dangerously-skip-permissions`
-- [x] 多 Provider Adapter 配置抽象
-  - [x] Agent 角色通过 `provider` 路由到具体 Adapter
-  - [x] 生成配置默认不启用任何 Provider（v1.0 起，`verify` 与 `run --dry-run` 无需 Provider）
-  - [x] 可在 `.harness/agents.json` 增加 Copilot 或其他 Provider
-- [x] 真实 Coder 闭环验证
-  - [x] Planner、Coder、Tester、Reviewer 流程成功跑通
-  - [x] `harness:verify` 通过
-  - [x] `type-check` 通过
-  - [x] `test:unit` 通过
-  - [x] `build` 通过
-- [x] CI Harness 门禁
+---
 
-## 待办清单
+## Why Harness?
 
-完整的工作项与验收标准见 [里程碑路线](./docs/milestones.md)，这里只保留当前进度，
-避免同一份计划在多个文件里各自漂移。**明确不做**的方向见
-[项目目标](./docs/项目目标.md) 第四节，不列在此处。
+Coding Agent 的能力越来越强，但“能够完成任务”并不意味着“能够可靠地完成任务”。
 
-### 第二阶段：治理能力（M7–M11）
+一个 Agent 可能：
 
-- [ ] M7 让策略真正可执行：`protectedPaths` 和 `forbiddenCommands` 当前只是声明性字段，
-      无任何拦截效果
-- [ ] M8 独立验证与证据链：每条门禁的退出码、耗时和输出摘要写入 `output.json`
-- [ ] M9 执行轨迹与审计：事件流、阶段耗时、`runs list/show`、运行记录保留策略
-- [ ] M10 审批门：高风险任务的可选人工节点
-- [ ] M11 发布 v1.1.0
+* 修改任务范围之外的文件
+* 执行不应该执行的命令
+* 声称测试通过，但实际上没有留下可验证证据
+* 修改受保护文件
+* 只根据自己的输出判断任务是否完成
+* 在失败后不断扩大执行范围
+* 最终无法回答“这次修改到底发生了什么”
 
-### 尚未排期
+因此，可靠的 Agent 系统不能只依赖 Agent 自己的判断。
 
-- [ ] 在允许 Claude CLI 执行后验证四阶段真实闭环成功
-- [ ] 完整提示词分层：把 core + preset + AGENTS.md 显式注入每次请求
+pedyc-harness 的核心思想是：
 
-### 工程质量
+> **Agent 的输出是执行结果，不是最终可信证据。**
 
-- [ ] 增加越权修改、无修改任务和命令失败场景测试
-- [ ] 增加符号链接、路径穿越和删除文件场景的安全测试
-- [ ] 增加多任务、并发和长任务场景验证
-- [ ] 增加 Playwright E2E 测试
-- [ ] 增加 ESLint
-- [ ] 增加 Prettier
-- [x] 在 CI 中执行 Harness dry-run 和更多失败路径测试
+Harness 通过独立的 Policy、Verification、Diff 和 Review 对 Agent 的执行进行约束和判断。
 
-## 目录职责
+---
 
-| 目录 | 用途 |
-| --- | --- |
-| `src/` | 产品演示代码，仅放 Vue 组件和页面 |
-| `.github/` | GitHub Agent、Instructions、CI 和配置校验 |
-| `.agents/skills/` | 可复用的任务技能 |
-| `.harness/` | 输入/输出契约、策略、评估、Agent 配置和运行记录 |
-| `packages/` | Core、CLI 和 Preset 的 workspace 发布包 |
-| `scripts/harness/` | 发布包的兼容入口（薄封装）、Provider Adapter、样例与发布校验脚本 |
-| `examples/` | 外部项目样例和兼容性验收项目 |
-| `.claude/` | Claude Code 入口和权限相关配置 |
-| `tests/` | 产品组件和 Harness 配置测试 |
+## Core Model
 
-## 通用化与 npm CLI
+pedyc-harness 将一次 Agent 任务建模为：
 
-本项目现在同时提供可复用的 CLI 入口。安装到其他项目后，可以使用：
+```text
+Task Contract
+      │
+      ▼
+   Policy
+      │
+      ▼
+Agent Execution
+      │
+      ▼
+ Actual Changes
+      │
+      ├──────────────┐
+      ▼              ▼
+Scope Check    Independent Verification
+      │              │
+      └───────┬──────┘
+              ▼
+           Review
+              │
+              ▼
+        Run Result / Audit
+```
+
+核心原则：
+
+### 1. Task Contract
+
+任务必须明确：
+
+* 做什么
+* 可以修改什么
+* 验收标准是什么
+* 需要执行哪些验证
+
+### 2. Policy
+
+Harness 定义执行边界：
+
+* `allowedPaths`
+* `protectedPaths`
+* `allowedCommands`
+* `forbiddenCommands`
+* 最大执行轮次
+* 必须执行的验证
+
+默认原则是：
+
+> **拒绝未明确允许的扩展。**
+
+### 3. Independent Verification
+
+验证不能只依赖 Agent 的自我报告。
+
+Harness 可以独立执行：
+
+```text
+typecheck
+test
+build
+lint
+verify
+```
+
+并记录结构化验证证据。
+
+### 4. Diff / Scope Enforcement
+
+Harness 检查实际产生的文件变更，而不是只相信 Agent 声称修改了什么。
+
+```text
+Declared Changes
+      ≠
+Actual Changes
+```
+
+实际文件系统 / Git Diff 是更重要的判断依据。
+
+### 5. Review / Approval Gate
+
+最终结果不是简单的：
+
+```text
+Agent says: success
+```
+
+而是：
+
+```text
+Task
++ Policy
++ Actual Changes
++ Verification Evidence
++ Acceptance Criteria
+        ↓
+     Review
+        ↓
+   Approved / Rejected
+```
+
+---
+
+## Core Capabilities
+
+| Capability               | Purpose                        |
+| ------------------------ | ------------------------------ |
+| Task Contract            | 定义任务输入和验收标准         |
+| Policy Engine            | 限制文件和命令执行范围         |
+| Agent Adapter            | 对接不同 Coding Agent          |
+| Diff / Scope             | 检查实际代码变更               |
+| Independent Verification | 独立执行测试、构建、类型检查等 |
+| Review / Gate            | 根据证据判断任务是否通过       |
+| Execution Trace          | 保存执行过程和验证结果         |
+| Preset                   | 针对不同技术栈提供默认规则     |
+
+---
+
+## Quick Start
+
+### Install
 
 ```bash
-npm install --save-dev pedyc-harness
-npx pedyc-harness init --preset generic
-npx pedyc-harness verify
-npx pedyc-harness run --input .harness/task.json --dry-run --json
+npm install -g pedyc-harness
 ```
 
-`generic` Preset 只生成通用契约和安全策略；`vue` Preset 额外生成 Vue 约束。运行时通过
-`--root` 将 Harness 指向目标项目，Provider 和项目规则仍保存在目标项目中并纳入版本控制。
+或者：
 
-发布包共有四个，全部为 `1.0.1`、同步发布：
-
-| 包 | 用途 |
-| --- | --- |
-| `pedyc-harness` | CLI，内含 Preset Registry 和 Schema 模板，可独立安装 |
-| `@pedyc/harness-core` | Runtime 原语，不依赖 Vue |
-| `@pedyc/harness-preset-generic` | 通用契约与安全策略 |
-| `@pedyc/harness-preset-vue` | Vue 3 + TypeScript + Vite 约定 |
-
-CLI 不假设用户安装或登录了任何 Agent CLI：生成的 `agents.json` 不含 Provider，
-`verify` 和 `run --dry-run` 无需 Provider 即可使用。
-
-详细设计见 [`docs/`](./docs/README.md)，发布规则见 [发布与版本规则](./docs/release.md)。
-
-本仓库使用 pnpm 管理依赖，目标项目仍兼容 npm、pnpm 和 yarn。Harness Runtime 会根据
-锁文件选择验证命令对应的包管理器。
-
-`examples/` 中的 `generic-project`、`vue-project` 和 `node-project` 用真实的最小项目验证
-这一点，可执行 `npm run verify:examples` 复现。
-
-## 常用命令
-
-```powershell
-# 配置完整性检查
-npm run harness:verify
-
-# 外部项目样例验收（init、verify、dry-run、doctor）
-npm run verify:examples
-
-# 发布前检查：打包四个包并在临时消费者项目中跑通 CLI
-npm run release:check
-
-# 单元测试
-npm run test:unit
-
-# 类型检查
-npm run type-check
-
-# 构建
-npm run build
-
-# 安全预览：不调用 Provider、不执行验证命令、不修改产品代码
-node scripts/harness/run.mjs --input .harness/task.example.json --dry-run --json
-
-# 运行真实 Harness
-node scripts/harness/run.mjs --input .harness/task.example.json --json
-
-# 使用简化任务契约
-node scripts/harness/run.mjs --task .harness/task.example.json --json
-
-# 使用自然语言试探输入；信息不足时返回需要补充的问题
-node scripts/harness/run.mjs --prompt "创建一个用户卡片组件" --json
+```bash
+pnpm add -g pedyc-harness
 ```
 
-建议直接使用 `node scripts/harness/run.mjs` 传递参数；当前 npm 11 对
-`npm run ... -- --input ...` 的参数转发在部分 Windows 环境中不稳定。
+### Initialize
 
-运行前需要确认 Claude Code CLI 已安装并认证：
+在目标项目中：
 
-```powershell
-claude --version
-claude auth status
+```bash
+harness init
 ```
 
-## 查看运行结果
+根据需要选择 preset，例如：
 
-最终结果会打印为 JSON，并保存到：
-
-```text
-.harness/runs/<运行编号>/output.json
+```bash
+harness init --preset generic
 ```
 
-同一运行目录还包含：
+或者：
 
-- `input.json`：本次任务输入
-- `policy.json`：本次使用的策略快照
-- `iteration-<n>-verification.json`：每轮验证结果
+```bash
+harness init --preset vue
+```
 
-当前版本会输出最终结果和阶段结果；Claude 的中间思考内容不会展示。实时阶段日志和命令输出转发列在待办清单中。
+初始化后，项目会生成 `.harness/` 配置和相关规则。
 
-## 多 Provider 配置
+---
 
-Agent 角色不再直接绑定命令，而是引用 `.harness/agents.json` 中的 Provider：
+## Run a Task
+
+一个任务可以描述为：
 
 ```json
 {
-  "providers": {
-    "claude": {
-      "command": "node",
-      "args": ["scripts/harness/claude-adapter.mjs"]
-    }
+  "id": "add-user-profile",
+  "description": "Add a user profile component",
+  "scope": {
+    "allowedPaths": [
+      "src/components/**",
+      "src/types/**"
+    ]
   },
-  "coder": {
-    "mode": "external",
-    "provider": "claude"
-  }
+  "acceptanceCriteria": [
+    {
+      "id": "component-exists",
+      "description": "UserProfile component exists"
+    },
+    {
+      "id": "typecheck",
+      "description": "TypeScript type checking passes"
+    }
+  ]
 }
 ```
 
-后续接入 Copilot 时，只需增加一个 Provider，例如：
+然后交给 Harness 执行：
+
+```bash
+harness run task.json
+```
+
+Harness 不只是等待 Agent 返回：
+
+```text
+"Task completed successfully."
+```
+
+而是进一步检查：
+
+```text
+Task Contract
+      ↓
+Policy
+      ↓
+Agent
+      ↓
+Actual Changes
+      ↓
+Verification
+      ↓
+Review
+```
+
+最终产生结构化的 Run Result。
+
+---
+
+## Example
+
+假设任务要求：
+
+```text
+修改：
+src/components/**
+src/types/**
+
+禁止：
+src/config/**
+.harness/**
+.github/**
+```
+
+Agent 如果尝试修改：
+
+```text
+src/components/UserProfile.vue
+src/config/api.ts
+```
+
+即使 Agent 自己认为任务已经完成：
+
+```text
+Agent → success
+```
+
+Harness 仍然会发现：
+
+```text
+src/config/api.ts
+      ↓
+outside allowed scope
+      ↓
+Policy Violation
+      ↓
+Run Rejected
+```
+
+这正是 Harness 与普通 Coding Agent 的核心区别。
+
+---
+
+## Architecture
+
+pedyc-harness 采用分层架构：
+
+```text
+┌──────────────────────────────┐
+│             CLI              │
+├──────────────────────────────┤
+│           Runtime            │
+│                              │
+│ Contract / Policy / Executor │
+│ Verification / Diff / Review │
+├──────────────────────────────┤
+│      Preset / Provider       │
+└──────────────────────────────┘
+```
+
+核心依赖方向：
+
+```text
+Preset
+   ↓
+ CLI
+   ↓
+ Core
+```
+
+其中：
+
+* **Core**：Harness Runtime 和领域模型
+* **CLI**：用户入口和命令行编排
+* **Preset**：技术栈相关规则和模板
+* **Provider / Adapter**：连接具体 Agent Runtime
+
+Core 不依赖 Vue，也不依赖具体 Agent Provider。
+
+---
+
+## Packages
+
+当前项目拆分为 4 个 npm package：
+
+| Package                         | Responsibility                   |
+| ------------------------------- | -------------------------------- |
+| `@pedyc/harness-core`           | Harness 核心 Runtime / Domain    |
+| `pedyc-harness`                 | CLI                              |
+| `@pedyc/harness-preset-generic` | 通用 Preset                      |
+| `@pedyc/harness-preset-vue`     | Vue 3 + TypeScript + Vite Preset |
+
+设计目标：
+
+```text
+Core
+  ↑
+CLI
+  ↑
+Preset
+```
+
+Preset 不应该把具体 Agent Provider 实现耦合进 Core。
+
+---
+
+## Harness ≠ Coding Agent
+
+pedyc-harness **不是**：
+
+* Claude Code 的替代品
+* Codex 的替代品
+* 一个新的 Coding Agent
+* 一个 LLM
+* 一个模型路由器
+* 一个 Prompt 自动优化系统
+
+它们之间的关系更接近：
+
+```text
+              ┌─────────────────┐
+              │      Agent      │
+              │ Claude / Codex  │
+              │   / Other       │
+              └────────┬────────┘
+                       │
+                 executes task
+                       │
+                       ▼
+              ┌─────────────────┐
+              │     Harness     │
+              │                 │
+              │ Contract        │
+              │ Policy          │
+              │ Scope           │
+              │ Verification    │
+              │ Review          │
+              │ Audit           │
+              └─────────────────┘
+                       │
+                       ▼
+                 Trusted Result
+```
+
+因此：
+
+> **Agent 越强，Harness 越重要。**
+
+Agent 负责把事情做好。
+
+Harness 负责判断：
+
+> **它到底有没有按照要求把事情做好。**
+
+---
+
+## Configuration
+
+项目级 Harness 配置位于：
+
+```text
+.harness/
+```
+
+项目规则可以通过：
+
+```text
+AGENTS.md
+```
+
+以及项目自身的：
+
+```text
+package.json
+```
+
+脚本和配置进行补充。
+
+Harness 的目标不是接管项目本身的工程配置，而是在项目现有工程规则之上增加一层可验证的执行治理。
+
+---
+
+## Verification
+
+Verification 是 Harness 的关键组成部分。
+
+一个完整的验证结果应该包含类似：
 
 ```json
 {
-  "providers": {
-    "copilot": {
-      "command": "node",
-      "args": ["scripts/harness/copilot-adapter.mjs"]
-    }
-  }
+  "name": "typecheck",
+  "command": "pnpm typecheck",
+  "exitCode": 0,
+  "durationMs": 4210,
+  "skipped": false
 }
 ```
 
-Provider Adapter 必须遵守统一接口：从 stdin 接收一个 Harness JSON 请求，向 stdout
-输出一个 Agent JSON 响应，并通过退出码报告启动或执行失败。
-
-## 三层输入模型
+Harness 最终关注的是：
 
 ```text
-自然语言输入 / 简化任务文件
-  ↓
-Intake：检查关键信息并提出问题
-  ↓
-标准化 input.schema.json
-  ↓
-Planner → Coder → Tester → Reviewer
+Independent Execution
+        +
+Structured Evidence
+        +
+Deterministic Evaluation
 ```
 
-开发者通常只需要描述任务、目标、范围、特殊约束和验收标准。项目规则、
-默认验证命令、最大迭代次数和 Provider 配置由 Harness 自动补全。
+而不是 Agent 的一句：
 
-当前 CLI 在缺少关键信息时返回 `harness:intake` 结构化失败结果；
-后续可将该结果接入 VS Code Chat 或交互式前端，实现暂停后问答和恢复执行。
-
-## Skill 调用方式
-
-默认由 LLM 根据自然语言任务匹配 `.agents/skills/` 中的 Skill，开发者不需要手动输入 Skill 名称。
-开发者可以显式指定 Skill 作为覆盖，例如“使用 `implement-vue-component` Skill”，
-但 Harness 仍应检查该 Skill 是否存在并遵守项目规则。Skill 负责补充任务方法，
-不替代输入契约、权限策略或最终验证。
-
-## 质量门禁
-
-产品或 Harness 配置发生变化后，至少执行：
-
-```powershell
-npm run harness:verify
-npm run verify:examples
-npm run release:check
-npm run type-check
-npm run test:unit
-npm run build
+```text
+"Tests passed."
 ```
 
-核心原则（完整列表见 [项目目标](./docs/项目目标.md) 第二节）：
+---
 
-1. **不能把 Agent 的自我描述当作独立验证证据**——所有门禁由 Tester 独立执行并记录证据。
-2. Agent 只能修改 `src/` 产品目录，这条由 `allowedProductPaths` 强制执行。
-3. `.github/`、`.agents/`、`.harness/`、`.claude/` 和 `scripts/` 在 `policy.json` 中列为
-   `protectedPaths`，但**当前尚未强制拦截**，属于 M7 的工作。
-4. 所有必要验证命令通过后，Reviewer 才能批准任务。
-5. 最终结果必须满足输出契约。
+## Documentation
+
+详细设计位于 [`docs/`](docs/)：
+
+| Document                                          | Description                         |
+| ------------------------------------------------- | ----------------------------------- |
+| [`项目目标.md`](docs/项目目标.md)                 | 项目定位、设计原则和非目标          |
+| [`核心架构.md`](docs/核心架构.md)                 | Runtime、CLI、Preset、Provider 架构 |
+| [`核心接口设计.md`](docs/核心接口设计.md)         | 核心 Domain Interface 和数据模型    |
+| [`Policy设计.md`](docs/Policy设计.md)             | Policy Engine 和执行边界            |
+| [`Verification设计.md`](docs/Verification设计.md) | 独立验证和验证证据                  |
+| [`Provider设计.md`](docs/Provider设计.md)         | Agent Provider / Adapter            |
+| [`Preset设计.md`](docs/Preset设计.md)             | Preset 体系                         |
+| [`release.md`](docs/release.md)                   | Package 构建和发布流程              |
+| [`milestones.md`](docs/milestones.md)             | 项目迁移、重构和发布里程碑          |
+
+README 负责介绍项目。
+
+具体设计以 `docs/` 中对应文档为准。
+
+---
+
+## Project Status
+
+当前项目已经完成：
+
+* TypeScript migration
+* 四 package workspace
+* Core / CLI / Preset 分层
+* Task Contract
+* JSON Schema validation
+* 基础 Policy 能力
+* Agent Adapter 基础协议
+* package build / typecheck / test
+* package tarball consumer verification
+* Generic / Vue Preset
+* CLI dry-run / verify / doctor 等基础能力
+
+当前重点已经从：
+
+```text
+"让 Agent 能执行"
+```
+
+转向：
+
+```text
+"让 Agent 的执行可以被约束、验证和审计"
+```
+
+下一阶段重点包括：
+
+* Policy enforcement
+* Independent Verification Evidence
+* Execution Trace / Audit
+* Approval Gate
+* Adapter portability
+* Release / compatibility hardening
+
+---
+
+## Design Principles
+
+pedyc-harness 遵循几个核心原则：
+
+1. **Agent 是执行者，不是最终裁判。**
+2. **约束必须能够被机器执行。**
+3. **实际变更优先于 Agent 自我描述。**
+4. **验证必须产生结构化证据。**
+5. **任务边界必须显式定义。**
+6. **默认拒绝未授权的范围扩展。**
+7. **Provider 与 Harness Core 解耦。**
+8. **技术栈规则通过 Preset 注入，而不是写死在 Core。**
+9. **执行过程应该可以追踪和审计。**
+10. **治理能力优先于 Agent 能力扩张。**
+
+---
+
+## Roadmap
+
+项目当前的演进方向：
+
+```text
+M0–M6
+Foundation
+    ↓
+M7
+Policy Enforcement
+    ↓
+M8
+Independent Verification
+    ↓
+M9
+Execution Trace / Audit
+    ↓
+M10
+Approval Gate
+    ↓
+M11
+TypeScript Migration
+    ↓
+M12
+Governance Release
+    ↓
+M13
+A
+```

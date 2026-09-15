@@ -1,6 +1,6 @@
 ---
 name: review-change
-description: Review a completed Vue product change for correctness, scope, accessibility, and verification evidence.
+description: Review a completed harness change for correctness, scope, contract compliance, and verification evidence.
 ---
 
 # Reviewing a change
@@ -9,8 +9,10 @@ Review the diff against the acceptance criteria and `.harness/evaluation.json`.
 Report high-confidence defects first:
 
 - incorrect runtime behavior or missing states;
-- invalid or unsafe props;
-- accessibility regressions;
+- type or runtime errors;
+- contract drift between TypeScript types, the JSON Schemas, and the published
+  package entry points;
+- unsafe input handling or command construction;
 - changes outside the product boundary;
 - missing verification evidence.
 

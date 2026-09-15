@@ -42,7 +42,18 @@ describe('core schema and agent contracts', () => {
       validator: () => true,
       ajv: { errorsText: () => '' },
     })
-    await expect(runner('planner', {})).resolves.toEqual({
+    await expect(runner('planner', {
+      phase: 'planner',
+      input: {
+        feature: 'Feature',
+        objective: 'Objective',
+        constraints: [],
+        acceptanceCriteria: ['Done'],
+        testHints: [],
+        maxIterations: 1,
+      },
+      implementationPlan: [],
+    })).resolves.toEqual({
       ok: true,
       details: 'planner completed using the built-in stage.',
       payload: {},

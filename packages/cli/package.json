@@ -1,15 +1,21 @@
 {
   "name": "pedyc-harness",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Configuration-driven Agent Harness CLI",
   "license": "MIT",
   "type": "module",
   "bin": {
-    "pedyc-harness": "src/bin.mjs"
+    "pedyc-harness": "dist/bin.js"
   },
   "exports": {
-    ".": "./src/index.mjs",
-    "./run": "./src/run.mjs"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./run": {
+      "types": "./dist/run.d.ts",
+      "default": "./dist/run.js"
+    }
   },
   "repository": {
     "type": "git",
@@ -41,8 +47,11 @@
     "node": ">=20"
   },
   "files": [
-    "src",
+    "dist",
     "templates",
     "README.md"
-  ]
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  }
 }

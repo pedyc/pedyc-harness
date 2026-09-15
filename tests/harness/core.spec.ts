@@ -39,12 +39,19 @@ describe('harness core', () => {
 
   it('runs the planner, coder, tester and reviewer loop in dry-run mode', async () => {
     const result = await runOrchestrator({
-      input: { feature: 'Feature', objective: 'Objective', acceptanceCriteria: ['Done'], maxIterations: 1 },
+      input: {
+        feature: 'Feature',
+        objective: 'Objective',
+        constraints: [],
+        acceptanceCriteria: ['Done'],
+        testHints: [],
+        maxIterations: 1,
+      },
       policy: { maxIterations: 1, allowedProductPaths: ['src/'] },
       dryRun: true,
       snapshot: () => new Map(),
       changedFiles: () => [],
-      runAgent: async (name) => name === 'tester'
+      runAgent: async (name: string) => name === 'tester'
         ? { ok: true, details: 'approved', payload: { approved: true, evidence: [{ command: 'check', result: 'pass', details: 'ok' }] } }
         : { ok: true, details: 'ok', payload: {} },
       runVerification: async () => [{ command: 'check', result: 'pass', details: 'ok' }],
@@ -57,7 +64,14 @@ describe('harness core', () => {
     let agentCalls = 0
     let gateCalls = 0
     const result = await runOrchestrator({
-      input: { feature: 'Feature', objective: 'Objective', acceptanceCriteria: ['Done'], maxIterations: 1 },
+      input: {
+        feature: 'Feature',
+        objective: 'Objective',
+        constraints: [],
+        acceptanceCriteria: ['Done'],
+        testHints: [],
+        maxIterations: 1,
+      },
       policy: { maxIterations: 1, allowedProductPaths: ['src/'] },
       dryRun: true,
       snapshot: () => new Map(),

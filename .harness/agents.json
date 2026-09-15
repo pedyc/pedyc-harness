@@ -3,7 +3,7 @@
   "providers": {
     "claude": {
       "command": "node",
-      "args": ["scripts/harness/claude-adapter.mjs"]
+      "args": ["scripts/dist/claude-adapter.js"]
     }
   },
   "planner": {

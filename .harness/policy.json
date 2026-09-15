@@ -2,9 +2,9 @@
   "$schema": "https://pedyc.dev/harness/policy.schema.json",
   "maxIterations": 3,
   "protectedPaths": [".github/", ".claude/", ".agents/", ".harness/", "scripts/"],
-  "requiredChecks": ["harness:verify", "type-check", "test:unit", "build"],
+  "requiredChecks": ["build", "harness:verify", "schemas:check", "type-check", "test:unit"],
   "forbiddenCommands": ["git reset --hard", "git checkout --", "npm publish"],
   "allowedAgentCommands": [],
-  "allowedProductPaths": ["src/"],
+  "allowedProductPaths": ["packages/"],
   "agentTimeoutMs": 300000
 }

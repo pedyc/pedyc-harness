@@ -36,7 +36,7 @@ npx pedyc-harness run --input .harness/task.json --dry-run --json
 - `generic` — stack-agnostic contracts and safety policy.
 - `vue` — Vue 3 + TypeScript + Vite conventions.
 
-New presets are added by registering them in `packages/cli/src/presets.mjs`; Core does
+New presets are added by registering them in `packages/cli/src/presets.ts`; Core does
 not need to change.
 
 ## Provider protocol

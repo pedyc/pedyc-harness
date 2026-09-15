@@ -1,7 +1,7 @@
 # Agent instructions
 
-This repository is a Vue 3 + TypeScript product demo with a configuration-driven
-agent harness.
+This repository is a configuration-driven agent harness, published as a pnpm
+workspace of npm packages.
 
 ## Instruction hierarchy
 
@@ -12,24 +12,29 @@ agent harness.
 
 ## Product boundary
 
-- `src/` contains product demonstration code only.
+- `packages/` contains the Harness runtime, CLI, and preset product code.
 - `.harness/` contains machine-readable contracts, policy, and evaluation criteria.
 - `.agents/` contains reusable task skills.
 - `.github/` contains Copilot instructions, agents, and CI.
 - `.claude/` contains Claude Code entrypoints and permissions.
 - `scripts/` contains harness execution and verification code.
 
-Do not place agent orchestration, schemas, or harness runtime code in `src/`.
+Do not place repository-level rules, CI configuration, or test fixtures in `packages/`.
 
 ## Required verification
 
 Run these commands after product or harness changes:
 
 ```bash
+pnpm run build
 pnpm run harness:verify
 pnpm run type-check
-pnpm run build
+pnpm run test:unit
 ```
+
+`build` runs first because the CLI resolves `@pedyc/harness-core` through its
+published entry points: the packages must be compiled before the Harness can run
+against this repository.
 
 To run the orchestrator in a safe preview mode:
 
@@ -42,9 +47,9 @@ by the CLI may use npm, pnpm, or yarn.
 
 The default coder adapter is intentionally external. Configure
 `.harness/agents.json` with a command that accepts one JSON payload on stdin
-before running a non-dry execution. The adapter must only change `src/`.
+before running a non-dry execution. The adapter must only change `packages/`.
 
-The Claude Code adapter at `scripts/harness/claude-adapter.mjs` is an optional
+The Claude Code adapter at `scripts/dist/claude-adapter.js` is an optional
 repository-local example, not part of any published package. Presets generate an
 `agents.json` without providers, so `verify` and `run --dry-run` work before an
 adapter is configured. The adapter requires the `claude` CLI to be installed and
@@ -56,7 +61,10 @@ success based on an unexecuted or stale result.
 
 ## Product conventions
 
-- Use Vue 3 `<script setup lang="ts">`.
-- Use PascalCase for components.
-- Keep component props explicitly typed.
+- Write new and modified runtime source in TypeScript.
+- Use `import type` for type-only imports.
+- Suffix relative imports with `.js` (`./policy.js`), because packages compile
+  with `module: "nodenext"` and Node resolves the emitted file.
+- Do not use `enum`, `namespace`, or constructor parameter properties.
+- Prefer `unknown` plus a type guard over `any`.
 - Keep changes scoped to the request.

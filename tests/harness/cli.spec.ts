@@ -4,7 +4,7 @@ import { dirname, join, resolve } from 'node:path'
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { detectPackageManager } from '../../scripts/harness/package-manager.mjs'
-import { availablePresets, getPreset } from '../../packages/cli/src/presets.mjs'
+import { availablePresets, getPreset } from '../../packages/cli/src/presets.js'
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const cliPath = join(projectRoot, 'scripts/harness/cli.mjs')
@@ -87,10 +87,14 @@ describe('pedyc-harness CLI', () => {
 describe('preset registry', () => {
   it('exposes independent generic and Vue presets', () => {
     expect(availablePresets()).toEqual(['generic', 'vue'])
-    expect(getPreset('generic').name).toBe('generic')
-    expect(getPreset('vue').name).toBe('vue')
+
+    const generic = getPreset('generic')
+    const vue = getPreset('vue')
+
+    expect(generic?.name).toBe('generic')
+    expect(vue?.name).toBe('vue')
     expect(getPreset('unknown')).toBeUndefined()
-    expect(getPreset('vue').verificationScripts).toContain('build')
+    expect(vue?.verificationScripts).toContain('build')
   })
 })
 

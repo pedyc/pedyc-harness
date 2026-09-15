@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // Deterministic offline Agent Provider used by the compatibility tests. It speaks
-// the same stdin/stdout JSON protocol as scripts/harness/claude-adapter.mjs, but
+// the same stdin/stdout JSON protocol as scripts/harness/claude-adapter.ts, but
 // never touches the network so a non-Vue project can run the full four-phase loop
 // in CI.
 

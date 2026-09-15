@@ -1,24 +1,33 @@
 {
+  "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "target": "es2023",
-    "module": "esnext",
-    "lib": ["ES2023", "DOM"],
-    "types": ["vite/client"],
-    "allowArbitraryExtensions": true,
-    "skipLibCheck": true,
-
-    /* Bundler mode */
-    "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "verbatimModuleSyntax": true,
-    "moduleDetection": "force",
     "noEmit": true,
-
-    /* Linting */
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "erasableSyntaxOnly": true,
-    "noFallthroughCasesInSwitch": true
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "types": ["node", "vitest/globals"],
+    "allowJs": true,
+    "checkJs": false,
+    // Tests resolve the workspace packages to their TypeScript sources, so
+    // type-checking does not depend on a prior build. Runtime resolution still
+    // goes through package `exports`, which point at `dist/`.
+    "paths": {
+      "pedyc-harness": ["./packages/cli/src/index.ts"],
+      "pedyc-harness/run": ["./packages/cli/src/run.ts"],
+      "@pedyc/harness-preset-generic": ["./packages/preset-generic/src/index.ts"],
+      "@pedyc/harness-preset-vue": ["./packages/preset-vue/src/index.ts"],
+      "@pedyc/harness-core": ["./packages/core/src/index.ts"],
+      "@pedyc/harness-core/package-manager": ["./packages/core/src/core/package-manager.ts"],
+      "@pedyc/harness-core/intake": ["./packages/core/src/core/intake.ts"],
+      "@pedyc/harness-core/command": ["./packages/core/src/core/command.ts"],
+      "@pedyc/harness-core/snapshots": ["./packages/core/src/core/diff-inspector.ts"],
+      "@pedyc/harness-core/schema": ["./packages/core/src/core/validator.ts"],
+      "@pedyc/harness-core/agent": ["./packages/core/src/core/agent.ts"],
+      "@pedyc/harness-core/policy": ["./packages/core/src/core/policy-engine.ts"],
+      "@pedyc/harness-core/provider": ["./packages/core/src/adapters/provider-runner.ts"],
+      "@pedyc/harness-core/orchestrator": ["./packages/core/src/core/executor.ts"],
+      "@pedyc/harness-core/contracts": ["./packages/core/src/contracts/index.ts"]
+    }
   },
-  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.vue"]
+  "include": ["tests/**/*.ts", "vitest.config.ts"]
 }

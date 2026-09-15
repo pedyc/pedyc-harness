@@ -8,19 +8,58 @@ const read = (relativePath: string) => readFileSync(join(repoRoot, relativePath)
 const readJson = (relativePath: string) => JSON.parse(read(relativePath))
 const exists = (relativePath: string) => existsSync(join(repoRoot, relativePath))
 
+// `ships` is the directory the tarball carries: the compiled output for a
+// migrated TypeScript package, the sources for one that is still plain ESM.
 const packages = [
-  { dir: 'packages/core', name: '@pedyc/harness-core' },
-  { dir: 'packages/cli', name: 'pedyc-harness' },
-  { dir: 'packages/preset-generic', name: '@pedyc/harness-preset-generic' },
-  { dir: 'packages/preset-vue', name: '@pedyc/harness-preset-vue' },
+  { dir: 'packages/core', name: '@pedyc/harness-core', ships: 'dist' },
+  { dir: 'packages/cli', name: 'pedyc-harness', ships: 'dist' },
+  { dir: 'packages/preset-generic', name: '@pedyc/harness-preset-generic', ships: 'dist' },
+  { dir: 'packages/preset-vue', name: '@pedyc/harness-preset-vue', ships: 'dist' },
 ]
 
-const templates = ['input.schema.json', 'output.schema.json', 'agent-response.schema.json', 'task.example.json']
+// An `exports` target is either a bare path or a conditions object.
+const exportTargets = (target: string | Record<string, string>): string[] =>
+  typeof target === 'string' ? [target] : Object.values(target)
 
 describe('release configuration', () => {
-  it('keeps the CLI templates byte-identical to the repository contracts', () => {
-    for (const file of templates) {
-      expect(read(join('packages/cli/templates', file))).toBe(read(join('.harness', file)))
+  it('keeps every schema copy byte-identical to schemas/', () => {
+    const exampleProjects = readdirSync(join(repoRoot, 'examples'), { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => `examples/${entry.name}`)
+    const expand = (pattern: string) => pattern.startsWith('examples/*')
+      ? exampleProjects.map((project) => pattern.replace('examples/*', project))
+      : [pattern]
+
+    // `schemas/` is the source of truth and these copies are derived. Generated
+    // projects validate themselves offline, so the bytes have to match exactly.
+    // The human intake contract stays in this repository only.
+    const contracts = [
+      { file: 'input.schema.json', destinations: ['.harness', 'packages/cli/templates', 'examples/*/.harness'] },
+      { file: 'output.schema.json', destinations: ['.harness', 'packages/cli/templates', 'examples/*/.harness'] },
+      { file: 'agent-response.schema.json', destinations: ['.harness', 'packages/cli/templates', 'examples/*/.harness'] },
+      { file: 'task.example.json', destinations: ['.harness', 'packages/cli/templates', 'examples/*/.harness'] },
+      { file: 'task.schema.json', destinations: ['.harness'] },
+    ]
+
+    for (const { file, destinations } of contracts) {
+      const source = read(join('schemas', file))
+
+      for (const pattern of destinations) {
+        for (const destination of expand(pattern)) {
+          expect(read(join(destination, file)), `${destination}/${file}`).toBe(source)
+        }
+      }
+    }
+  })
+
+  // A hardcoded copy of the version silently kept reporting the previous release
+  // after a bump, so the constant is read from the manifest and pinned here.
+  it('reports the core runtime version the manifests actually declare', async () => {
+    const { harnessCoreVersion } = await import('@pedyc/harness-core')
+
+    expect(harnessCoreVersion).toMatch(/^\d+\.\d+\.\d+$/)
+    for (const { dir } of packages) {
+      expect(harnessCoreVersion, dir).toBe(readJson(join(dir, 'package.json')).version)
     }
   })
 
@@ -30,7 +69,7 @@ describe('release configuration', () => {
     expect(versions.size).toBe(1)
     expect([...versions][0]).toMatch(/^\d+\.\d+\.\d+$/)
 
-    for (const { dir, name } of packages) {
+    for (const { dir, name, ships } of packages) {
       const manifest = readJson(join(dir, 'package.json'))
 
       expect(manifest.name).toBe(name)
@@ -39,8 +78,20 @@ describe('release configuration', () => {
       expect(manifest.publishConfig?.access).toBe('public')
       expect(manifest.description).toBeTruthy()
       expect(manifest.repository?.directory).toBe(dir)
-      expect(manifest.files).toEqual(expect.arrayContaining(['src']))
+      expect(manifest.files).toEqual(expect.arrayContaining([ships]))
       expect(manifest.files.some((entry: string) => /test|example|scripts/.test(entry))).toBe(false)
+    }
+  })
+
+  it('points every export subpath at a file the build produced', () => {
+    for (const { dir } of packages) {
+      const manifest = readJson(join(dir, 'package.json'))
+
+      for (const target of Object.values(manifest.exports ?? {}) as Array<string | Record<string, string>>) {
+        for (const path of exportTargets(target)) {
+          expect(exists(join(dir, path)), `${dir} -> ${path}`).toBe(true)
+        }
+      }
     }
   })
 
@@ -60,8 +111,10 @@ describe('release configuration', () => {
 
     expect(exists(binPath)).toBe(true)
 
-    for (const target of Object.values(manifest.exports) as string[]) {
-      expect(exists(join('packages/cli', target))).toBe(true)
+    for (const target of Object.values(manifest.exports) as Array<string | Record<string, string>>) {
+      for (const path of exportTargets(target)) {
+        expect(exists(join('packages/cli', path)), `packages/cli -> ${path}`).toBe(true)
+      }
     }
 
     // A published tarball has no repository around it, so the runtime must not
@@ -98,12 +151,18 @@ describe('release configuration', () => {
 
     for (const name of availablePresets()) {
       const preset = getPreset(name)
+      if (!preset) throw new Error(`Preset '${name}' is not registered.`)
 
       expect(preset.agents.providers).toEqual({})
       expect(preset.agents.planner).toEqual({ mode: 'internal' })
-      for (const role of ['coder', 'tester', 'reviewer']) {
-        expect(preset.agents[role].mode).toBe('external')
-        expect(preset.agents[role].provider).toBe('custom')
+      for (const role of ['coder', 'tester', 'reviewer'] as const) {
+        // A preset that omitted a role would otherwise make the assertions below
+        // throw on `undefined` rather than report which role is missing.
+        const config = preset.agents[role]
+        if (!config) throw new Error(`Preset '${name}' does not configure the ${role} role.`)
+
+        expect(config.mode).toBe('external')
+        expect(config.provider).toBe('custom')
       }
     }
   })
@@ -111,13 +170,15 @@ describe('release configuration', () => {
   it('wires the release check into the root scripts and CI', () => {
     const scripts = readJson('package.json').scripts
 
-    expect(scripts['release:check']).toBe('node scripts/harness/release-check.mjs')
-    expect(exists('scripts/harness/release-check.mjs')).toBe(true)
-    expect(scripts['release:publish']).toBe('node scripts/harness/publish.mjs')
-    expect(exists('scripts/harness/publish.mjs')).toBe(true)
+    // The scripts are TypeScript now, so the commands point at compiled output
+    // under `scripts/dist/`. `scripts/harness/*.mjs` keeps only the four shims.
+    expect(scripts['release:check']).toBe('node scripts/dist/release-check.js')
+    expect(exists('scripts/dist/release-check.js')).toBe(true)
+    expect(scripts['release:publish']).toBe('node scripts/dist/publish.js')
+    expect(exists('scripts/dist/publish.js')).toBe(true)
 
     // Publishing is irreversible, so the precondition checks must stay in place.
-    const publish = read('scripts/harness/publish.mjs')
+    const publish = read('scripts/harness/publish.ts')
     expect(publish).toContain('whoami')
     expect(publish).toContain('registry.npmjs.org')
     expect(publish).toContain('release:check')

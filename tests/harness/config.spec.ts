@@ -20,7 +20,7 @@ describe('harness contracts', () => {
 
   it('keeps product code outside the harness directories', () => {
     const instructions = readFileSync(resolve(root, 'AGENTS.md'), 'utf8')
-    expect(instructions).toContain('`src/` contains product demonstration code only.')
+    expect(instructions).toContain('`packages/` contains the Harness runtime, CLI, and preset product code.')
     expect(instructions).toContain('`.harness/` contains machine-readable contracts')
   })
 
@@ -31,7 +31,7 @@ describe('harness contracts', () => {
     }
 
     expect(agents.providers[agents.coder.provider].command).toBe('node')
-    expect(agents.providers[agents.coder.provider].args).toContain('scripts/harness/claude-adapter.mjs')
+    expect(agents.providers[agents.coder.provider].args).toContain('scripts/dist/claude-adapter.js')
   })
 
   it('keeps the human task intake contract available', () => {

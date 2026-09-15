@@ -2,7 +2,7 @@
 // configuration first and then runs this file when it exists, so a project can add
 // stricter checks without changing Core or the CLI.
 //
-// This repository keeps the full Harness contract here: the file list, the src/
+// This repository keeps the full Harness contract here: the file list, the packages/
 // product boundary and the Agent frontmatter.
 
 import { existsSync, readFileSync } from 'node:fs'
@@ -19,7 +19,6 @@ const requiredFiles = [
   '.github/agents/Coder.agent.md',
   '.github/agents/Tester.agent.md',
   '.github/agents/Reviewer.agent.md',
-  '.agents/skills/implement-vue-component/SKILL.md',
   '.agents/skills/verify-change/SKILL.md',
   '.agents/skills/review-change/SKILL.md',
   '.harness/input.schema.json',
@@ -30,7 +29,7 @@ const requiredFiles = [
   '.harness/agents.json',
   '.harness/agent-response.schema.json',
   '.harness/task.example.json',
-  'scripts/harness/claude-adapter.mjs',
+  'scripts/dist/claude-adapter.js',
   'scripts/harness/run.mjs',
   '.claude/CLAUDE.md',
   '.vscode/task.json',
@@ -44,8 +43,8 @@ if (missingFiles.length > 0) {
 }
 
 const instructions = readFileSync(resolve(root, '.github/instructions/copilot-instructions.md'), 'utf8')
-if (!instructions.includes('src/') || !instructions.includes('产品演示代码')) {
-  console.error('Harness instructions must define the src/ product boundary.')
+if (!instructions.includes('packages/') || !instructions.includes('产品代码')) {
+  console.error('Harness instructions must define the packages/ product boundary.')
   process.exit(1)
 }
 

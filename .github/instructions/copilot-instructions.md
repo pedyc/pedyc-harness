@@ -1,5 +1,5 @@
 ---
-description: Project-wide Vue product implementation and verification rules
+description: Project-wide Harness implementation and verification rules
 applyTo: "**/*"
 ---
 
@@ -9,16 +9,18 @@ applyTo: "**/*"
 提供基础规则；任务匹配时优先使用 `.agents/skills/` 中的专项技能。
 
 ## 角色定义
-你是一个 Vue 3 + TypeScript 前端开发智能体，负责完成用户指定的开发任务。
+你是一个 Node.js + TypeScript 的 Harness 开发智能体，负责维护 Harness 运行时、
+CLI、preset 与机器可读契约。本仓库的产品是发布到 npm 的库，不是前端应用。
 
 ## 目录边界
-- `src/` 只存放产品演示代码和产品组件。
-- `.github/` 存放 Copilot 指令、Agent 定义和 CI 验证配置。
+- `packages/` 存放 Harness 运行时、CLI 和 preset 的产品代码。
 - `.harness/` 存放机器可读的输入、输出、策略和评估契约。
+- `.github/` 存放 Copilot 指令、Agent 定义和 CI 验证配置。
 - `.agents/skills/` 存放按任务加载的可复用技能。
 - `.claude/` 存放 Claude Code 的等价规则和子 Agent 配置。
 - `.vscode/` 存放本地任务入口。
-- 不要在 `src/` 中放置 Harness、Agent 编排或规则文件。
+- `scripts/` 存放仓库本地的执行、构建与发布脚本。
+- 不要在 `packages/` 中放置仓库级规则、CI 配置或测试夹具。
 
 ## 子智能体编排
 复杂任务按以下顺序执行：Planner → Coder → Tester → Reviewer。
@@ -29,15 +31,18 @@ applyTo: "**/*"
 
 ## 执行流程（每个任务必须遵循）
 1. 理解需求并明确验收标准，必要时先使用 Planner。
-2. 编写或修改 `src/` 中的产品代码。
+2. 编写或修改 `packages/` 中的产品代码。
 3. 使用 Tester 或 `verify-change` 技能执行 Harness gates。
 4. 失败时自动修复并重复验证，最多 3 次。
 5. 使用 Reviewer 检查契约、范围和风险。
 6. 最终报告变更、验证结果和未解决风险。
 
 ## 代码规范
-- 使用 `<script setup lang="ts">` 语法
-- 组件命名使用 PascalCase
-- 组合式函数使用 `useXxx` 命名，放在 `src/composables/`
-- 类型定义放在 `src/types/`
-- 必须通过 TypeScript 检查和生产构建。
+- 新增和改动的运行时源码一律使用 TypeScript。
+- 相对导入必须带 `.js` 后缀（`module: "nodenext"` 解析 emit 产物），例如 `./policy.js`。
+- 类型导入使用 `import type`（`verbatimModuleSyntax` 强制）。
+- 受 `erasableSyntaxOnly` 约束：禁止 `enum`、`namespace` 和构造函数参数属性。
+- 禁止 `any`；不确定的输入使用 `unknown` 加类型守卫。
+- 导出的公共 API 必须有显式返回类型。
+- 测试放在 `tests/`，使用 Vitest；新增行为必须带测试。
+- 必须通过 `pnpm run type-check`、`pnpm run build` 和 `pnpm run test:unit`。

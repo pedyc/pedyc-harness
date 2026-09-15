@@ -5,16 +5,46 @@
 
 所有 workspace 包共享同一个版本号，同步发布。升级规则见 [发布与版本规则](./docs/release.md)。
 
-## [Unreleased]
+## [1.1.0] - 2026-09-15
+
+Harness 运行时从零类型标注的 ESM `.mjs` 迁移到 TypeScript，由 `tsc` 编译到 `dist/` 发布。
+
+这是一次**非破坏性变更**：`@pedyc/harness-core` 的十个 `exports` 子路径名全部保留，`.harness/`
+JSON Schema 的字节内容、Provider 的 stdin/stdout 契约、`run --dry-run --json` 的输出形状和
+`policy.json` 的字段语义都没有改动，`engines.node` 仍为 `>=20`（`dist/` 是普通 JS）。
+包内文件从 `src/*.mjs` 变为 `dist/*.js`，但 `exports` 从未暴露 `src/`，因此深路径不属于公开
+接口。
+
+### Added
+
+- `@pedyc/harness-core/contracts` 子路径，导出跨模块契约类型：`Policy`、`AgentsConfig`、
+  `NormalizedTask`、`RunResult`、`StageRequest`、`Preset` 等。
+- 各包发布 `dist/` 时同时携带 `.d.ts` 与 sourcemap，消费者首次获得可用的类型提示。
+- 根 `schemas/` 作为 JSON Schema 唯一来源，配 `pnpm run schemas:sync` / `schemas:check`；
+  后者在 `.harness/`、`packages/cli/templates/` 或 `examples/*/.harness/` 的副本漂移时
+  非零退出，并已接入 CI 与 `harness:verify`。
+- 测试覆盖类型与 Schema 的一致性，以及 `harnessCoreVersion` 与四个包 manifest 版本的一致性。
+
+### Changed
+
+- 四个包与仓库工具链改用 TypeScript。`packages/cli`、两个 preset 包和 `release-check`、
+  `publish`、`verify-examples`、`claude-adapter`、`schemas-sync` 均由 `tsc` 编译。
+- `packages/core` 源码按 `contracts/`、`core/`、`adapters/` 分层。内部的策略校验、审批判定等
+  重复逻辑合并到 `@pedyc/harness-core/policy`，`@pedyc/harness-core/snapshots` 等子路径名不变。
+- 仓库自身的 `.harness/verify.mjs`、`tests/fixtures/echo-adapter.mjs` 和四个转发 shim 保持
+  `.mjs`：前者在任意生成项目里直接执行，必须无需构建步骤即可运行。
+- 两个 preset 包新增对 `@pedyc/harness-core` 的依赖（仅类型引用，运行时产物无 import）。
+- 构建顺序变为强制约束：`pnpm run build` 必须先于其余门禁，因为仓库内脚本通过包 `exports`
+  解析到 `dist/`。根 `prepare` 钩子保证 `pnpm install` 之后即存在构建产物。
+- 仓库自身的 Vue 演示应用（根 `src/`、`index.html`、`vite.config.ts`）移除，验证入口改为
+  Harness 自身；`packages/preset-vue` 与 `examples/vue-project` 保留不变。
+- 仓库自己的 `policy.json` 中 `allowedProductPaths` 由 `src/` 改为 `packages/`。
 
 ### Fixed
 
 - `@pedyc/harness-core` 导出的 `harnessCoreVersion` 不再硬编码版本号，改为读取自身
   `package.json`。`1.0.1` 中该常量仍返回 `1.0.0`；仓库内没有任何调用方，所以没有测试
   能发现这处漂移，registry 上已发布的 `1.0.1` 产物同样保持原值。
-
-### Changed
-
 - README、里程碑和发布规则中残留的 `1.0.0` 版本引用改为当前版本，或去掉具体版本号，
   避免下次升版再次过期。
 
