@@ -14,14 +14,17 @@
 
 - [项目目标](./项目目标.md)：**基准文档**。定位（Agent 的控制平面）、设计原则、能力优先级与
   现状、明确不做的方向，以及包拆分和 CLI 形态等实现设计。
-- [项目架构](./architecture.md)：运行时、配置和项目生成文件的职责边界。
-- [Preset 设计](./preset-design.md)：generic、Vue 以及未来技术栈 Preset 的抽象。
-- [Provider 设计](./provider-design.md)：Planner、Coder、Tester、Reviewer 与外部 Agent 的适配协议。
-- [CLI 使用与生成规则](./cli.md)：安装、初始化、验证、运行和升级策略。
+- [核心架构](./核心架构.md)：运行时、配置和项目生成文件的职责边界。
+- [核心接口设计](./核心接口设计.md)：Core Domain Model、核心 TypeScript 类型、生命周期关系与
+  Schema 边界。
+- [Policy 设计](./Policy设计.md)：一次 Run 中 Agent 允许做什么、不允许做什么的治理边界。
+- [Preset 设计](./Preset设计.md)：generic、Vue 以及未来技术栈 Preset 的抽象。
+- [Provider 设计](./Provider设计.md)：Planner、Coder、Tester、Reviewer 与外部 Agent 的适配协议。
+- [Verification 设计](./Verification设计.md)：独立确认任务是否完成，以及验证门禁与证据链的构造。
+- [CLI 使用与生成规则](./CLI设计.md)：安装、初始化、验证、运行和升级策略。
 - [发布与版本规则](./release.md)：发布单元、SemVer 策略、发布前检查清单、Provider 安全边界。
 - [里程碑路线](./milestones.md)：迁移、拆包、Preset 和发布的阶段目标与验收标准。
-- [SOP：搭建前端 Harness](./SOP-搭建前端Harness.md)：以 Vue 3 为例的落地步骤、证据链和常见坑点。
-- [Harness 设计权衡](./Harness设计权衡.md)：按风险分级决定流程深度，以及 Token 投入的取舍。
+- [成本权衡](./成本权衡.md)：按风险分级决定流程深度，以及 Token 投入的取舍。
 
 ## Workspace 包
 

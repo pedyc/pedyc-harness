@@ -19,6 +19,13 @@ Compared with the `generic` preset:
 The generated `agents.json` contains no Provider. Real (non dry-run) execution
 requires replacing the placeholder Provider with your own Adapter command.
 
+## Changelog
+
+All four Harness packages share one version number and are released together, so
+release notes for this package live in the repository changelog:
+
+https://github.com/pedyc/pedyc-harness/blob/main/CHANGELOG.md
+
 ## License
 
 MIT
