@@ -5,6 +5,17 @@
 
 所有 workspace 包共享同一个版本号，同步发布。升级规则见 [发布与版本规则](./docs/release.md)。
 
+## [2.0.0] - 2026-09-15
+
+### Added
+- 
+
+### Changed
+- 重构：从JS迁移到TS
+
+### Fixed
+- 
+
 ## [1.1.0] - 2026-09-15
 
 Harness 运行时从零类型标注的 ESM `.mjs` 迁移到 TypeScript，由 `tsc` 编译到 `dist/` 发布。
