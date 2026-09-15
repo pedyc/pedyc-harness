@@ -30,7 +30,10 @@ npx pedyc-harness run --input .harness/task.json --dry-run --json
 
 规划中：
 
-- `list-presets`：列出可用 Preset，避免让用户记忆 Preset 名称。
+- `list-presets`：列出可用 Preset，避免让用户记忆 Preset 名称。目标形态下它会列出项目已安装的
+  Preset 包及其继承关系，而不只是 CLI 内置表。
+- `explain`：打印本次运行使用的 `EffectiveHarnessConfig`，以及每个值的来源（provenance），
+  用于回答「这条 Policy 是谁声明的」。
 
 ## 初始化行为
 
@@ -47,6 +50,10 @@ npx pedyc-harness init --preset vue --force
 `diff` 比较当前项目与 Preset 的受管模板文件，输出 `missing`、`unchanged` 或 `modified`
 状态，不会修改文件。`update` 只补充缺失文件，并默认跳过已经修改的文件；传入 `--force`
 才会覆盖已修改的模板。
+
+目标形态下 `init --preset` 的语义会收窄：Preset 内容不再被复制进项目，`init` 只写入
+`.harness/harness.json` 并安装对应的 npm package，`diff` / `update` 的对象退化为项目自有
+文件。原因与迁移方式见 [§11](#11-cli--npm--core-的职责边界)；当前实现仍是模板复制模式。
 
 ## 发布建议
 
@@ -411,14 +418,19 @@ GitHub Actions
 CLI 负责加载：
 
 ```text
-.harness/
+.harness/harness.json      Manifest（目标形态）
+.harness/policy.json
+.harness/agents.json
 AGENTS.md
-package.json
-Preset
+package.json               依赖与 Preset 版本来源
+Preset（已安装的 npm 包）
 Task Contract
 ```
 
 但配置解析完成后，应交给 Runtime。
+
+目标形态下，CLI 只负责定位和读取这些来源；Preset 依赖图的递归解析和配置合成属于 Core，
+见 [§11](#11-cli--npm--core-的职责边界) 与 [核心接口设计](./核心接口设计.md)。
 
 不要让：
 
@@ -436,7 +448,112 @@ Diff Engine
 
 ---
 
-## 11. CLI 与 Runtime 边界
+## 11. CLI / npm / Core 的职责边界
+
+Preset 生态由三层共同组成，职责不重叠：
+
+```text
+CLI
+   ↓
+DX layer
+
+npm
+   ↓
+distribution layer
+
+Core
+   ↓
+runtime layer
+```
+
+| 层   | 职责                                                     |
+| ---- | -------------------------------------------------------- |
+| CLI  | 参数解析、初始化、诊断、输出，让用户不必理解多层 Preset   |
+| npm  | Preset 分发、版本、依赖                                   |
+| Core | Preset 解析、配置合成、Policy 执行                       |
+
+因此 `init --preset` 实际上是两个动作：
+
+```text
+                  init
+                   │
+        ┌──────────┴──────────┐
+        ↓                     ↓
+修改 harness.json        安装 npm package
+        │                     │
+        └──────────┬──────────┘
+                   ↓
+              npm install
+                   ↓
+             preset ready
+```
+
+期望输出：
+
+```text
+✔ Found package manager: npm
+
+✔ Installing @acme/harness-preset
+
+✔ Validating preset
+
+✔ Resolving dependencies
+
+✔ Creating .harness/harness.json
+
+✔ Preset loaded successfully
+```
+
+因此：
+
+```json
+{
+  "presets": ["@acme/harness-preset"]
+}
+```
+
+并且：
+
+```json
+{
+  "devDependencies": {
+    "pedyc-harness": "^1.0.0",
+    "@acme/harness-preset": "^1.2.0"
+  }
+}
+```
+
+这里有一个重要区别：
+
+> **`init --preset` 不应该把 Preset 的内容复制进项目。**
+
+它应该只把依赖写进 `package.json`、把引用写进 `.harness/harness.json`。Preset 升级因此
+不需要 `update` 去逐文件比对，也就不会静默覆盖用户修改。
+
+这与当前实现不同：当前 `init` 会把 Preset 模板文件生成到目标项目，`update` 负责后续同步。
+目标形态下的模板生成只保留给项目自有文件（如 `AGENTS.md`）。
+
+手动方式同样支持：
+
+```bash
+npm install -D @acme/harness-preset
+```
+
+用户不需要知道多层 Preset。安装一个包、在 `harness.json` 中声明一次，其余由 Harness 自动解析：
+
+```text
+@acme/harness-preset
+        ↓
+@pedyc/harness-preset-web
+        ↓
+@pedyc/harness-preset-base
+```
+
+需要解释时使用诊断命令，而不是要求用户维护继承关系。
+
+---
+
+## 12. CLI 与 Runtime 边界
 
 ### CLI 负责
 
@@ -463,7 +580,7 @@ Run Record
 
 ---
 
-## 12. CLI 设计原则
+## 13. CLI 设计原则
 
 1. CLI 是入口，不是核心逻辑。
 2. CLI 不实现 Policy。

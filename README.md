@@ -449,6 +449,22 @@ package.json
 
 脚本和配置进行补充。
 
+配置的职责分层是：
+
+```text
+npm                      安装能力（CLI / Core / Preset）
+.harness/                声明项目治理模型
+Preset                   复用默认治理能力
+团队仓库 / npm 包         共享组织级配置
+```
+
+其中 `.harness/` 是 Harness 的项目控制面，治理定义（Policy、Verification、Rules、Tasks）进入
+版本库，运行记录（`.harness/runs/`）不进入。
+
+> 规划中：`.harness/harness.json` 将作为入口配置（Harness Manifest），只声明使用哪些 Preset 和
+> 配置来源；Preset 将以 npm package 分发并支持继承。Packages 目前尚未实现这些能力，详见
+> [`docs/核心架构.md`](docs/核心架构.md) 与 [`docs/Preset设计.md`](docs/Preset设计.md)。
+
 Harness 的目标不是接管项目本身的工程配置，而是在项目现有工程规则之上增加一层可验证的执行治理。
 
 ---
@@ -499,9 +515,12 @@ Deterministic Evaluation
 | [`Policy设计.md`](docs/Policy设计.md)             | Policy Engine 和执行边界            |
 | [`Verification设计.md`](docs/Verification设计.md) | 独立验证和验证证据                  |
 | [`Provider设计.md`](docs/Provider设计.md)         | Agent Provider / Adapter            |
-| [`Preset设计.md`](docs/Preset设计.md)             | Preset 体系                         |
+| [`Preset设计.md`](docs/Preset设计.md)             | Preset 体系与配置合成               |
+| [`CLI设计.md`](docs/CLI设计.md)                   | CLI 使用与项目初始化                |
 | [`release.md`](docs/release.md)                   | Package 构建和发布流程              |
+| [`成本权衡.md`](docs/成本权衡.md)                 | 流程深度与 Token 取舍               |
 | [`milestones.md`](docs/milestones.md)             | 项目迁移、重构和发布里程碑          |
+| [`faq/`](docs/faq/)                               | 配置分层与 Preset 生态的设计讨论    |
 
 README 负责介绍项目。
 
@@ -537,7 +556,16 @@ README 负责介绍项目。
 "让 Agent 的执行可以被约束、验证和审计"
 ```
 
-下一阶段重点包括：
+下一步先做配置层（M15–M16）：
+
+```text
+"让治理策略可以被声明、继承和分层共享"
+```
+
+配置层决定 Policy、Verification 与 Run Record 从哪里读配置，因此排在治理执行之前；团队级
+Preset 与安全模型（M18–M19）仍在其后。见 [`docs/milestones.md`](docs/milestones.md)。
+
+随后重点包括：
 
 * Policy enforcement
 * Independent Verification Evidence
@@ -571,26 +599,30 @@ pedyc-harness 遵循几个核心原则：
 
 ```text
 M0–M6
-Foundation
-    ↓
-M7
-Policy Enforcement
-    ↓
-M8
-Independent Verification
-    ↓
-M9
-Execution Trace / Audit
-    ↓
-M10
-Approval Gate
+Foundation（已完成）
     ↓
 M11
-TypeScript Migration
+TypeScript Migration（已完成）
     ↓
-M12
-Governance Release
+M15 → M16
+Config Foundation / Preset Resolution
     ↓
-M13
-A
+M7 → M8
+Policy Enforcement / Independent Verification
+    ↓
+M17
+Effective Policy
+    ↓
+M9 → M10
+Trace / Audit / Approval Gate
+    ↓
+M12 → M13 → M14
+Governance Release / Provider / v1.3.0
+
+M18 → M19 → M20
+Team Preset / Security Model / Preset 生态命令
 ```
+
+配置层（M15–M16）排在治理能力之前，是因为它决定 Policy、Verification 与 Run Record 从哪里
+读配置；M17 依赖 M7 已实现的策略字段，因此不随之提前。阶段划分、依赖关系与验收标准见
+[`docs/milestones.md`](docs/milestones.md)。

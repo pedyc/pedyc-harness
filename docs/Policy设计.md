@@ -568,9 +568,171 @@ P2
 
 当前具体实现状态以代码与里程碑为准。原项目目标文档已经明确记录了上述落差。
 
+策略合成（[§十五](#十五策略来源与优先级) ～ [§十七](#十七effectivepolicy)）同样属于设计目标：当前实现只加载
+单一 `policy.json`，没有 Preset 继承、没有字段级合并语义、没有 provenance。因此不要把多层
+Preset 的合成行为当成既有保证。
+
 ---
 
-# 十五、核心原则
+# 十五、策略来源与优先级
+
+一次 Run 使用的 Policy 不是只来自 `.harness/policy.json`。完整来源是：
+
+```text
+Base Preset
+     ↓
+Community Preset
+     ↓
+Organization Preset
+     ↓
+Team Preset
+     ↓
+Project（.harness/harness.json + policy.json）
+     ↓
+Task Contract
+```
+
+但这些来源之间存在**两种不同的优先级顺序**，不能合并成一条链：
+
+普通默认值按便利性排序，越高层越贴合项目：
+
+```text
+Project > Team > Organization > Community > Base
+```
+
+安全约束按不可放宽性排序，越低层越不可突破：
+
+```text
+Convenience defaults
+        ↓
+Project policy
+        ↓
+Organization policy
+        ↓
+Security invariants
+```
+
+也就是说：
+
+> **个人或项目的配置可以改变默认值，但不能移除上层已经声明的安全约束。**
+
+Preset 依赖图的解析方式见 [Preset 设计](./Preset设计.md)。
+
+---
+
+# 十六、Policy Composition
+
+Policy 合成不等于 JSON merge。
+
+```ts
+deepMerge(base, project)
+```
+
+这种通用对象合并无法表达「哪些字段只能收紧」，因此每个字段都必须显式声明合并语义：
+
+```ts
+export type MergeStrategy =
+  | "replace"
+  | "merge"
+  | "append"
+  | "deny-wins"
+  | "immutable"
+```
+
+字段级默认语义：
+
+| 字段                                        | 语义              | 说明                             |
+| ------------------------------------------- | ----------------- | -------------------------------- |
+| `protectedPaths`                            | `append`          | 只能增加，不能删除已有项         |
+| `forbiddenCommands`                         | `append` + `deny-wins` | 只要出现过禁止，任何层级不能解除 |
+| `allowedPaths`                              | `replace`         | 项目通常需要声明自己的范围，但受 `protectedPaths` 与 `immutable` 约束 |
+| `allowedCommands`                           | `merge`           | 按 command 合并，禁止项优先       |
+| `requiredVerification` / `requiredChecks`   | `append`          | 只能增加检查项，不能减少         |
+| `maxIterations` / `timeout` / `maxChangedFiles` | `replace`（取更严格值） | 资源上限只能收紧，不能放宽 |
+| 安全不变量                                  | `immutable`       | 完全不可覆盖                     |
+
+累积类字段的例子：
+
+```text
+Preset A      protectedPaths = [".env"]
+Preset B      protectedPaths = [".github"]
+        ↓
+              [".env", ".github"]
+```
+
+禁止类字段的例子：
+
+```text
+个人 Preset   允许 git push
+公司 Preset   禁止 git push
+        ↓
+             DENY
+```
+
+不可覆盖的例子：
+
+```json
+{
+  "protectedPaths": [".harness"]
+}
+```
+
+即使项目把 `.harness` 从自己的配置中删掉，`protectedPaths` 仍然命中，因此：
+
+```text
+protectedPaths
+        >
+allowedPaths
+```
+
+这条优先级不会因为配置来源不同而改变。
+
+两个实现约束：
+
+1. 合并语义必须由单一模块实现。Preset Resolver 只负责收集来源与顺序，不做语义判断。
+2. 不能一部分规则写在 Resolver、一部分写在 Policy Engine，否则规则语义会漂移。
+
+---
+
+# 十七、EffectivePolicy
+
+Policy 合成的输出是 `EffectivePolicy`：
+
+```text
+Preset
+  +
+Organization Preset
+  +
+Project Config
+  +
+Task Config
+        ↓
+   Config Resolver
+        ↓
+   EffectivePolicy
+        ↓
+   Harness Runtime
+```
+
+Runtime 只使用 `EffectivePolicy`，不关心某个字段来自哪一层。
+
+但来源必须保留为 provenance，并随 Run Record 保存。否则无法回答：
+
+```text
+这条 protectedPaths 是谁声明的？
+这次运行为什么被拒绝？
+评审时看到的规则和当时执行的是否一致？
+```
+
+原则：
+
+> **Runtime 不需要知道来源，但审计必须能够还原来源。**
+
+类型定义见 [核心接口设计](./核心接口设计.md)，配置分层见 [核心架构](./核心架构.md)。
+
+---
+
+# 十八、核心原则
 
 Policy 的核心不是：
 

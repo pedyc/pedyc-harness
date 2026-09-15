@@ -380,6 +380,25 @@ Type declarations
 
 CLI 通过 Preset Registry 或对应的 package resolve Preset。
 
+目标形态下 Preset 是独立分发的 npm package，官方 Preset 之外还会有公司 Preset 与个人 Preset：
+
+```text
+@pedyc/harness-preset-vue      官方
+@acme/harness-preset           公司
+@alice/harness-preset-react    个人
+```
+
+发布约定：
+
+* 发布物必须包含 `preset.json`（Preset Manifest），声明继承关系与本 Preset 提供的配置。
+* 通过 `peerDependencies` 声明兼容的 `pedyc-harness` 版本，不要依赖 Core 的内部路径。
+* 版本由 npm 承担：项目只在 `.harness/harness.json` 中声明包名，版本落在 `package.json` 与
+  lockfile，不在 harness 配置里重复记录。
+* 第三方 Preset 不参与官方四包的同步版本约束。下一节的规则约束的是 pedyc 官方发布单元，
+  不是所有 Preset。
+
+Harness 不自建 Preset Registry，分发与权限复用 npm 生态，见 [项目目标](./项目目标.md)。
+
 ---
 
 # 11. Versioning
@@ -465,6 +484,9 @@ pedyc-harness                  → @pedyc/harness-preset-vue
 
 因此同步发布是唯一自洽的方式。发布入口只有根目录的 `pnpm run release:publish`，
 它按 `core → preset-generic → preset-vue → cli` 的依赖顺序推送四个包。
+
+> 这条约束只适用于 pedyc 官方发布的四个包。未来的第三方、公司或个人 Preset 是独立的 npm
+> package，按自己的节奏发布，只需通过 `peerDependencies` 声明兼容的 `pedyc-harness` 范围。
 
 ## 升级规则
 
