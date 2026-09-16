@@ -22,8 +22,13 @@ export {
   manifestFile,
   manifestPath,
   policyProblems,
+  presetDocument,
+  presetFile,
+  presetPackageName,
+  presetSchema,
   readManifest,
   readSchema,
+  resolvePresets,
   validateAgents,
   validatePolicy,
   validationDetails,
@@ -31,6 +36,7 @@ export {
 export type {
   HarnessSchemas,
   HarnessValidators,
+  PresetsResult,
   ResponseValidator,
   SchemaErrorFormatter,
 } from './config/index.js'

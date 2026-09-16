@@ -1,0 +1,7 @@
+{
+  "$schema": "https://pedyc.dev/schema/preset.json",
+  "name": "@pedyc/harness-preset-generic",
+  "policy": "policy.json",
+  "agents": "agents.json",
+  "instruction": "AGENTS.md"
+}

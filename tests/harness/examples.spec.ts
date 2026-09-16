@@ -1,4 +1,4 @@
-import { copyFile, cp, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { copyFile, cp, mkdir, mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { spawn } from 'node:child_process'
@@ -84,12 +84,18 @@ const createProject = async ({
   return root
 }
 
-const copyExample = async (name: string) => {
+const copyExample = async (name: string, preset: string) => {
   const root = await mkdtemp(join(tmpdir(), `pedyc-example-${name}-`))
   await cp(join(repoRoot, 'examples', name), root, {
     recursive: true,
     filter: (source) => !source.includes(join('.harness', 'runs')),
   })
+  // The example declares a preset, and a preset is resolved like any other
+  // dependency: outside the workspace that means an install, so the copy needs
+  // the package resolvable from its own directory.
+  const scope = join(root, 'node_modules', '@pedyc')
+  await mkdir(scope, { recursive: true })
+  await symlink(join(repoRoot, `packages/preset-${preset}`), join(scope, `harness-preset-${preset}`), 'junction')
   return root
 }
 
@@ -101,7 +107,7 @@ const examples = [
 
 describe('external project examples', () => {
   it.each(examples)('passes init, verify, doctor and dry-run for $directory', async ({ directory, preset, manager }) => {
-    const root = await copyExample(directory)
+    const root = await copyExample(directory, preset)
     const policyPath = join(root, '.harness/policy.json')
     const before = await readFile(policyPath, 'utf8')
 

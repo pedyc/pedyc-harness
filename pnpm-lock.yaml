@@ -39,12 +39,6 @@ importers:
       '@pedyc/harness-core':
         specifier: workspace:*
         version: link:../core
-      '@pedyc/harness-preset-generic':
-        specifier: workspace:*
-        version: link:../preset-generic
-      '@pedyc/harness-preset-vue':
-        specifier: workspace:*
-        version: link:../preset-vue
 
   packages/core:
     dependencies:
@@ -52,17 +46,9 @@ importers:
         specifier: ^8.20.0
         version: 8.20.0
 
-  packages/preset-generic:
-    dependencies:
-      '@pedyc/harness-core':
-        specifier: workspace:*
-        version: link:../core
+  packages/preset-generic: {}
 
-  packages/preset-vue:
-    dependencies:
-      '@pedyc/harness-core':
-        specifier: workspace:*
-        version: link:../core
+  packages/preset-vue: {}
 
 packages:
 

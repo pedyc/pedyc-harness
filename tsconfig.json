@@ -14,8 +14,6 @@
     "paths": {
       "pedyc-harness": ["./packages/cli/src/index.ts"],
       "pedyc-harness/run": ["./packages/cli/src/run.ts"],
-      "@pedyc/harness-preset-generic": ["./packages/preset-generic/src/index.ts"],
-      "@pedyc/harness-preset-vue": ["./packages/preset-vue/src/index.ts"],
       "@pedyc/harness-core": ["./packages/core/src/index.ts"],
       "@pedyc/harness-core/package-manager": ["./packages/core/src/runtime/package-manager.ts"],
       "@pedyc/harness-core/intake": ["./packages/core/src/runtime/intake.ts"],

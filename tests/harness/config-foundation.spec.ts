@@ -1,4 +1,4 @@
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { readdirSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -48,6 +48,25 @@ const createProject = async (manifest?: unknown | string): Promise<string> => {
   return root
 }
 
+/**
+ * Links the official preset packages into a copied project.
+ *
+ * A preset is resolved the way any dependency is, so a project outside the
+ * workspace only sees one after an install. Linking the package directory is
+ * what an install produces, without the network.
+ */
+const linkPresets = async (root: string): Promise<void> => {
+  const scope = join(root, 'node_modules', '@pedyc')
+  await mkdir(scope, { recursive: true })
+  for (const directory of ['preset-generic', 'preset-vue']) {
+    await symlink(
+      join(repoRoot, 'packages', directory),
+      join(scope, directory.replace('preset-', 'harness-preset-')),
+      'junction',
+    )
+  }
+}
+
 /** Copy of an initialized example, which is what a real project looks like. */
 const copyExample = async (name: string): Promise<string> => {
   const root = await mkdtemp(join(tmpdir(), `pedyc-config-${name}-`))
@@ -55,6 +74,7 @@ const copyExample = async (name: string): Promise<string> => {
     recursive: true,
     filter: (source) => !source.includes(join('.harness', 'runs')),
   })
+  await linkPresets(root)
   return root
 }
 
@@ -74,17 +94,19 @@ describe('M15 config loader', () => {
     expect(result.config.sources[0]).toEqual({ kind: 'manifest', location: '.harness/harness.json', active: true })
   })
 
-  it('records a declared preset without consuming it', async () => {
+  it('reports a declared preset as a source a run consumed', async () => {
     const root = await createProject({ version: 1, presets: ['@pedyc/harness-preset-vue'] })
+    await linkPresets(root)
 
     const result = loadHarnessConfig(root)
 
     expect(result.ok).toBe(true)
     if (!result.ok) return
+    expect(result.config.presets.map(({ packageName }) => packageName)).toEqual(['@pedyc/harness-preset-vue'])
     expect(result.config.sources).toContainEqual({
       kind: 'preset',
       location: '@pedyc/harness-preset-vue',
-      active: false,
+      active: true,
     })
   })
 
@@ -269,7 +291,7 @@ describe('M15 CLI integration', () => {
     expect(result.code).toBe(0)
     expect(result.stdout).toContain('manifest\t.harness/harness.json')
     expect(result.stdout).toContain('policy\t.harness/policy.json')
-    expect(result.stdout).toContain('preset\t@pedyc/harness-preset-vue\t(declared, not yet consumed)')
+    expect(result.stdout).toContain('preset\t@pedyc/harness-preset-vue')
   })
 
   it('reports a configuration error from doctor instead of a healthy-looking report', async () => {

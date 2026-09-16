@@ -94,25 +94,18 @@ Release orchestration
 
 # 3. 依赖方向
 
-发布前必须保持依赖方向：
+发布前必须保持依赖方向。M16 之后官方 Preset 是数据包，workspace 内只剩一条边：
 
 ```text
-preset
-   ↓
-CLI
-   ↓
-Core
-```
-
-更准确地说：
-
-```text
-@pedyc/harness-preset-*
-          ↓
    pedyc-harness
           ↓
 @pedyc/harness-core
+
+@pedyc/harness-preset-*      无依赖
 ```
+
+第三方 Preset 可以选择声明 `peerDependencies: { "pedyc-harness": "^x" }` 来表达兼容范围，
+但官方两个包不依赖任何 Harness 包——它们只在运行时被解析，不被导入。
 
 Core 不应该反向依赖：
 
@@ -361,13 +354,14 @@ pedyc-harness verify
 
 # 10. Preset Package
 
-Preset package 的发布物主要包括：
+Preset package 的发布物只有文档：
 
 ```text
-Preset implementation
-Templates
-Preset metadata
-Type declarations
+preset.json      Preset Manifest
+policy.json      默认策略
+agents.json      默认 Agent 配置
+AGENTS.md        项目说明模板
+README.md
 ```
 
 例如：
@@ -376,9 +370,11 @@ Type declarations
 @pedyc/harness-preset-vue
 ```
 
-安装 Preset 不应该要求用户直接依赖其内部源码路径。
+没有 `dist/`、没有类型声明、没有 `build` 脚本。Preset 是数据不是模块，因此它的 `exports`
+只暴露 `./preset.json`，安装 Preset 也不会让用户依赖任何源码路径。
 
-CLI 通过 Preset Registry 或对应的 package resolve Preset。
+CLI 通过 `require.resolve('<包名>/preset.json')` 定位 Preset，因此包可以自由组织内部文件，
+只要 `exports` 里有这条子路径。
 
 目标形态下 Preset 是独立分发的 npm package，官方 Preset 之外还会有公司 Preset 与个人 Preset：
 
@@ -390,8 +386,11 @@ CLI 通过 Preset Registry 或对应的 package resolve Preset。
 
 发布约定：
 
-* 发布物必须包含 `preset.json`（Preset Manifest），声明继承关系与本 Preset 提供的配置。
-* 通过 `peerDependencies` 声明兼容的 `pedyc-harness` 版本，不要依赖 Core 的内部路径。
+* 发布物必须包含 `preset.json`（Preset Manifest），声明继承关系与本 Preset 提供的配置；
+  路径字段只能指向包内文件，越界会在解析时报 `preset_path_outside_package`。
+* `package.json` 的 `exports` 必须暴露 `./preset.json`，否则运行时无法定位这个包。
+* 不要依赖 Core 的内部路径。Preset 不需要依赖任何 Harness 包：它提供的是文档，解析由消费者
+  项目里安装的 CLI 完成。
 * 版本由 npm 承担：项目只在 `.harness/harness.json` 中声明包名，版本落在 `package.json` 与
   lockfile，不在 harness 配置里重复记录。
 * 第三方 Preset 不参与官方四包的同步版本约束。下一节的规则约束的是 pedyc 官方发布单元，
@@ -470,23 +469,25 @@ workspace:*      →       1.1.0        （不是 ^1.1.0）
 ```
 
 所以单独发布 `@pedyc/harness-core` 的新版本**不会传递给任何已有消费者**：
-依赖它的 CLI 和两个 preset 仍然精确锁定旧版本，除非它们也重新发布。
+依赖它的 CLI 仍然精确锁定旧版本，除非它也跟着重新发布。
 
-**3. 依赖是菱形闭包。** 任何一条边上的改动都会波及全部四个包：
+**3. 两个 preset 是数据包，CLI 是它们的消费者。** M16 之后 workspace 内只剩一条依赖边：
 
 ```text
 pedyc-harness                  → @pedyc/harness-core
-pedyc-harness                  → @pedyc/harness-preset-generic
-pedyc-harness                  → @pedyc/harness-preset-vue
-@pedyc/harness-preset-generic  → @pedyc/harness-core
-@pedyc/harness-preset-vue      → @pedyc/harness-core
+
+@pedyc/harness-preset-generic     无依赖
+@pedyc/harness-preset-vue         无依赖
 ```
 
-因此同步发布是唯一自洽的方式。发布入口只有根目录的 `pnpm run release:publish`，
-它按 `core → preset-generic → preset-vue → cli` 的依赖顺序推送四个包。
+Preset 不再是模块，CLI 也不再导入它们：`init` 把包名写进 `harness.json` 并（在需要时）从
+registry 安装。因此核心版本一旦变化，四个包仍然要一起发布，因为**同步版本号是这套发布流程的
+约定**，而不是因为依赖图强制——见上面的 `workspace:*` 改写规则。发布入口只有根目录的
+`pnpm run release:publish`，它按 `core → preset-generic → preset-vue → cli` 的顺序推送四个包。
 
-> 这条约束只适用于 pedyc 官方发布的四个包。未来的第三方、公司或个人 Preset 是独立的 npm
-> package，按自己的节奏发布，只需通过 `peerDependencies` 声明兼容的 `pedyc-harness` 范围。
+> 这条约束只适用于 pedyc 官方发布的四个包。第三方、公司或个人 Preset 是独立的 npm package，
+> 按自己的节奏发布，版本完全自由：`extends` 只写包名，兼容范围由使用者项目的 `package.json`
+> 与 lockfile 决定。
 
 ## 升级规则
 
@@ -642,9 +643,13 @@ import { ... } from "@pedyc/harness-core"
 
 Preset 可以验证：
 
-```ts
-import { ... } from "@pedyc/harness-preset-vue"
+```bash
+npm install --save-dev @pedyc/harness-preset-vue
+node -e "require.resolve('@pedyc/harness-preset-vue/preset.json')"
 ```
+
+它没有可 `import` 的模块，所以「装得上、能解析到」就是发布物的全部契约。`release:check`
+对四个包都做了这件事。
 
 目标是确认：
 

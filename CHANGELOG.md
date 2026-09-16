@@ -20,6 +20,16 @@
   `defaultAgents`、`policyProblems`、`agentProblems`、`formatConfigError` 与相关类型。
 - `pedyc-harness doctor` 输出实际生效的配置来源，包括回退到 `built-in defaults` 的情况。
 - `Preset` 契约新增 `packageName`；`init` 写入 Manifest 的是包名而不是短名。
+- `schemas/preset.schema.json`（Preset Manifest 契约）与 `preset.json`，Preset 由此成为
+  可发布的 npm package。见 [M16](./docs/milestones.md#m16preset-system)。
+- Preset 继承：`extends` 声明父级包名，解析为 DAG。同一个 Preset 无论被多少条链引用都只加载
+  一次，依赖排在使用它的 Preset 之前，循环依赖报出完整环路而不是让调用栈溢出。
+- `pedyc-harness list-presets`：列出项目实际解析到的 Preset 包，标注 `declared` / `inherited`
+  与各自的 `extends`。它走运行时的同一套解析，未安装的 Preset 在这里就是错误。
+- `@pedyc/harness-core` 新增 `resolvePresets`、`presetPackageName`、`presetFile`、
+  `presetDocument` 与 `PresetManifest` / `ResolvedPreset` 类型。
+- `init --preset` 在 Preset 尚未安装时按检测到的包管理器安装它；`--no-install` 关闭该行为。
+  只写 Manifest 不装包会让下一次运行在配置阶段失败。
 
 ### Changed
 
@@ -30,8 +40,39 @@
   `contracts/` + `config/` + `runtime/`。`exports` 子路径名全部保留，其中 `./schema` 现在指向
   `dist/config/schema.js`，导出名不变并新增 `compileSchema` / `readSchema`。
 - `run` 的配置来源选择统一走 `loadHarnessConfig`：Manifest 声明 → 约定位置
-  `.harness/policy.json` / `.harness/agents.json` → 内置默认值。没有 `harness.json` 的项目
-  行为与之前一致，`policy.json` 与 `agents.json` 仍然被读取。
+  `.harness/policy.json` / `.harness/agents.json` → Preset → 内置默认值。没有 `harness.json`
+  的项目行为与之前一致，`policy.json` 与 `agents.json` 仍然被读取。
+- **`init` 不再把 Preset 的内容复制进项目。** 它只写 `.harness/harness.json` 与契约文件，
+  `AGENTS.md` 在缺失时用 Preset 的 `instruction` 播种。`policy.json` / `agents.json` 留在
+  Preset 包里由 Resolver 读取，升级 Preset 因此是升级依赖，而不是逐文件合并。
+- `diff` / `update` 的对象收窄为契约文件（`.harness/*.schema.json`、`task.example.json`），
+  不再接受 `--preset`：`harness.json` 与 `AGENTS.md` 由 `init` 写过一次后归项目所有。
+- Preset 的短名由 CLI 展开（`vue` → `@pedyc/harness-preset-vue`），含 `/` 的名字原样当作包名。
+  这条纯函数取代了 CLI 内置的静态 Preset 表，团队 Preset 不再需要在本仓库注册。
+- 两个官方 Preset 的映射改为按 npm 解析，不再依赖 CLI 硬编码表。
+
+### Breaking
+
+- **`@pedyc/harness-preset-generic` 与 `@pedyc/harness-preset-vue` 移除了默认导出。**
+  两个包现在是纯数据包：只有 `preset.json`、`policy.json`、`agents.json`、`AGENTS.md`，
+  不再包含 `src/`、`dist/`、类型声明与构建步骤，也不再依赖 `@pedyc/harness-core`。
+  按 [发布与版本规则](./docs/release.md) §11「删除公开 API」，这属于 MAJOR。
+
+  迁移方式：把 `import preset from '@pedyc/harness-preset-vue'` 换成安装包并在
+  `.harness/harness.json` 中声明包名——
+
+  ```json
+  {
+    "presets": ["@pedyc/harness-preset-vue"]
+  }
+  ```
+
+  然后执行 `npx pedyc-harness init`（或在已有 Manifest 的 `.harness/` 下直接读取）。升级 Preset
+  由 `npm update` 完成，不再需要 `update` 逐文件同步。
+
+- `@pedyc/harness-core/contracts` 不再导出 `Preset` 与 `PresetDetection`。它们描述的是内存中的
+  Preset 对象，而 M16 之后 Preset 不再是一个模块；替代类型是 `PresetManifest` 与
+  `ResolvedPreset`。
 
 ### Compatibility
 
@@ -39,8 +80,11 @@
   都没有变化。
 - `harness.json` 的路径字段相对 `.harness/` 解析，且不允许绝对路径或 `..` 越出 `.harness/`。
 - 只有 `harness.json` 的最小项目可以完成 `verify` 与 `run --dry-run`。
+- 已经 `init` 过并且 `.harness/policy.json`、`.harness/agents.json` 存在的项目按原样工作：
+  项目自己的文档优先于 Preset，因此旧项目不会被 Preset 的策略改变行为。
 
-按 [发布与版本规则](./docs/release.md) §11，新增可选配置属于 MINOR；版本号在发布时统一提升。
+按 [发布与版本规则](./docs/release.md) §11，一次发布取最高语义级别。Preset 包的默认导出移除属于
+MAJOR，因此下一个发布是 **MAJOR**，四个包同步提升；具体版本号在发布时统一处理。
 
 
 ## [1.1.0] - 2026-09-15

@@ -46,7 +46,7 @@ Preset
 
 ### 2. HarnessPreset
 
-当前 Preset 的核心接口：
+早期设计里的 Preset 是一个内存中的 TypeScript 对象：
 
 ```ts
 type HarnessPreset = {
@@ -66,25 +66,32 @@ type HarnessPreset = {
 }
 ```
 
-上面的形状是目标形态。当前落地的契约（`packages/core/src/contracts/preset.ts`）更小：
+M16 之后这条路线被放弃：Preset 不再是模块，而是一份数据（`preset.json`）加若干文档。
+`Preset` / `PresetDetection` 契约已从 `packages/core/src/contracts/preset.ts` 移除，取而代之的是：
 
 ```ts
-interface Preset {
-  name: string          // 用户输入的名字，例如 generic
-  packageName: string   // npm 包名，例如 @pedyc/harness-preset-generic
-  detection: PresetDetection
-  defaultProductPaths: string[]
-  verificationScripts: string[]
-  skills: string[]
-  policy: Policy
-  agents: AgentsConfig
-  instruction: string
+interface PresetManifest {
+  name: string          // npm 包名，必须与被解析到的包一致
+  extends?: string[]    // 只写包名，不写版本
+  policy?: string       // 包内相对路径
+  agents?: string
+  instruction?: string
+  verification?: string // 已声明，运行时尚无消费者
+  rules?: string[]      // 已声明，运行时尚无消费者
+}
+
+interface ResolvedPreset {
+  packageName: string   // 正在被解析的包名（可能是短名展开而来）
+  name: string          // preset.json 里声明的名字
+  directory: string     // 包的安装目录
+  extends: string[]     // 展开成包名后的直接父级
+  manifest: PresetManifest
 }
 ```
 
-`name` 与 `packageName` 是两个不同的东西：`name` 是 `--preset generic` 里输入的名字，
-`packageName` 是 `init` 写进 `harness.json` 的值。Manifest 记录的是「要解析什么」而不是
-「要输入什么」，所以写进 Manifest 的是包名，且不带版本——版本属于 `package.json` 与 lockfile。
+`packageName` 与 `manifest.name` 是两个不同的东西：前者是解析入口，后者是包对自己的声明，
+两者必须相等——不一致会在解析时报 `preset_manifest_invalid`，因为 `extends` 和所有错误信息
+都按包名寻址。
 
 Preset 本质上是一组：
 
@@ -95,6 +102,8 @@ Verification Defaults
 +
 Project Templates
 ```
+
+只是这三样都以文件形式放在包内，由 Resolver 按需读取，而不是由 TypeScript 导出。
 
 ---
 
@@ -228,23 +237,14 @@ Task-specific Configuration
 
 ### 7. Templates
 
-Preset 可以携带模板：
+Preset 携带文档：
 
 ```text
-templates/
-├── AGENTS.md
-├── policy.json
-├── evaluation.json
-└── …
+preset.json
+policy.json
+agents.json
+AGENTS.md
 ```
-
-这些模板用于：
-
-```bash
-pedyc-harness init
-```
-
-生成目标项目中的 Harness 文件。
 
 需要区分：
 
@@ -261,6 +261,11 @@ npm package 中的模板
 Preset package 属于发布物。
 
 `.harness/`、`AGENTS.md` 等属于目标项目。
+
+M16 之前 `init` 会把 Preset 的 `policy.json` / `agents.json` 复制进目标项目，于是同一份治理
+有两个副本，升级 Preset 变成一次需要人工合并的 diff。现在这两个文件留在包里由 Resolver 读取，
+只有契约文件（`.harness/*.schema.json`、`.harness/task.example.json`）和 Manifest 会写进项目，
+`AGENTS.md` 在缺失时由 Preset 的 `instruction` 播种。
 
 ---
 
@@ -308,6 +313,11 @@ pedyc-harness init
 
 才允许覆盖。
 
+M16 起 `init` 在同一个前提下多做一件事：若声明的 Preset 还不可解析，就按检测到的包管理器安装它
+（`--no-install` 可关掉）。Preset 是依赖，光写 Manifest 而不装包只会让下一次运行在配置阶段失败。
+Manifest 已存在且声明了自己的 Preset 时，`init` 会保留它并明确说出来，而不是让调用方以为新的
+`--preset` 生效了。
+
 ---
 
 ### 9. Update
@@ -342,6 +352,10 @@ migration
 conflict detection
 ```
 
+M16 起 `update` 的语义随之收窄：它只同步契约文件，不再有「把 Preset 的内容迁移进项目」这一步，
+因为 Preset 的内容从未被复制进项目。Preset 升级就是依赖升级，`policy.json` 与 `agents.json`
+的读取路径不含项目副本，也就不存在被新模板覆盖的风险。
+
 ---
 
 ### 10. Preset Registry
@@ -372,8 +386,18 @@ vue
 
 这些名字。
 
-当前 Registry 是 CLI 内置的静态表（`packages/cli/src/presets.ts`）。目标形态是由 npm 承担分发与
-版本，Harness 只负责递归解析、合并和校验，见 [§13](#13-preset-分发npm-是分发层)。
+M16 之前 Registry 是 CLI 内置的静态表（`packages/cli/src/presets.ts`），新增 Preset 要改这个仓库
+的源码。现在只剩一条命名约定：
+
+```text
+不含 / 的名字 → @pedyc/harness-preset-<name>
+含 / 的名字   → 原样当作包名
+```
+
+这条约定属于 CLI，不属于 Core：`presetPackageName` 是一个纯函数，Core 的 `resolvePresets`
+只接受包名。因此 `@acme/web` 这类团队 Preset 不需要在本仓库注册任何东西，也不需要 Core 认识
+`generic` 或 `vue`，见 [§13](#13-preset-分发npm-是分发层)。`list-presets` 打印的是实际解析到的
+包及其继承关系，而不是任何一张表。
 
 ---
 
@@ -398,6 +422,10 @@ Preset
 技术栈相关
 ```
 
+两个包都是**纯数据包**：只有 `preset.json`、`policy.json`、`agents.json`、`AGENTS.md`，
+没有 `src/`、没有 `dist/`、没有 `build` 脚本，也没有对 `@pedyc/harness-core` 的依赖。
+`exports` 只暴露 `./preset.json`，这也是 Resolver 定位一个 Preset 的方式。
+
 ---
 
 ### 12. 设计原则
@@ -417,7 +445,9 @@ Preset
 
 ## 进阶设计：npm 化 Preset 与配置合成
 
-> 以下内容描述目标形态，尚未实现。当前实现与目标的差距见 [§21](#21-当前实现与目标)。
+> M16 已实现分发、解析与继承（[§13](#13-preset-分发npm-是分发层)–[§16](#16-版本交给-npm)、
+> [§20](#20-解析管线) 的 Preset Resolver 一段）。**配置合成仍是目标形态**：字段级合并、
+> provenance 与 `EffectiveHarnessConfig` 属于 M17，见 [§21](#21-当前实现与目标)。
 
 ---
 
@@ -471,36 +501,35 @@ GitHub Package Registry
 
 ### 14. preset.json
 
-Preset package 的结构：
+Preset package 的结构（两个官方 Preset 的实际形状）：
 
 ```text
-@acme/harness-preset/
+@pedyc/harness-preset-vue/
 ├── package.json
 ├── preset.json
-├── policies/
-│   ├── security.json
-│   ├── commands.json
-│   └── scope.json
-├── verification/
-│   ├── typecheck.json
-│   └── test.json
-└── rules/
-    └── frontend.md
+├── policy.json
+├── agents.json
+├── AGENTS.md
+└── README.md
 ```
+
+文档可以按任意目录组织——`policies/`、`verification/`、`rules/` 都只是路径——但路径必须在包内。
 
 `package.json`：
 
 ```json
 {
-  "name": "@acme/harness-preset",
+  "name": "@pedyc/harness-preset-vue",
   "version": "1.2.0",
-  "type": "module",
-  "files": ["preset.json", "policies", "verification", "rules"],
-  "peerDependencies": {
-    "pedyc-harness": "^1.0.0"
+  "files": ["preset.json", "policy.json", "agents.json", "AGENTS.md", "README.md"],
+  "exports": {
+    "./preset.json": "./preset.json"
   }
 }
 ```
+
+没有 `type`、没有 `main`、没有 `dependencies`：包不导出模块，只导出文档。`exports` 里的
+`./preset.json` 是 Resolver 的入口，也是唯一需要存在的子路径。
 
 `preset.json` 描述「这个 Preset 继承什么、提供什么」：
 
@@ -508,17 +537,29 @@ Preset package 的结构：
 {
   "$schema": "https://pedyc.dev/schema/preset.json",
 
-  "name": "@acme/harness-preset",
+  "name": "@pedyc/harness-preset-vue",
 
-  "extends": ["@pedyc/harness-preset-web"],
+  "extends": [],
 
-  "policy": "./policies/security.json",
+  "policy": "policy.json",
 
-  "verification": "./verification/typecheck.json",
+  "agents": "agents.json",
 
-  "rules": ["./rules/frontend.md"]
+  "instruction": "AGENTS.md"
 }
 ```
+
+字段（`schemas/preset.schema.json` 是唯一来源，且 `additionalProperties: false`）：
+
+| 字段           | 含义                                              | 运行时消费者           |
+| -------------- | ------------------------------------------------- | ---------------------- |
+| `name`         | 包名，必须与被解析到的包一致                      | Resolver 校验           |
+| `extends`      | 直接父级包名，只写包名不写版本                    | Resolver                |
+| `policy`       | 包内 Policy 文档路径                              | Config Loader           |
+| `agents`       | 包内 Agent 配置文档路径                           | Config Loader           |
+| `instruction`  | 用于播种目标项目 `AGENTS.md` 的 Markdown 路径      | `init`                  |
+| `verification` | 已声明，运行时尚无消费者                          | 无（前向兼容）          |
+| `rules`        | 已声明，运行时尚无消费者                          | 无（前向兼容）          |
 
 两点约定：
 
@@ -532,7 +573,9 @@ extends 只写包名，不写版本
 相对路径只指向包内文件
 ```
 
-Preset 不允许引用安装它以外的项目路径，否则 Preset 就不再是可复用的发布物。
+Preset 不允许引用安装它以外的项目路径，否则 Preset 就不再是可复用的发布物。这条约定由
+Resolver 强制：绝对路径、`..` 与 `.` 都会报 `preset_path_outside_package`，指向包内不存在的
+文件则报 `config_file_missing`。
 
 Preset 自己也可以继承 Preset，这就解决了「多层 Preset 如何加载」。
 
@@ -631,45 +674,48 @@ project
 
 每个 Preset 在一条解析链中只加载一次。
 
-循环依赖必须被显式拒绝，而不是让调用栈溢出：
+循环依赖必须被显式拒绝，而不是让调用栈溢出。`packages/core/src/config/presets.ts` 的实现是
+深度优先后序遍历，三个性质由同一段代码给出：`done` 让一个 Preset 无论被多少条链到达都只加载
+一次（去重），后序入队让依赖排在使用者之前（拓扑排序），而 `stack` 里再次遇到同一个包就是环：
 
 ```ts
-const visiting = new Set<string>()
-const resolved = new Set<string>()
+const done = new Map<string, ResolvedPreset>()
+const order: ResolvedPreset[] = []
+const stack: string[] = []
 
-async function resolvePreset(name: string) {
-  if (resolved.has(name)) {
-    return
+const visit = (packageName: string, requiredBy?: string): HarnessConfigError[] => {
+  if (done.has(packageName)) return []
+
+  const entered = stack.indexOf(packageName)
+  if (entered >= 0) {
+    const loop = [...stack.slice(entered), packageName].join(' → ')
+    return [configError('preset_cyclic', packageName, `Cyclic preset dependency: ${loop}.`)]
   }
 
-  if (visiting.has(name)) {
-    throw new CircularPresetError(name)
+  const located = locate(root, resolveFrom, packageName, requiredBy)
+  if ('errors' in located) return located.errors
+
+  stack.push(packageName)
+
+  for (const parent of located.value.manifest.extends ?? []) {
+    const errors = visit(presetPackageName(parent), packageName)
+    if (errors.length > 0) return errors
   }
 
-  visiting.add(name)
-
-  const preset = await loadPreset(name)
-
-  for (const dependency of preset.extends ?? []) {
-    await resolvePreset(dependency)
-  }
-
-  visiting.delete(name)
-  resolved.add(name)
-
-  result.push(preset)
+  stack.pop()
+  const preset: ResolvedPreset = { /* … */ }
+  done.set(packageName, preset)
+  order.push(preset)
+  return []
 }
 ```
 
-错误信息必须包含完整环路：
+`done` 只在子树全部解析成功后才写入，所以环不会被误判成「已加载」；`stack` 是数组而不是集合，
+是为了在报错时用 `slice(entered)` 切出环路本身：
 
 ```text
-HarnessError: Circular preset dependency detected
-
-A
-→ B
-→ C
-→ A
+Cyclic preset dependency: @acme/a → @acme/b → @acme/c → @acme/a.
+A preset cannot inherit from itself, directly or through another preset.
 ```
 
 ---
@@ -973,6 +1019,15 @@ Preset Resolver 与 Config Resolver 是两个不同的职责：
               Harness Runtime
 ```
 
+M16 落地的是上半段：`resolvePresets` 负责 Dependency Graph、Cycle Detection、Topological Sort
+与 Preset Validation，`locate` 负责从 npm 解析包。管线里只剩 **npm package** 一条路径，
+`local preset` 尚未实现（M18 的团队 Preset 仍走 npm，本地目录不在计划内）。
+
+下半段属于 M17。当前 `Config Loader` 做的是**来源选择**而不是字段合并：按
+Manifest 声明 → 项目约定位置 → Preset（拓扑序最后一个）→ 内置默认值取一份完整文档，
+不混合两个来源的字段。因此 Runtime 现在消费的还是 `LoadedHarnessConfig`，
+`EffectiveHarnessConfig` 要到 M17 才出现。
+
 Runtime 只接受 `EffectiveHarnessConfig`，不关心某个值来自哪个 Preset、哪一层配置。
 
 但来源信息必须保留为 provenance 并写入 Run Record：审计需要回答「这次运行为什么用这条
@@ -984,13 +1039,17 @@ Policy」。类型定义见 [核心接口设计](./核心接口设计.md)。
 
 ### 21. 当前实现与目标
 
-当前实现：
+当前实现（M16 之后）：
 
 ```text
-packages/core/src/contracts/preset.ts   Preset 类型（TS 对象）
-packages/cli/src/presets.ts             CLI 内置静态 Registry
-packages/preset-generic, preset-vue     两个官方 Preset
-harness init --preset <name>            复制模板文件到目标项目
+schemas/preset.schema.json              Preset Manifest 契约（唯一副本，随 core 发布）
+packages/core/src/contracts/preset.ts   PresetManifest / ResolvedPreset（纯类型）
+packages/core/src/config/presets.ts     resolvePresets：npm 定位 + DAG 解析 + 环检测 + 拓扑排序
+packages/core/src/config/loader.ts      来源选择：Manifest → 项目约定位置 → Preset → 默认值
+packages/cli/src/presets.ts             presetPackageName 短名展开 + 安装 + 读取 instruction
+packages/preset-generic, preset-vue     两个官方 Preset（纯数据包）
+harness init --preset <name>            写 Manifest 与契约文件；Preset 不可解析时安装它
+harness list-presets                    列出实际解析到的包、来源与继承关系
 ```
 
 目标形态：
@@ -1004,14 +1063,22 @@ Config Resolver = 按字段合并语义合成 EffectiveHarnessConfig
 
 差距清单：
 
-| 能力                       | 当前         | 目标               |
-| -------------------------- | ------------ | ------------------ |
-| Preset 发现                | CLI 内置表   | npm 解析           |
-| Preset 继承                | 不支持       | `extends` + DAG    |
-| 版本归属                   | package.json | package.json（不变） |
-| 项目配置入口               | 无           | `.harness/harness.json` |
-| 配置合并语义               | 未定义       | MergeStrategy 表   |
-| EffectiveHarnessConfig     | 无           | Runtime 唯一输入   |
+| 能力                   | M16 之后                                  | 目标                        |
+| ---------------------- | ----------------------------------------- | --------------------------- |
+| Preset 发现            | npm 解析（`require.resolve` + `exports`） | npm 解析（不变）            |
+| Preset 继承            | `extends` + DAG，含去重、环检测、拓扑排序 | 不变                        |
+| 版本归属               | package.json                              | package.json（不变）        |
+| 项目配置入口           | `.harness/harness.json`                   | 不变                        |
+| Preset 与项目优先级    | 整份文档取值，项目优先于 Preset           | 字段级 MergeStrategy        |
+| 配置合并语义           | 未定义                                    | MergeStrategy 表            |
+| EffectiveHarnessConfig | 无                                        | Runtime 唯一输入            |
+| 来源可追溯             | `doctor` 报告来源；无逐字段 provenance    | provenance 写入 Run Record  |
+| 安全约束不可放宽       | 未实现（项目可以覆盖 Preset 的任何字段）  | Constraint 合并语义（M19）  |
+| Preset 发现与搜索      | 无（只有短名约定）                        | `search` 等生态能力（M20）  |
+| 本地 Preset            | 不支持                                    | 未在计划内                  |
+
+最后一行不是欠账：Preset 的三个来源（官方 / 组织 / 团队）在 M16 的实现里是同一个机制，
+区别只在包名和 registry。本地目录会引入第二条解析路径和一套不同的信任模型，需要时再单独定义。
 
 阶段目标与验收标准见 [里程碑路线](./milestones.md)。
 

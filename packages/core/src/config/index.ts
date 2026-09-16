@@ -7,6 +7,7 @@
 // effects.
 
 export { agentProblems, validateAgents } from './agents.js'
+export { bundledSchemaFile, bundledValidator, fieldOf } from './bundled.js'
 export { defaultAgents, defaultPolicy } from './defaults.js'
 export { configError, formatConfigError } from './errors.js'
 export { asRecord } from './json.js'
@@ -15,6 +16,8 @@ export { harnessDirectory, loadHarnessConfig } from './loader.js'
 export { manifestFile, manifestPath, readManifest } from './manifest.js'
 export type { ManifestResult } from './manifest.js'
 export { policyProblems, validatePolicy } from './policy.js'
+export { presetDocument, presetFile, presetPackageName, presetSchema, resolvePresets } from './presets.js'
+export type { PresetsResult } from './presets.js'
 export {
   compileSchema,
   createAjv,

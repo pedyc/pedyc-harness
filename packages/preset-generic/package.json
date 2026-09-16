@@ -3,12 +3,8 @@
   "version": "1.1.0",
   "description": "Generic project preset for pedyc-harness",
   "license": "MIT",
-  "type": "module",
   "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
-    }
+    "./preset.json": "./preset.json"
   },
   "repository": {
     "type": "git",
@@ -32,13 +28,10 @@
     "node": ">=20"
   },
   "files": [
-    "dist",
+    "preset.json",
+    "policy.json",
+    "agents.json",
+    "AGENTS.md",
     "README.md"
-  ],
-  "scripts": {
-    "build": "tsc -p tsconfig.json"
-  },
-  "dependencies": {
-    "@pedyc/harness-core": "workspace:*"
-  }
+  ]
 }

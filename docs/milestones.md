@@ -113,8 +113,8 @@ M9       才能把生效配置与 provenance 写进 Run Record
 
 | 里程碑 | 目标                                                              | 状态   |
 | ------ | ----------------------------------------------------------------- | ------ |
-| M15    | 建立 Config Foundation（Manifest、加载、校验）与 Runtime 模块边界 | 计划中 |
-| M16    | 建立 Preset System（npm 分发、继承、DAG 解析）                    | 计划中 |
+| M15    | 建立 Config Foundation（Manifest、加载、校验）与 Runtime 模块边界 | 已完成 |
+| M16    | 建立 Preset System（npm 分发、继承、DAG 解析）                    | 已完成 |
 | M17    | 合成 EffectiveHarnessConfig / EffectivePolicy                     | 计划中 |
 | M18    | 支持团队与组织 Preset                                             | 计划中 |
 | M19    | 定义策略安全模型（合并语义与不可覆盖约束）                        | 计划中 |
@@ -1162,7 +1162,7 @@ M16 接管。
 
 ### 状态
 
-**计划中**
+**已完成**
 
 ### 目标
 
@@ -1210,6 +1210,44 @@ Preset = npm package + preset.json
 #### 4. `list-presets`
 
 列出已安装 Preset 及其继承关系，而不只是 CLI 内置表。
+
+### 已交付
+
+* `schemas/preset.schema.json`（Preset Manifest 契约）。它只同步到
+  `packages/core/schemas/`：Preset Manifest 住在包里，项目永远不持有副本，因此没有第二份
+  可以漂移的定义。
+* `contracts/preset.ts`：`PresetManifest`、`ResolvedPreset`。M15 的 `Preset` /
+  `PresetDetection` 契约移除。
+* `config/presets.ts`：`resolvePresets`、`presetPackageName`、`presetFile`。解析用
+  `createRequire(root/package.json).resolve('<pkg>/preset.json')`，因此 `exports` 是包自己的
+  声明，运行时不再假设包内目录结构。
+* `config/bundled.ts`：把「校验器读自带 schema 副本」的逻辑从 `manifest.ts` 提出来，
+  Manifest 与 Preset Manifest 共用。
+* `config/loader.ts`：配置来源增加 Preset 一层。项目自己的 `policy.json` /
+  `agents.json` 优先于 Preset；同一层级内按拓扑序最后一个 Preset 生效（整份文档取值，
+  字段级合并留给 M17）。
+* CLI：`init` 只写 Manifest 与契约文件，并在 Preset 不可解析时按检测到的包管理器安装；
+  `list-presets` 打印每个 Preset 的来源（`declared` / `inherited`）与 `extends`。
+  `diff` / `update` 不再接受 `--preset`，只管理契约文件。
+* 两个官方 Preset 改为纯数据包：只有 `preset.json`、`policy.json`、`agents.json`、
+  `AGENTS.md`，删除 `src/`、`dist/`、`tsconfig.json`、`build` 脚本与对 `@pedyc/harness-core`
+  的依赖。
+* `tests/harness/preset-resolution.spec.ts` 覆盖短名展开、菱形去重与拓扑序、三包环路与
+  自环、包名不匹配、路径越界、缺失文档、来源优先级，以及 `init` / `list-presets` / `verify`
+  的退出码。
+
+与本文档早期草稿不同的一处收敛：官方 generic 与 Vue Preset **之间不建立 `extends` 关系**。
+继承机制由测试里的 fixture 包覆盖，官方包保持平铺，这样发布的依赖图与文档描述一致，
+真正的团队/组织继承留给 M18。
+
+### 版本影响
+
+**MAJOR**。`@pedyc/harness-preset-generic` 与 `@pedyc/harness-preset-vue` 移除了默认导出，
+不再是一个可 `import` 的模块，包内也不再包含 `dist/`。按
+[发布与版本规则](./release.md) §11，删除既有公开导出属于不兼容变更，需要在 CHANGELOG 中写明
+迁移方式：Preset 的消费方从「导入 Preset 对象」改为「安装包 + 在 `harness.json` 中声明包名」。
+除此之外的部分（Manifest 新增 `presets` 解析、`list-presets`、`init` 不再复制内容）都是
+兼容性扩展。
 
 ### 验收标准
 

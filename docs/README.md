@@ -35,16 +35,17 @@
 当前 pnpm workspace 包含：
 
 - `@pedyc/harness-core`（`packages/core`）：可复用的 Runtime 原语和 Node API。
-- `pedyc-harness`（`packages/cli`）：CLI 发布包边界，提供 Preset Registry 和验证命令辅助。
-- `@pedyc/harness-preset-generic`（`packages/preset-generic`）：通用契约与安全策略。
-- `@pedyc/harness-preset-vue`（`packages/preset-vue`）：Vue 3 + TypeScript + Vite 约定。
+- `pedyc-harness`（`packages/cli`）：CLI 发布包边界，提供初始化、诊断与验证命令。
+- `@pedyc/harness-preset-generic`（`packages/preset-generic`）：通用安全策略，纯数据包。
+- `@pedyc/harness-preset-vue`（`packages/preset-vue`）：Vue 3 + TypeScript + Vite 约定，纯数据包。
 
 根目录是 pnpm workspace 的集成宿主，`tests/` 保存 Harness 集成测试，`scripts/harness/` 保留
 兼容入口、Provider Adapter 和样例、发布校验脚本。
 `examples/` 提供三个最小外部项目，用于验证 Harness 不依赖 Vue 目录和命令；运行
 `pnpm run verify:examples` 可以复现验收结果。
 
-CLI 已经是自包含的发布包：`packages/cli/src/` 内含运行时、Preset Registry 和 Schema 模板，
-不引用仓库内路径。根目录 `scripts/harness/cli.mjs`、`scripts/harness/run.mjs` 只是指向
+CLI 已经是自包含的发布包：`packages/cli/src/` 内含运行时、契约模板与短名展开规则，
+不引用仓库内路径。Preset 不在包内——它是项目的一个依赖，由 Resolver 从 `node_modules` 解析。
+根目录 `scripts/harness/cli.mjs`、`scripts/harness/run.mjs` 只是指向
 `pedyc-harness` 的薄封装，保证仓库内命令与发布包行为一致。`pnpm run release:check`
 负责验证打包与安装，规则见 [发布与版本规则](./release.md)。

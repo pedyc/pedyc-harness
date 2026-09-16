@@ -35,6 +35,10 @@ const contracts: Array<[string, string[]]> = [
   // package, so a project cannot loosen the rules its own manifest is held to.
   // The copies listed here are for editors and for drift detection.
   ['harness.schema.json', ['.harness', 'packages/cli/templates', 'packages/core/schemas', 'examples/*/.harness']],
+  // A preset manifest is read out of an installed package and a project never
+  // holds one, so the only copy that has to exist is the one the runtime
+  // validates against. Projects get no copy to drift from.
+  ['preset.schema.json', ['packages/core/schemas']],
   // The human intake contract is only used by this repository's own harness run.
   ['task.schema.json', ['.harness']],
   ['task.example.json', ['.harness', 'packages/cli/templates', 'examples/*/.harness']],

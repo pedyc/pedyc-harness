@@ -1,5 +1,6 @@
 import type { AgentsConfig } from './agent.js'
 import type { Policy } from './policy.js'
+import type { ResolvedPreset } from './preset.js'
 
 /**
  * The `.harness/harness.json` manifest.
@@ -36,6 +37,12 @@ export type ConfigErrorCode =
   | 'config_file_invalid_json'
   | 'config_file_invalid'
   | 'config_path_outside_harness'
+  | 'preset_not_installed'
+  | 'preset_manifest_unreadable'
+  | 'preset_manifest_invalid_json'
+  | 'preset_manifest_invalid'
+  | 'preset_cyclic'
+  | 'preset_path_outside_package'
 
 /**
  * A configuration problem found before any stage runs.
@@ -45,7 +52,14 @@ export type ConfigErrorCode =
  */
 export interface HarnessConfigError {
   code: ConfigErrorCode
-  /** Repository-relative path of the offending document. */
+  /**
+   * Repository-relative path of the offending document, or a package-qualified
+   * path when the document lives in an installed package.
+   *
+   * A preset's documents are reported as `<package>/preset.json` and
+   * `<package>/policy.json`, because they are not part of this repository and a
+   * bare relative path would point at nothing a reader could open.
+   */
   file: string
   /** Dot path inside that document, when a single field is at fault. */
   field?: string
@@ -67,6 +81,14 @@ export interface LoadedHarnessConfig {
   manifest: HarnessManifest | null
   policy: Policy
   agents: AgentsConfig
+  /**
+   * The presets that were resolved, dependencies first.
+   *
+   * Reported rather than kept private because a preset's inheritance is not
+   * visible anywhere else: a project can see which packages it declares in
+   * `harness.json`, but only the resolver knows what they pull in.
+   */
+  presets: ResolvedPreset[]
   sources: ConfigSource[]
 }
 

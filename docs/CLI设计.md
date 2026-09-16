@@ -12,8 +12,9 @@ npx pedyc-harness init --preset generic
 npx pedyc-harness init --preset vue
 npx pedyc-harness verify
 npx pedyc-harness doctor
-npx pedyc-harness diff --preset generic
-npx pedyc-harness update --preset generic
+npx pedyc-harness list-presets
+npx pedyc-harness diff
+npx pedyc-harness update
 npx pedyc-harness run --input .harness/task.json --dry-run --json
 ```
 
@@ -28,32 +29,48 @@ npx pedyc-harness run --input .harness/task.json --dry-run --json
 形状正确、角色 mode 合法、`requiredChecks` 都能在 `package.json` 中找到对应脚本），再在项目
 存在 `.harness/verify.mjs` 时执行该钩子。项目特有规则写进钩子，不需要修改 Core 或 CLI。
 
+`list-presets` 列出项目实际解析到的 Preset。每行是 `<包名>\t<declared|inherited>`，带继承的还会
+追加 `\textends: a, b`：
+
+```text
+@pedyc/harness-preset-base   inherited   extends: …
+@pedyc/harness-preset-vue    declared
+```
+
+它走的是运行时的同一套解析，所以列表不会和实际加载的内容脱节：未安装的 Preset 在这里是错误
+（退出码 5）而不是一行输出，顺序就是 Resolver 应用它们的顺序。没有 `.harness/harness.json`
+时输出「没有声明 Preset」而不是报错。
+
 规划中：
 
-- `list-presets`：列出可用 Preset，避免让用户记忆 Preset 名称。目标形态下它会列出项目已安装的
-  Preset 包及其继承关系，而不只是 CLI 内置表。
 - `explain`：打印本次运行使用的 `EffectiveHarnessConfig`，以及每个值的来源（provenance），
   用于回答「这条 Policy 是谁声明的」。
 
 ## 初始化行为
 
-`init` 创建 `.harness/policy.json`、`.harness/agents.json`、JSON Schema 和 `AGENTS.md`。
-按 [项目目标](./项目目标.md) 第七节的原则，初始化必须可以安全地重复执行：已有 JSON 配置
-不会被无条件合并或覆盖；已有 `AGENTS.md` 也只有在传入 `--force` 时才覆盖。
+`init` 写入 `.harness/harness.json`、契约文件（`.harness/*.schema.json` 与
+`.harness/task.example.json`），并在项目还没有 `AGENTS.md` 时用 Preset 的 `instruction` 播种它。
+它**不创建** `.harness/policy.json` 或 `.harness/agents.json`：这两份文档留在 Preset 包里，由
+Resolver 读取。Preset 已声明但尚未安装时，`init` 按检测到的包管理器安装它（`--no-install` 关闭
+该行为），因为只写 Manifest 不装包会让下一次运行在配置阶段失败。
 
-`--force` 会重新生成 Preset 管理的配置和入口说明，适合显式升级模板：
+按 [项目目标](./项目目标.md) 第七节的原则，初始化必须可以安全地重复执行：已有文件不会被无条件
+覆盖，只有在传入 `--force` 时才覆盖。被保留的文件会列在输出里，Manifest 被保留时还会额外说明
+「新的 `--preset` 没有生效」，避免调用方误以为已经切换。
+
+`--force` 会重新生成受管文件，适合显式升级：
 
 ```bash
 npx pedyc-harness init --preset vue --force
 ```
 
-`diff` 比较当前项目与 Preset 的受管模板文件，输出 `missing`、`unchanged` 或 `modified`
+`diff` 比较当前项目与 CLI 模板中的契约文件，输出 `missing`、`unchanged` 或 `modified`
 状态，不会修改文件。`update` 只补充缺失文件，并默认跳过已经修改的文件；传入 `--force`
 才会覆盖已修改的模板。
 
-目标形态下 `init --preset` 的语义会收窄：Preset 内容不再被复制进项目，`init` 只写入
-`.harness/harness.json` 并安装对应的 npm package，`diff` / `update` 的对象退化为项目自有
-文件。原因与迁移方式见 [§11](#11-cli--npm--core-的职责边界)；当前实现仍是模板复制模式。
+`harness.json` 与 `AGENTS.md` 不在 `diff` / `update` 的管理范围内：`init` 写过一次之后它们属于
+项目，之后由项目自己维护。因此这两个命令也不再接受 `--preset`。原因与迁移方式见
+[§11](#11-cli--npm--core-的职责边界)。
 
 ## 发布建议
 
@@ -67,9 +84,9 @@ pnpm add --save-dev pedyc-harness
 CLI 负责生成项目级配置，Runtime 负责执行。配置和提示词进入项目版本库后，Harness 升级可以
 通过 `init`、`diff` 或 `update` 显式完成，而不是隐式改变 CI 行为。
 
-CLI 是自包含的发布包：运行时、Preset Registry 和 Schema 模板都在包内，不引用仓库路径。
-打包与安装验证由 `pnpm run release:check` 完成，版本与发布规则见
-[发布与版本规则](./release.md)。
+CLI 是自包含的发布包：运行时、契约模板与短名展开规则都在包内，不引用仓库路径。Preset 本身不在
+包内——它是项目的一个依赖，走正常的 npm 安装。打包与安装验证由 `pnpm run release:check` 完成，
+版本与发布规则见 [发布与版本规则](./release.md)。
 
 ## 外部项目样例
 
@@ -167,15 +184,15 @@ pedyc-harness init
 流程：
 
 ```text
-Resolve Preset
+Resolve Preset                    （不可解析 → 安装 npm package → 再解析）
     ↓
-Load Templates
+Write .harness/harness.json
     ↓
-Check Existing Files
+Write Contracts                   （*.schema.json、task.example.json）
     ↓
-Generate Missing Files
+Seed AGENTS.md                    （仅当不存在，取 Preset 的 instruction）
     ↓
-Report Changes
+Report Kept Files
 ```
 
 ---
@@ -338,7 +355,6 @@ pedyc-harness update
 用于更新：
 
 ```text
-Preset
 Templates
 Project Harness configuration
 ```
@@ -352,6 +368,9 @@ Update 必须识别：
 ```
 
 不能简单覆盖。
+
+`Preset` 不在这个列表里：Preset 的内容不会被复制进项目，升级 Preset 就是升级一个 npm 依赖。
+`update` 现在只同步契约文件，跳过已被修改的，`--force` 才覆盖。
 
 ---
 
@@ -377,7 +396,10 @@ CLI 必须使用稳定 Exit Code。
 | ---- | ------------------- | ------------------------------------------------------------------- |
 | 0    | success             | 命令成功                                                             |
 | 1    | task failed         | 运行未通过，或命令用法错误                                           |
-| 5    | configuration error | 配置缺失、非法、路径越界，或 `verify` / `doctor` 无法解析配置        |
+| 5    | configuration error | 配置缺失、非法、路径越界，或 `verify` / `doctor` / `list-presets` 无法解析配置；Preset 未安装、清单非法或存在循环依赖 |
+
+Preset 的问题一律是配置错误而不是运行失败：它们在执行任何东西之前就能看出来，而且不可解析的
+Preset 清单与不可解析的 `policy.json` 是同一类问题。
 
 `2` / `3` / `4` / `6` / `7` / `8` 保留给后续里程碑：把它们预留出来而不是现在凑合映射，
 是为了让已经落地的编号以后不再变动。
@@ -452,10 +474,15 @@ Manifest 声明的路径 / 内联对象
       ↓
 约定位置 .harness/policy.json、.harness/agents.json
       ↓
+Preset（拓扑序中最后一个声明该文档的生效）
+      ↓
 内置默认值
 ```
 
-没有 `harness.json` 的项目走同一条管线的后两级，行为与 Manifest 出现之前一致。
+项目自己的文档优先于 Preset：一份关于这个项目的声明比一份关于它所用技术栈的声明更具体。
+同一层级内取整份文档，不混合两个来源的字段。
+
+没有 `harness.json` 的项目走同一条管线，跳过前两级，行为与 Manifest 出现之前一致。
 迁移是增量的，不是破坏性的。
 
 `doctor` 打印实际生效的来源；回退到内置默认值也会被列出来：
@@ -463,12 +490,13 @@ Manifest 声明的路径 / 内联对象
 ```text
 Configuration sources:
   manifest   .harness/harness.json
-  policy     .harness/policy.json
+  policy     @pedyc/harness-preset-vue/policy.json
   agents     built-in defaults
-  preset     @pedyc/harness-preset-vue   (declared, not yet consumed)
+  preset     @pedyc/harness-preset-vue
 ```
 
-静默回退与显式配置在结果上无法区分，所以回退必须被报告出来。
+Preset 文档以**包限定路径**出现（`<包名>/<包内路径>`），这样一个不指向项目文件的来源也能被
+定位。静默回退与显式配置在结果上无法区分，所以回退必须被报告出来。
 
 不要让：
 
@@ -568,8 +596,10 @@ runtime layer
 它应该只把依赖写进 `package.json`、把引用写进 `.harness/harness.json`。Preset 升级因此
 不需要 `update` 去逐文件比对，也就不会静默覆盖用户修改。
 
-这与当前实现不同：当前 `init` 会把 Preset 模板文件生成到目标项目，`update` 负责后续同步。
-目标形态下的模板生成只保留给项目自有文件（如 `AGENTS.md`）。
+M16 已实现这条语义。`init` 写 Manifest 与契约文件，Preset 的 `policy.json` / `agents.json`
+留在包里由 Resolver 读取，`AGENTS.md` 在缺失时用 Preset 的 `instruction` 播种，之后归项目所有。
+安装由 `init` 在 Preset 不可解析时触发（按检测到的包管理器），因此手动 `npm install -D` 那条
+路径同样可用——先装、再 `init`，`init` 就不会再装。
 
 手动方式同样支持：
 
@@ -598,11 +628,15 @@ npm install -D @acme/harness-preset
 ```text
 参数解析
 配置加载
-Preset resolve
+短名展开（generic → @pedyc/harness-preset-generic）
+安装缺失的 Preset
 输出
 Exit Code
 进程启动
 ```
+
+Preset 的 DAG 解析、环检测与拓扑排序不在 CLI：它在 Core 的 `config/presets.ts`，
+因为 `run`、`verify` 与 `doctor` 都要用同一套结果，解析逻辑放两份必然会漂移。
 
 ### Runtime 负责
 

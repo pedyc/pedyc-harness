@@ -89,6 +89,15 @@ for (const example of examples) {
   const verify = runCli(root, 'verify')
   check(verify.code === 0, `verify exits 0 (actual ${verify.code})`)
 
+  // The example's own policy.json wins over the preset's, so a passing verify
+  // says nothing about whether the preset resolved. Listing it does.
+  const list = runCli(root, 'list-presets')
+  check(list.code === 0, `list-presets exits 0 (actual ${list.code})`)
+  check(
+    list.stdout.includes(`@pedyc/harness-preset-${example.preset}\tdeclared`),
+    `list-presets resolves @pedyc/harness-preset-${example.preset}`,
+  )
+
   const doctor = runCli(root, 'doctor')
   check(doctor.code === 0, `doctor exits 0 (actual ${doctor.code})`)
   check(

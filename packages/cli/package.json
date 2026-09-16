@@ -39,9 +39,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@pedyc/harness-core": "workspace:*",
-    "@pedyc/harness-preset-generic": "workspace:*",
-    "@pedyc/harness-preset-vue": "workspace:*"
+    "@pedyc/harness-core": "workspace:*"
   },
   "engines": {
     "node": ">=20"

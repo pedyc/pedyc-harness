@@ -26,6 +26,10 @@ import {
   policyProblems,
   agentProblems,
   formatConfigError,
+  resolvePresets,
+  presetPackageName,
+  presetFile,
+  presetDocument,
   validatePolicy,
   findOutOfScopeChanges,
   isCommandAllowed,
@@ -45,10 +49,20 @@ import { loadHarnessConfig } from '@pedyc/harness-core/config'
 - `config` — the only module that reads a project's configuration documents.
   `loadHarnessConfig(root)` resolves `.harness/harness.json` when there is one,
   falls back to the conventional `.harness/policy.json` and `.harness/agents.json`,
-  and finally to built-in defaults. It returns either a complete configuration plus
-  the sources it came from, or a list of structured errors naming a file and a
-  field. Nothing is executed first, so a bad configuration fails before a run
-  starts rather than partway through one.
+  then to the documents an installed preset provides, and finally to built-in
+  defaults. It returns either a complete configuration plus the sources it came
+  from, or a list of structured errors naming a file and a field. Nothing is
+  executed first, so a bad configuration fails before a run starts rather than
+  partway through one.
+- `resolvePresets(root, names)` — preset resolution, exported from the same module.
+  A preset is an installed npm package exposing `preset.json`; the walk is
+  depth-first post-order, so a preset is loaded once however many chains reach it,
+  dependencies come before the presets that inherit from them, and re-entering a
+  package still on the stack is reported as a cycle listing the whole loop. Errors
+  are the same structured `HarnessConfigError` values the loader returns. Pass a
+  short name through `presetPackageName` first: `vue` becomes
+  `@pedyc/harness-preset-vue`, while anything containing `/` is a package name
+  already.
 - `package-manager` / `command` — lockfile detection and command execution.
 - `intake` / `schema` / `agent` — task normalization, Ajv validation and Agent
   response parsing.

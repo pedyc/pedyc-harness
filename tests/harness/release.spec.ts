@@ -8,13 +8,14 @@ const read = (relativePath: string) => readFileSync(join(repoRoot, relativePath)
 const readJson = (relativePath: string) => JSON.parse(read(relativePath))
 const exists = (relativePath: string) => existsSync(join(repoRoot, relativePath))
 
-// `ships` is the directory the tarball carries: the compiled output for a
-// migrated TypeScript package, the sources for one that is still plain ESM.
+// `ships` is what the tarball carries and what a consumer resolves: compiled
+// output for a code package, the declarative documents for a data-only preset
+// package, whose entry point is the document rather than a module.
 const packages = [
   { dir: 'packages/core', name: '@pedyc/harness-core', ships: 'dist' },
   { dir: 'packages/cli', name: 'pedyc-harness', ships: 'dist' },
-  { dir: 'packages/preset-generic', name: '@pedyc/harness-preset-generic', ships: 'dist' },
-  { dir: 'packages/preset-vue', name: '@pedyc/harness-preset-vue', ships: 'dist' },
+  { dir: 'packages/preset-generic', name: '@pedyc/harness-preset-generic', ships: 'preset.json' },
+  { dir: 'packages/preset-vue', name: '@pedyc/harness-preset-vue', ships: 'preset.json' },
 ]
 
 // An `exports` target is either a bare path or a conditions object.
@@ -40,6 +41,9 @@ describe('release configuration', () => {
       // The runtime validates `harness.json` against the copy bundled in the
       // core package, so that copy is load-bearing rather than decorative.
       { file: 'harness.schema.json', destinations: ['.harness', 'packages/cli/templates', 'packages/core/schemas', 'examples/*/.harness'] },
+      // Only the bundled copy exists: a preset manifest lives in a package, so
+      // no project holds one to drift from.
+      { file: 'preset.schema.json', destinations: ['packages/core/schemas'] },
       { file: 'task.example.json', destinations: ['.harness', 'packages/cli/templates', 'examples/*/.harness'] },
       { file: 'task.schema.json', destinations: ['.harness'] },
     ]
@@ -147,26 +151,34 @@ describe('release configuration', () => {
     }
   })
 
-  it('generates a provider-less agent configuration for every preset', async () => {
-    const { availablePresets, getPreset } = await import('pedyc-harness')
+  it('ships a provider-less agent configuration for every preset', () => {
+    for (const { dir, name } of packages.filter(({ dir }) => dir.includes('preset'))) {
+      const preset = readJson(join(dir, 'preset.json'))
+      const agents = readJson(join(dir, 'agents.json'))
 
-    expect(availablePresets().sort()).toEqual(['generic', 'vue'])
+      // The package name is the preset's identity: `extends` and every error
+      // message address it by package name, so a mismatch has to be impossible
+      // to ship rather than merely caught at resolve time.
+      expect(preset.name, dir).toBe(name)
+      expect(preset.policy, dir).toBe('policy.json')
+      expect(preset.agents, dir).toBe('agents.json')
 
-    for (const name of availablePresets()) {
-      const preset = getPreset(name)
-      if (!preset) throw new Error(`Preset '${name}' is not registered.`)
-
-      expect(preset.agents.providers).toEqual({})
-      expect(preset.agents.planner).toEqual({ mode: 'internal' })
+      expect(agents.providers).toEqual({})
+      expect(agents.planner).toEqual({ mode: 'internal' })
       for (const role of ['coder', 'tester', 'reviewer'] as const) {
         // A preset that omitted a role would otherwise make the assertions below
         // throw on `undefined` rather than report which role is missing.
-        const config = preset.agents[role]
+        const config = agents[role]
         if (!config) throw new Error(`Preset '${name}' does not configure the ${role} role.`)
 
         expect(config.mode).toBe('external')
         expect(config.provider).toBe('custom')
       }
+
+      // A preset is data: a package that still shipped code would be a second,
+      // silently authoritative definition of what it means.
+      expect(exists(join(dir, 'src'))).toBe(false)
+      expect(exists(join(dir, 'dist'))).toBe(false)
     }
   })
 
