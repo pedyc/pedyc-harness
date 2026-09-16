@@ -1,50 +1,86 @@
-# Pedyc Harness 文档
+# pedyc-harness Documentation
 
-本目录记录 Harness 的产品目标、通用架构、配置边界和扩展方式。文档与项目中的机器可读契约
-（`.harness/`）保持同步，面向维护者和希望接入 Harness 的项目作者。
+> pedyc-harness 设计与工程文档地图。
 
-[项目目标](./项目目标.md) 是本目录的基准文档，先回答「这个项目是什么、按什么原则做、先做什么、
-明确不做什么」。其他文档的分层、配置和扩展方式都应与其对齐；已经实现到哪一步、每个阶段的
-验收标准，见 [里程碑路线](./milestones.md)。
+## 项目
 
-文档中标为「设想」或「待 Mxx」的内容尚未实现。区分已实现与设计意图很重要：本目录曾多处
-按目标形态描述行为，导致读代码时会发现文档承诺了实际不存在的约束。
+* [项目目标](./项目目标.md) — 项目愿景、问题与边界
+* [Milestones](./milestones.md) — 项目阶段与进度
+* [Release](./release.md) — 发布流程与版本规范
 
-## 文档索引
+## 架构
 
-- [项目目标](./项目目标.md)：**基准文档**。定位（Agent 的控制平面）、设计原则、能力优先级与
-  现状、明确不做的方向，以及包拆分和 CLI 形态等实现设计。
-- [核心架构](./核心架构.md)：运行时分层、配置分层与解析管线、`.harness/` 的治理定义与运行时
-  状态边界。
-- [核心接口设计](./核心接口设计.md)：Core Domain Model、核心 TypeScript 类型、生命周期关系、
-  配置解析模型与 Schema 边界。
-- [Policy 设计](./Policy设计.md)：一次 Run 中 Agent 允许做什么、不允许做什么，策略来源与合成语义。
-- [Preset 设计](./Preset设计.md)：generic、Vue 以及未来技术栈 Preset 的抽象；npm 化分发、
-  Preset 依赖图与配置合成。
-- [Provider 设计](./Provider设计.md)：Planner、Coder、Tester、Reviewer 与外部 Agent 的适配协议。
-- [Verification 设计](./Verification设计.md)：独立确认任务是否完成，以及验证门禁与证据链的构造。
-- [CLI 使用与生成规则](./CLI设计.md)：安装、初始化、验证、运行和升级策略。
-- [发布与版本规则](./release.md)：发布单元、SemVer 策略、发布前检查清单、Provider 安全边界。
-- [里程碑路线](./milestones.md)：迁移、拆包、Preset 和发布的阶段目标与验收标准。
-- [成本权衡](./成本权衡.md)：按风险分级决定流程深度，以及 Token 投入的取舍。
-- [进阶设计讨论](./faq/)：配置分层与 Preset 生态的设计输入。结论已经并入上述设计文档，原始
-  讨论不是规范，两者不一致时以设计文档为准。
+* [核心架构](./architecture/system.md.md) — 系统整体架构与模块关系
+* [Preset 设计](./architecture/preset.md.md) — Preset 模型、继承与配置解析
+* [Policy 设计](./architecture/policy.md.md) — Policy 模型与策略执行
+* [CLI 设计](./architecture/cli.md) 
+* [Provider 设计](./architecture/provider.md.md) — Provider 抽象与扩展机制
+* [Verification 设计](./architecture/Verification设计.md) — 执行结果验证机制
 
-## Workspace 包
+## 算法
 
-当前 pnpm workspace 包含：
+算法文档描述系统内部的核心计算与执行过程。
 
-- `@pedyc/harness-core`（`packages/core`）：可复用的 Runtime 原语和 Node API。
-- `pedyc-harness`（`packages/cli`）：CLI 发布包边界，提供 Preset Registry 和验证命令辅助。
-- `@pedyc/harness-preset-generic`（`packages/preset-generic`）：通用契约与安全策略。
-- `@pedyc/harness-preset-vue`（`packages/preset-vue`）：Vue 3 + TypeScript + Vite 约定。
+* [算法总览](./architecture/algorithms/README.md)
+* [01 Graph](./architecture/algorithms/01-graph.md) — 图结构、依赖与遍历
+* [02 Config Resolution](./architecture/algorithms/02-config-resolution.md) — 配置解析与合并
+* [03 Policy Evaluation](./architecture/algorithms/03-policy-evaluation.md) — Policy 求值
+* [04 Execution](./architecture/algorithms/04-excution.md) — 执行流程与调度
+* [05 Verification](./architecture/algorithms/05-verification.md) — 结果验证
+* [06 Evidence & Audit](./architecture/algorithms/06-evidence-audit.md) — 证据与审计
 
-根目录是 pnpm workspace 的集成宿主，`tests/` 保存 Harness 集成测试，`scripts/harness/` 保留
-兼容入口、Provider Adapter 和样例、发布校验脚本。
-`examples/` 提供三个最小外部项目，用于验证 Harness 不依赖 Vue 目录和命令；运行
-`pnpm run verify:examples` 可以复现验收结果。
+## 接口
 
-CLI 已经是自包含的发布包：`packages/cli/src/` 内含运行时、Preset Registry 和 Schema 模板，
-不引用仓库内路径。根目录 `scripts/harness/cli.mjs`、`scripts/harness/run.mjs` 只是指向
-`pedyc-harness` 的薄封装，保证仓库内命令与发布包行为一致。`pnpm run release:check`
-负责验证打包与安装，规则见 [发布与版本规则](./release.md)。
+* [核心接口设计](./interfaces/README.md) — 核心类型与模块契约
+* [CLI接口](./interfaces/cli.md) — CLI 命令与交互
+* [Policy接口](./interfaces/policy.md)
+* [Providr接口](./interfaces/provider.md)
+* [Preset接口](./interfaces/preset.md)
+* `interfaces/` — 后续拆分后的模块接口定义
+
+## 决策
+
+`decisions/` — Architecture Decision Records（ADR）
+* [决策总览](./decisions/README.md)
+* [preset策略](./decisions/ADR-001-preset-resolution.md)
+
+记录重要架构选择及其原因，例如：
+
+* Preset Resolution 策略
+* Config 优先级
+* Policy 执行时机
+* Provider 抽象
+* Verification 边界
+
+## 权衡
+
+* [成本权衡](./成本权衡.md) — 性能、复杂度、成本与可维护性的设计权衡
+* `tradeoffs/` — 后续拆分后的专题权衡分析
+
+## 归档
+
+`archived/` 保存已经废弃或被替代的历史设计，仅用于追踪架构演进。
+
+* [Preset 进阶设计](./archived/preset进阶设计.md)
+* [算法设计原始文档](./archived/算法设计原始文档.md)
+* [项目架构进阶设计](./archived/项目架构进阶设计.md)
+
+---
+
+## 文档关系
+
+```text
+项目目标
+   ↓
+架构
+   ↓
+算法 ──→ 接口
+   ↓
+决策 ←── 权衡
+   ↓
+Milestones / Release
+   ↓
+Archived
+```
+
+> **原则：README 只负责导航，具体设计进入对应文档。**

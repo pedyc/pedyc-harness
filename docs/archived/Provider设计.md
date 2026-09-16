@@ -1,9 +1,3 @@
----
-title: Untitled
-date-created: 2026-09-15
-date-modified: 2026-09-15
----
-
 ## Provider 设计
 
 > Provider 是 Agent 执行能力的适配层。
