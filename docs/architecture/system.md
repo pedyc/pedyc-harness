@@ -1,852 +1,186 @@
-# 核心架构
+# 系统架构
 
-> pedyc-harness 的 Runtime 架构与模块职责。
+> pedyc-harness 的整体结构:系统由哪些部分组成、各自什么时候执行、如何参与系统决策。
+>
+> 模块级细节见 [CLI](./cli.md)、[Policy](./policy.md)、[Preset](./preset.md)、
+> [Provider](./provider.md)、[Verification](./verification.md);类型契约见
+> [核心接口设计](../interfaces/README.md)。
+>
+> 标注约定见[文档规范](../CONVENTIONS.md):现在时陈述表示**已实现**;目标形态一律显式标注。
 
----
-
-## 一、整体架构
-
-```text
-CLI
- │
- ▼
-Runtime
- │
- ├── Intake / Contract Validation
- ├── Policy Enforcement
- ├── Agent Orchestration
- ├── Independent Verification
- ├── Diff / Scope Inspection
- ├── Review / Gate
- └── Run Records
-```
-
-外围：
+## 1. 系统由什么组成
 
 ```text
-Project
- ├── .harness/
- ├── AGENTS.md
- ├── package.json
- └── project source
-
-Preset
- ├── generic
- ├── vue
- └── project-owned
-
-Provider
- ├── Claude
- ├── Codex
- └── other Agent
+Project                          Harness                        Agent
+├── .harness/  (治理定义)         ┌─────────┐
+├── AGENTS.md                    │   CLI   │  入口:init / verify / doctor / diff / update / run
+├── package.json                 └────┬────┘
+└── src/  (产品代码)                  │
+                                 ┌────▼─────┐
+                                 │ Runtime  │  契约 · Policy · 编排 · 独立验证 · Diff · Review
+                                 └────┬─────┘
+                                 ┌────▼─────┐
+                                 │ Provider │  Adapter:stdin 一个 JSON,stdout 一个 JSON
+                                 └────┬─────┘
+                                      ▼
+                              Claude Code / Codex / 其他
 ```
 
----
+四层各自的执行时机不同:
 
-# 二、分层
+| 层 | 何时执行 | 职责 |
+| -------- | ---------------------------- | -------------------------------------------------------------- |
+| CLI | 用户每次调用命令时 | 参数解析、`init` 落盘 `.harness/`、`run` 编排一次任务、`doctor` 报告环境 |
+| Runtime | 一次 `run` 期间 | 校验契约、执行 Policy、编排 Agent、独立验证、检查改动范围、产出记录 |
+| Preset | `init` / `diff` / `update` 时 | 提供技术栈相关默认能力(Policy、闸门、AGENTS.md 文本) |
+| Provider | Runtime 调用某个阶段时 | 把 Harness 的阶段请求翻译成具体 Agent 的调用 |
 
-## CLI Layer
+CLI 不承担治理判定,Runtime 不感知具体技术栈,Preset 不实现 Runtime,Provider 不负责验证。
 
-负责：
+## 2. 分层与依赖方向
 
-* 用户输入
-* 参数解析
-* `init`
-* `run`
-* `verify`
-* 输出结果
-
-CLI 不负责核心治理逻辑。
-
----
-
-## Runtime Layer
-
-Runtime 是 Harness 的核心。
-
-负责：
-
-* Contract 校验
-* Policy
-* Agent 编排
-* 独立验证
-* Diff 检查
-* Gate
-* Run Record
-
-Runtime 不依赖 Vue 等具体技术栈。
-
----
-
-## Preset Layer
-
-Preset 提供项目差异：
+真实的依赖边由各包 `package.json` 决定:
 
 ```text
-generic
-vue
-project-owned
+pedyc-harness (CLI) ──→ @pedyc/harness-core (Runtime)
+        │
+        └────────────→ @pedyc/harness-preset-*  ──→ @pedyc/harness-core
 ```
 
-例如 Vue Preset 可以提供：
+`@pedyc/harness-core` 是最低层,不依赖 CLI、Preset、Vue 或任何具体 Provider。注意 Preset 依赖的是
+Core,**不是 CLI**——依赖结构是扇形而非链式。发布顺序与该方向一致,见 [Release](../release.md)。
 
-* Vue 3 规则
-* TypeScript 规则
-* Vite 检查
-* 项目模板
-
-但不实现 Harness Runtime。
-
-目标形态下 Preset 以 npm package 分发，官方、公司和个人 Preset 地位相同；CLI 只负责发现，
-解析与合成由 Core 的 Preset Resolver / Config Resolver 完成。见 [Preset 设计](./Preset设计.md)。
-
----
-
-## Provider Layer
-
-Provider 负责把：
+因此新增一个技术栈的正确做法是新增一个 Preset:
 
 ```text
-Harness AgentRequest
+正确:  Core ← Generic Preset / Vue Preset / React Preset / …
+错误:  Core ├── if vue · if react · if vite
 ```
 
-转换为具体 Agent 的调用。
+Core 中不得出现任何技术栈分支。技术栈差异通过 Preset 表达,见 [Preset 设计](./preset.md)。
 
-例如：
+## 3. 一次 Run 的执行顺序
+
+`run` 由 `packages/cli/src/run.ts` 驱动,核心循环在 `packages/core/src/core/executor.ts`。
+
+| # | 阶段 | 关键行为 | 产物 |
+| - | ---------------- | ------------------------------------------------------------------------ | ---------------------------------- |
+| 1 | Intake | `normalizeTask` 归一化输入;支持 `--input` / `--prompt` / `--task` | `.harness/runs/<id>/input.json` |
+| 2 | 契约校验 | 用 `input.schema.json` 校验;不合法即终止 | 失败结果 |
+| 3 | 加载 Policy | 读取 `.harness/policy.json` 与 `agents.json`,校验字段 | `policy.json` 快照 |
+| 4 | Planner | 规划阶段结束即产出计划,失败则整体停止 | `implementationPlan` |
+| 5 | Coder | 按计划改文件;这是唯一允许修改产品的阶段 | 文件改动 |
+| 6 | 验证闸门 | 逐个执行 `policy.requiredChecks` 中的 npm 脚本 | `iteration-<n>-verification.json` |
+| 7 | Tester | 依据闸门结果与外部 tester 的裁定决定是否重试 | 通过 / 重试 |
+| 8 | Reviewer | 检查越界改动与验收标准 | 通过 / 停止 |
+| 9 | 记录 | 写出最终结果 | `output.json` |
+
+循环性质:
+
+- Coder 只在 Tester 未通过时重试,次数上限为 `min(input.maxIterations, policy.maxIterations)`,
+  默认 3。
+- Planner、Coder、Reviewer 任一失败都会直接终止,不重试。
+- Reviewer 的通过条件包含范围检查:改动必须落在 `policy.allowedProductPaths` 内。
+- `--dry-run` 不调用任何 Provider、不执行任何闸门、不修改产品文件,但同样输出四个阶段的记录,
+  因此调用方可以用同一套输出契约消费它。
+
+阶段状态取值为 `running` / `passed` / `failed`;一次运行的整体状态取值为 `passed` / `failed`。
+不存在 `rejected`、`cancelled` 等未实现的状态。
+
+## 4. 模块职责
+
+| 模块 | 回答的问题 | 实现 |
+| ------------- | ---------------------- | --------------------------------------------- |
+| Intake | 输入是什么 | `packages/core/src/core/intake.ts` |
+| Contract | 任务要求是什么 | `core/validator.ts` + `schemas/input.schema.json` |
+| Policy | 允许做什么 | `core/policy-engine.ts` |
+| Executor | 如何推进一次 Run | `core/executor.ts` |
+| Adapter | 如何调用 Agent | `adapters/provider-runner.ts` |
+| Diff | 实际改了什么 | `core/diff-inspector.ts` |
+| Validator | 是否通过独立检查 | `core/validator.ts` + `core/approval-gate.ts` |
+| Review | 是否满足要求 | `core/approval-gate.ts` + Reviewer 阶段 |
+| Run Record | 如何留下证据 | `.harness/runs/<run-id>/` |
+
+Policy 当前的执行能力需要准确理解(`core/policy-engine.ts` 共三个函数):
+
+- `validatePolicy` 校验字段形状,`allowedProductPaths` 是唯一必填项。
+- `findOutOfScopeChanges` 用**前缀匹配**比对改动路径与 `allowedProductPaths`。
+- `isCommandAllowed` 对 `allowedAgentCommands` 做成员判断。
+
+`protectedPaths`、`forbiddenCommands`、`agentTimeoutMs` 已被 schema 接受但**尚未强制执行**。
+细节与字段含义见 [Policy 设计](./policy.md)。
+
+## 5. 新增能力应该进入哪里
+
+在没有明确归属时,按下面这张表路由,而不是往 Runtime 里加分支:
+
+| 这个功能是在… | 归属 |
+| -------------------------------------- | ------------------------------------------ |
+| 增强 Agent 自身能力 | 不属于 Harness(交给 Agent) |
+| 约束 Agent 能做什么 | Policy |
+| 验证 Agent 的结果 | Verification |
+| 检查实际改动 | Diff / Scope |
+| 记录执行过程 | Trace / Audit |
+| 表达某个技术栈的规则 | Preset |
+| 适配某个 Agent 的调用方式 | Provider |
+| 描述配置如何声明、继承与合成 | Manifest / Preset Resolver / Config Resolver |
+
+## 6. 可信执行模型
+
+整个系统的信任边界只有一条规则:
+
+> **Agent 的自我描述不是独立验证证据。**
 
 ```text
-Harness
-   ↓
-Claude Adapter
-   ↓
-Claude Code
+Agent ──self-report──→ Agent 的自述
+                            │ 不直接信任
+                            ▼
+                   Harness 独立观察
+                    ├── 实际 Diff
+                    └── 独立执行的闸门
+                            ▼
+                    Review(含范围检查)
+                            ▼
+                        RunResult
 ```
 
-或者：
+因此 Harness 必须自己执行验证并记录结果,而不是采信 Agent 的"已完成"。当前记录的每条闸门结果是
+`VerificationCheck { command, result: 'pass' | 'fail', details }`,其中 `details` 取 stderr 或
+固定成功文案。更完整的证据模型(退出码、stdout、耗时、时间戳)属于**目标形态**,见
+[Verification 设计](./verification.md)。
 
-```text
-Harness
-   ↓
-Codex Adapter
-   ↓
-Codex
-```
+## 7. 配置从哪里来
 
----
+当前:Runtime 直接读取 `.harness/policy.json` 与 `.harness/agents.json`。不存在 `harness.json`,
+也不存在 Preset 继承与配置合成——CLI 的 `presets.ts` 是一张两个表项的静态表。
 
-# 三、依赖方向
+> **目标(M15/M16)** 配置解析将变成一条管线:
+> `.harness/harness.json` → Preset Resolver(依赖图 / 循环检测 / 拓扑排序)→ Config Resolver
+> (字段级合并语义)→ Effective Governance → Runtime。届时 Runtime 只消费合成结果,不再关心某个值
+> 来自 Preset、项目还是任务,并由 provenance 回答"为什么用这条 Policy"。
+>
+> 该管线**尚未实现**。完整设计与合并语义见 [Preset 设计](./preset.md);阶段与依赖顺序见
+> [里程碑路线](../milestones/milestones.md)。
 
-核心依赖方向：
+`.harness/` 的两类内容必须分开:治理定义(`policy.json`、`agents.json`,应提交)与运行时状态
+(`runs/`,应 gitignore)。
 
-```text
-Preset
-   ↓
-CLI
-   ↓
-Core
-```
+## 8. 边界
 
-Core 是最低层。
+**Runtime 不负责**:训练模型、Prompt 自动优化、Memory、RAG、Multi-Agent 框架、MCP 工具生态、
+模型路由、以及 Vue / React 这类具体技术栈规则。这些要么属于 Agent,要么属于 Preset,要么不属于
+本项目。
 
-```text
-Core
- ├── 不依赖 Vue
- ├── 不依赖 CLI
- ├── 不依赖具体 Preset
- └── 不依赖具体 Agent
-```
+**Preset 与 Runtime 的边界**:Preset 只提供默认能力与治理规范,不实现 Runtime,也不负责编排。
 
-新增技术栈：
+**Provider 与 Runtime 的边界**:Provider 只做调用翻译。Policy、Diff、Verification、Review、Audit
+全部留在 Runtime,不因某个 Agent 的特殊能力而改变核心领域模型。调用契约见
+[Provider 设计](./provider.md)。
 
-```text
-Core
-  │
-  ├── Generic Preset
-  ├── Vue Preset
-  ├── React Preset
-  └── ...
-```
+## 9. 相关文档
 
-而不是：
-
-```text
-Core
- ├── Vue
- ├── React
- └── Vite
-```
-
----
-
-# 四、一次 Run 的生命周期
-
-```text
-1. Intake
-      ↓
-2. Validate Contract
-      ↓
-3. Load Policy
-      ↓
-4. Create AgentRequest
-      ↓
-5. Execute Agent
-      ↓
-6. Inspect Actual Changes
-      ↓
-7. Independent Verification
-      ↓
-8. Review / Gate
-      ↓
-9. Persist Run Result
-```
-
----
-
-## 1. Intake
-
-读取任务输入。
-
-来源可以是：
-
-* CLI
-* JSON
-* 其他未来入口
-
-入口首先得到：
-
-```text
-TaskContract
-```
-
----
-
-## 2. Contract Validation
-
-使用 JSON Schema 验证输入结构。
-
-```text
-Raw Input
-   ↓
-JSON Schema
-   ↓
-TaskContract
-```
-
-不合法则停止执行。
-
----
-
-## 3. Policy
-
-加载本次运行的 Policy。
-
-主要控制：
-
-```text
-allowedPaths
-protectedPaths
-allowedCommands
-forbiddenCommands
-maxIterations
-requiredVerification
-```
-
-Policy 是执行前约束。
-
----
-
-## 4. Agent Execution
-
-Runtime 创建：
-
-```ts
-AgentRequest
-```
-
-并交给：
-
-```ts
-AgentAdapter
-```
-
-执行具体 Agent。
-
----
-
-## 5. Actual Change Inspection
-
-Agent 完成后，Harness 检查实际变化。
-
-重点包括：
-
-```text
-文件路径
-新增文件
-修改文件
-删除文件
-重命名
-```
-
-然后判断：
-
-```text
-Actual Changes
-      ↓
-Policy / Scope
-      ↓
-Allowed?
-```
-
-不允许的修改必须进入 Gate / Reject 流程。
-
----
-
-## 6. Independent Verification
-
-Harness 自己执行：
-
-```text
-npm run type-check
-npm test
-npm run build
-```
-
-或者 Preset / Project 定义的其他检查。
-
-验证结果必须形成：
-
-```ts
-ValidationEvidence
-```
-
-不能只记录：
-
-```text
-passed = true
-```
-
-而应该记录完整执行信息。
-
----
-
-## 7. Review / Gate
-
-综合：
-
-```text
-Task Contract
-+
-Policy
-+
-Actual Changes
-+
-Validation Evidence
-```
-
-形成：
-
-```ts
-ReviewResult
-```
-
-最终状态可能为：
-
-```text
-passed
-failed
-rejected
-cancelled
-```
-
-未来可以在这里加入：
-
-```text
-Human Approval
-```
-
----
-
-## 8. Run Record
-
-最终保存：
-
-```text
-RunResult
-```
-
-目标结构：
-
-```text
-.harness/
-├── harness.json          # Manifest：入口配置
-├── policy.json
-├── verification.json
-├── agents.json
-├── rules/
-├── tasks/
-├── hooks/
-└── runs/                 # Runtime State，不进入版本库
-    └── <run-id>/
-        ├── input.json
-        ├── policy.json
-        ├── stages/
-        ├── changes.json
-        ├── validation.json
-        └── result.json
-```
-
-Run Record 还可以保存本次运行的 `EffectiveHarnessConfig` 快照，让「为什么这样判定」可复核。
-定义与运行时状态的边界见 [§十二](#十二harness-的边界治理定义-vs-运行时状态)。
-
-Run Record 的目的不是日志堆积，而是：
-
-> **让一次运行可以被重新检查。**
-
----
-
-# 五、模块职责
-
-| 模块       | 核心问题         |
-| ---------- | ---------------- |
-| Intake     | 输入是什么       |
-| Contract   | 任务要求是什么   |
-| Policy     | 允许做什么       |
-| Executor   | 如何推进一次 Run |
-| Adapter    | 如何调用 Agent   |
-| Diff       | 实际改了什么     |
-| Validator  | 是否通过独立检查 |
-| Review     | 是否满足要求     |
-| Run Record | 如何留下证据     |
-
----
-
-# 六、Runtime 不应该做什么
-
-Runtime 不负责：
-
-* 训练模型
-* Prompt 自动优化
-* Memory
-* RAG
-* Multi-Agent Framework
-* MCP Tool Ecosystem
-* 模型路由
-* Vue / React 具体规则
-
-这些能力要么属于 Agent，要么属于 Preset，要么不属于当前项目。
-
----
-
-# 七、Preset 与 Runtime 的边界
-
-正确关系：
-
-```text
-                Runtime
-                   │
-          ┌────────┴────────┐
-          │                 │
-       Generic             Vue
-       Preset             Preset
-          │                 │
-       通用规则          Vue/Vite/TS规则
-```
-
-错误关系：
-
-```text
-Runtime
- ├── if vue
- ├── if react
- ├── if vite
- └── if node
-```
-
-因此：
-
-> 新增技术栈应该增加 Preset，而不是修改 Core Runtime。
-
----
-
-# 八、Provider 与 Runtime 的边界
-
-Provider 只负责：
-
-```text
-Harness Request
-      ↓
-Agent
-      ↓
-Harness Response
-```
-
-Runtime 仍然负责：
-
-```text
-Policy
-Diff
-Verification
-Review
-Audit
-```
-
-所以：
-
-```text
-Claude Code
-Codex
-Other Agent
-```
-
-只是执行器。
-
-Harness 不应该把某个 Agent 的特殊能力变成自己的核心领域模型。
-
----
-
-# 九、可信执行模型
-
-整个系统的信任边界：
-
-```text
-                 Agent
-                   │
-                   │ self-report
-                   ▼
-             AgentResult
-                   │
-                   │ 不直接信任
-                   ▼
-        ┌────────────────────┐
-        │ Harness Observation│
-        └─────────┬──────────┘
-                  │
-          ┌───────┴────────┐
-          ▼                ▼
-      Actual Diff     Independent Test
-          │                │
-          └───────┬────────┘
-                  ▼
-              Review
-                  │
-                  ▼
-             RunResult
-```
-
-核心思想：
-
-> **Harness 的可信度来自独立观察，而不是 Agent 的自我声明。**
-
----
-
-# 十、配置分层
-
-Harness 的配置来源分成四层，每层职责不同：
-
-```text
-npm                      安装能力（CLI / Core / Preset 包）
-   ↓
-.harness/                声明项目治理模型
-   ↓
-Preset                   复用默认治理能力
-   ↓
-团队仓库 / npm 包         共享组织级配置
-```
-
-完整关系：
-
-```text
-                    npm
-                     │
-         ┌───────────┴───────────┐
-         ↓                       ↓
-   pedyc-harness          Harness Presets
-      CLI / Core                 │
-                     ┌───────────┼───────────┐
-                     ↓           ↓           ↓
-                  Generic     Company     Personal
-                  Preset       Preset      Preset
-                     └───────────┼───────────┘
-                                 ↓
-                        Config Resolution
-                                 ↓
-                   EffectiveHarnessConfig
-                                 ↓
-                    ┌────────────┼────────────┐
-                    ↓            ↓            ↓
-                 Policy     Verification    Agent
-                    └────────────┼────────────┘
-                                 ↓
-                          Harness Runtime
-                                 ↓
-                     Change / Evidence / Gate
-                                 ↓
-                               Audit
-```
-
-两个关键判断：
-
-> **`.harness/harness.json` 是入口配置，不是全部配置。**
-
-它是 Harness Manifest，只回答「这个项目使用什么 Harness、加载哪些 Policy / Verification、
-使用什么 Agent、继承哪些 Preset」，而不是承载全部细节。
-
-> **`package.json` 不作为 Harness 配置的主入口。**
-
-`package.json` 描述的是依赖、脚本、包元数据；Harness 配置描述的是 Policy、Scope、
-Verification、Approval、Agent、Audit。两者语义不同，生命周期也不同。把治理配置塞进
-`package.json`，会让 Harness 的 schema 演进被 npm 项目的 schema 演进绑架。
-
-Preset 生态与解析细节见 [Preset 设计](./Preset设计.md)。
-
----
-
-# 十一、配置解析管线
-
-配置不是「读一个文件」，而是一条解析管线：
-
-```text
-.harness/harness.json（Manifest）
-        ↓
-Preset Resolver          依赖图 / 循环检测 / 拓扑排序
-        ↓
-Config Resolver          字段级 Merge Strategy
-        ↓
-EffectiveHarnessConfig
-        ↓
-Harness Runtime
-```
-
-约束：
-
-* Runtime 只消费 `EffectiveHarnessConfig`，不关心某个值来自 Preset、项目还是任务。Core 因此保持干净。
-* 配置合并不是通用 deep merge。每个字段声明自己的合并语义，且由单一模块实现。
-* 安全类约束只能收紧，不能放宽；个人层级同样不能突破组织约束。见 [Policy 设计](./Policy设计.md)。
-* 来源信息（provenance）必须随 Run Record 保存，否则「为什么用这条 Policy」无法审计。
-
----
-
-# 十二、.harness 的边界：治理定义 vs 运行时状态
-
-`.harness/` 不只是配置目录，而是项目的治理边界。其中两类内容必须分开：
-
-> 本节描述目标形态。当前 `.harness/` 中还没有 `harness.json`，运行记录的位置与命名以实际
-> 实现为准；`runs/` 不进入版本库这一条从现在起就适用。
-
-## 应该提交
-
-```text
-.harness/
-├── harness.json
-├── policy.json
-├── verification.json
-├── agents.json
-├── rules/
-└── tasks/
-```
-
-属于：
-
-> **Governance Definition**
-
-它们是项目规则的一部分，应当进入版本库，并在代码审查中可见。
-
-## 不应该提交
-
-```text
-.harness/runs/
-├── <run-id>/
-└── ...
-```
-
-属于：
-
-> **Runtime State / Audit Data**
-
-因此：
-
-```gitignore
-.harness/runs/
-```
-
-## 拆分粒度按项目复杂度决定
-
-简单项目只需要一个 Manifest：
-
-```text
-my-project/
-├── package.json
-├── src/
-└── .harness/
-    └── harness.json
-```
-
-```json
-{
-  "$schema": "https://pedyc.dev/schema/harness.json",
-  "version": 1,
-  "presets": ["@pedyc/harness-preset-vue"]
-}
-```
-
-大型团队项目才拆成多文件：
-
-```text
-.harness/
-├── harness.json
-├── policy.json
-├── verification.json
-├── agents.json
-└── rules/
-    ├── architecture.json
-    ├── security.json
-    └── testing.json
-```
-
-> 不要求用户手工维护一整套文件。绝大多数项目一开始只应该看到 `harness.json`。
-
----
-
-# 十三、当前演进方向
-
-第一阶段已经完成：
-
-```text
-Core
-+
-CLI
-+
-Generic Preset
-+
-Vue Preset
-```
-
-当前阶段的推进顺序是：
-
-```text
-Config Foundation
-   ↓
-Preset Resolution / EffectiveHarnessConfig
-   ↓
-Policy
-   ↓
-Verification
-   ↓
-Scope Enforcement
-   ↓
-Approval Gate
-   ↓
-Trace / Audit
-```
-
-顺序原则：
-
-> **先让约束可被声明，再让约束可执行，然后让过程可观察，最后才考虑可移植性。**
-
-配置层排在治理执行之前，是依赖关系而不是偏好：Manifest、Preset 解析与 `EffectiveHarnessConfig`
-决定 Policy、Verification 与 Run Record 从哪里读配置。先实现强制执行，再引入配置解析，
-会让加载层与记录格式各返工一次。
-
-配置层不替代 Policy 强制执行，而是让治理策略可以声明、复用和分层共享：没有它，
-团队 Preset 与个人 Preset 就只能靠复制文件传播，治理能力无法形成生态。阶段划分与依赖关系见
-[里程碑路线](./milestones.md)。
-
----
-
-# 十四、架构判断标准
-
-以后新增一个功能，可以先问：
-
-### 问题 1
-
-它是在增强 Agent 能力？
-
-如果是：
-
-> 默认不进入 Harness Core。
-
-### 问题 2
-
-它是在约束 Agent？
-
-如果是：
-
-> 考虑 Policy。
-
-### 问题 3
-
-它是在验证 Agent 的结果？
-
-如果是：
-
-> 考虑 Verification。
-
-### 问题 4
-
-它是在检查实际修改？
-
-如果是：
-
-> 考虑 Diff / Scope。
-
-### 问题 5
-
-它是在记录过程？
-
-如果是：
-
-> 考虑 Trace / Audit。
-
-### 问题 6
-
-它只是某个技术栈的规则？
-
-如果是：
-
-> 考虑 Preset。
-
-### 问题 7
-
-它只是某个 Agent 的调用方式？
-
-如果是：
-
-> 考虑 Provider / Adapter。
-
-### 问题 8
-
-它只是在描述配置如何被声明、继承和合成？
-
-如果是：
-
-> 考虑 Manifest / Preset Resolver / Config Resolver，而不是 Runtime 内的分支逻辑。
-
----
-
-# 十五、核心架构公式
-
-```text
-Task
-  +
-Contract
-  +
-Policy
-  +
-Agent
-  +
-Actual Changes
-  +
-Independent Verification
-  +
-Gate
-  ↓
-Auditable Result
-```
-
-Harness 的核心不是：
-
-> **让 Agent 做更多事情。**
-
-而是：
-
-> **让 Agent 在明确的边界内执行，并让执行结果能够被独立验证和审计。**
+- [CLI 设计](./cli.md) · [Policy 设计](./policy.md) · [Preset 设计](./preset.md)
+- [Provider 设计](./provider.md) · [Verification 设计](./verification.md)
+- [核心接口设计](../interfaces/README.md) · [Core 契约](../interfaces/core.md)
+- [项目目标](../项目目标.md) · [里程碑路线](../milestones/milestones.md) · [Release](../release.md)
+- [文档规范](../CONVENTIONS.md)

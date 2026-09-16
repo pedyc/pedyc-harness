@@ -1,6 +1,6 @@
 # CLI 使用与生成规则
 
-CLI 是 [项目目标](./项目目标.md) 中的工具链入口：npm 包提供稳定的运行时和模板，CLI 把
+CLI 是 [项目目标](../项目目标.md) 中的工具链入口：npm 包提供稳定的运行时和模板，CLI 把
 适配当前项目的配置、脚本和提示词生成到目标项目中。
 
 ## 命令
@@ -38,7 +38,7 @@ npx pedyc-harness run --input .harness/task.json --dry-run --json
 ## 初始化行为
 
 `init` 创建 `.harness/policy.json`、`.harness/agents.json`、JSON Schema 和 `AGENTS.md`。
-按 [项目目标](./项目目标.md) 第七节的原则，初始化必须可以安全地重复执行：已有 JSON 配置
+按 [项目目标](../项目目标.md) 第七节的原则，初始化必须可以安全地重复执行：已有 JSON 配置
 不会被无条件合并或覆盖；已有 `AGENTS.md` 也只有在传入 `--force` 时才覆盖。
 
 `--force` 会重新生成 Preset 管理的配置和入口说明，适合显式升级模板：
@@ -69,7 +69,7 @@ CLI 负责生成项目级配置，Runtime 负责执行。配置和提示词进�
 
 CLI 是自包含的发布包：运行时、Preset Registry 和 Schema 模板都在包内，不引用仓库路径。
 打包与安装验证由 `pnpm run release:check` 完成，版本与发布规则见
-[发布与版本规则](./release.md)。
+[发布与版本规则](../release.md)。
 
 ## 外部项目样例
 
@@ -430,7 +430,7 @@ Task Contract
 但配置解析完成后，应交给 Runtime。
 
 目标形态下，CLI 只负责定位和读取这些来源；Preset 依赖图的递归解析和配置合成属于 Core，
-见 [§11](#11-cli--npm--core-的职责边界) 与 [核心接口设计](./核心接口设计.md)。
+见 [§11](#11-cli--npm--core-的职责边界) 与 [核心接口设计](../interfaces/README.md)。
 
 不要让：
 

@@ -1,69 +1,65 @@
 # pedyc-harness Documentation
 
 > pedyc-harness 设计与工程文档地图。
+>
+> 本文件只负责导航,具体设计进入对应文档。文档的书写与检查规则见文档规范。
+
+## 规范
+
+* [文档规范](./CONVENTIONS.md) — 目录语义、标题层级、链接与「当前/目标」标记约定
 
 ## 项目
 
 * [项目目标](./项目目标.md) — 项目愿景、问题与边界
-* [Milestones](./milestones.md) — 项目阶段与进度
-* [Release](./release.md) — 发布流程与版本规范
+* [里程碑总览](./milestones/README.md) — `milestones/` 的语义
+* [Milestones](./milestones/milestones.md) — 项目阶段、状态与依赖顺序
+* [Release](./release.md) — 构建、版本、发布闸门与流程
 
 ## 架构
 
-* [核心架构](./architecture/system.md.md) — 系统整体架构与模块关系
-* [Preset 设计](./architecture/preset.md.md) — Preset 模型、继承与配置解析
-* [Policy 设计](./architecture/policy.md.md) — Policy 模型与策略执行
-* [CLI 设计](./architecture/cli.md) 
-* [Provider 设计](./architecture/provider.md.md) — Provider 抽象与扩展机制
-* [Verification 设计](./architecture/Verification设计.md) — 执行结果验证机制
+描述系统结构:是什么?什么时候执行?如何参与系统决策?
 
-## 算法
-
-算法文档描述系统内部的核心计算与执行过程。
-
-* [算法总览](./architecture/algorithms/README.md)
-* [01 Graph](./architecture/algorithms/01-graph.md) — 图结构、依赖与遍历
-* [02 Config Resolution](./architecture/algorithms/02-config-resolution.md) — 配置解析与合并
-* [03 Policy Evaluation](./architecture/algorithms/03-policy-evaluation.md) — Policy 求值
-* [04 Execution](./architecture/algorithms/04-excution.md) — 执行流程与调度
-* [05 Verification](./architecture/algorithms/05-verification.md) — 结果验证
-* [06 Evidence & Audit](./architecture/algorithms/06-evidence-audit.md) — 证据与审计
+* [架构总览](./architecture/README.md) — `architecture/` 的语义
+* [系统架构](./architecture/system.md) — 系统结构、分层与可信执行模型
+* [Preset 设计](./architecture/preset.md) — Preset 治理规范、继承与配置解析
+* [Policy 设计](./architecture/policy.md) — Policy 模型与执行边界
+* [CLI 设计](./architecture/cli.md) — 命令、参数与项目初始化
+* [Provider 设计](./architecture/provider.md) — Agent Adapter 与扩展机制
+* [Verification 设计](./architecture/verification.md) — 独立验证与证据
 
 ## 接口
 
-* [核心接口设计](./interfaces/README.md) — 核心类型与模块契约
-* [CLI接口](./interfaces/cli.md) — CLI 命令与交互
-* [Policy接口](./interfaces/policy.md)
-* [Providr接口](./interfaces/provider.md)
-* [Preset接口](./interfaces/preset.md)
-* `interfaces/` — 后续拆分后的模块接口定义
+接口契约:类型、签名与模块边界。
+
+* [接口总览](./interfaces/README.md) — 模块对应关系与阅读约定
+* [Core 契约](./interfaces/core.md) — 导出面与 task / run / schema / 进程 / 快照契约
+* [CLI 接口](./interfaces/cli.md) — CLI 命令与交互
+* [Policy 接口](./interfaces/policy.md)
+* [Provider 接口](./interfaces/provider.md)
+* [Preset 接口](./interfaces/preset.md)
+* [Verification 接口](./interfaces/verification.md)
 
 ## 决策
 
-`decisions/` — Architecture Decision Records（ADR）
-* [决策总览](./decisions/README.md)
-* [preset策略](./decisions/ADR-001-preset-resolution.md)
+记录重要架构选择**及其原因**(ADR)。目录语义见 [决策总览](./decisions/README.md)。
 
-记录重要架构选择及其原因，例如：
-
-* Preset Resolution 策略
-* Config 优先级
-* Policy 执行时机
-* Provider 抽象
-* Verification 边界
+* [ADR-001 Preset Resolution](./decisions/ADR-001-preset-resolution.md)
+* [ADR-002 Preset Validation & Resolution](./decisions/ADR-002-preset-validation-resolution.md)
 
 ## 权衡
 
-* [成本权衡](./成本权衡.md) — 性能、复杂度、成本与可维护性的设计权衡
-* `tradeoffs/` — 后续拆分后的专题权衡分析
+* [权衡总览](./tradeoffs/README.md) — `tradeoffs/` 的语义
+* [成本权衡](./tradeoffs/成本权衡.md) — 性能、复杂度、成本与可维护性的设计权衡
 
 ## 归档
 
-`archived/` 保存已经废弃或被替代的历史设计，仅用于追踪架构演进。
+保存已经废弃或被替代的历史设计,**非规范**,仅用于追踪架构演进。目录语义见
+[归档总览](./archived/README.md)。
 
 * [Preset 进阶设计](./archived/preset进阶设计.md)
 * [算法设计原始文档](./archived/算法设计原始文档.md)
 * [项目架构进阶设计](./archived/项目架构进阶设计.md)
+* [算法设计(已归档)](./archived/algorithms/README.md) — 当时规划但从未构建的核心算法
 
 ---
 
@@ -74,7 +70,7 @@
    ↓
 架构
    ↓
-算法 ──→ 接口
+接口
    ↓
 决策 ←── 权衡
    ↓
@@ -82,5 +78,3 @@ Milestones / Release
    ↓
 Archived
 ```
-
-> **原则：README 只负责导航，具体设计进入对应文档。**

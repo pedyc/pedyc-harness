@@ -1,585 +1,94 @@
 # Provider 架构
 
-## 1. 职责
+> Provider 层是 Harness 与 Coding Agent 之间**唯一的翻译层**,也是整个系统信任边界之外的一侧。
+>
+> stdin/stdout 载荷、配置类型与失败语义见 [Provider 契约](../interfaces/provider.md)。本目录只
+> 回答:是什么、什么时候执行、如何参与决策。
 
-Provider 是 Harness 对外部 Agent Runtime 的**执行适配层**。
+## 1. 是什么
 
-Provider 的核心目标不是支持尽可能多的 Agent，而是：
-
-> **让 Agent 执行能力可以被替换，而不改变 Harness Core。**
-
-整体关系：
-
-```text
-Harness Core
-    ↓
-AgentAdapter
-    ↓
-Provider
-    ↓
-Agent Runtime
-```
-
-Core 不应该直接依赖具体 Provider。
-
-例如 Core 中不应该出现：
-
-```ts
-if (provider === "claude") {
-  ...
-}
-
-if (provider === "codex") {
-  ...
-}
-```
-
-Provider-specific 逻辑必须停留在 Adapter 层。
-
----
-
-## 2. Provider 与 Adapter
-
-Provider 是外部 Agent 执行环境。
-
-Adapter 是 Harness 对 Provider 的适配实现。
-
-例如：
+Provider 把 Harness 的一次「阶段请求」翻译成对某个具体 Agent 的调用,再把 Agent 的输出翻译回
+Harness 能解读的响应。它是一个**函数**,不是一层框架:
 
 ```text
-Claude Code
-    ↓
-ClaudeAdapter
-    ↓
-AgentAdapter
-    ↓
-Harness Runtime
+Claude Code / Codex / 其他 Agent
+        ↑
+   Provider(一次进程调用:stdin 一个 JSON,stdout 一个 JSON)
+        ↓
+      Runtime
 ```
 
-或者：
+Runtime 只认识「阶段请求进、结构化响应出」这一个形状。因此换一个 Agent 不需要修改 Harness。
+代价是:Harness 不知道 Agent 内部发生了什么,只能观察它的输出与实际文件改动。
 
-```text
-Codex
-    ↓
-CodexAdapter
-    ↓
-AgentAdapter
-    ↓
-Harness Runtime
-```
+## 2. 什么时候执行
 
-因此：
+| 阶段 | 是否调用 Provider | 说明 |
+| -------- | ----------------- | ---------------------------------------------- |
+| planner | 是(external 时) | 产出实现计划 |
+| coder | 是 | 唯一会改产品文件的阶段 |
+| tester | 是 | 在 Harness 跑完闸门之后,判定证据是否可信 |
+| reviewer | 是 | 在范围检查之后,判定变更是否满足要求 |
 
-```text
-Provider
-= 外部执行环境
+`mode: internal` 的阶段**不启动任何进程**,直接通过。默认的 `agents.json` 四个阶段都是 external,
+但 Provider 是外部适配器,不属于任何一个发布包。
 
-Adapter
-= Harness 对 Provider 的适配实现
-```
+每次调用之前,Harness 先检查命令是否在 `allowedAgentCommands` 内;不在则阶段失败,进程不会被启动。
 
-Core 只依赖统一的 `AgentAdapter` 协议。
+## 3. 调用形态与它的理由
 
----
+| 约定 | 理由 |
+| ------------------ | ------------------------------------------------------------ |
+| stdin 传一个 JSON | 避免命令行长度与环境变量转义问题;载荷可以是任意深度的任务结构 |
+| stdout 返回一个 JSON | Agent 的自然语言输出无法判定,必须收敛到一个可校验的对象 |
+| **空 stdout 视为成功** | 内置阶段本就不产生载荷,允许 Provider 只做事不说话 |
+| `cwd` 固定为项目根 | Agent 的相对路径行为可预测;Provider 不自行切换目录 |
+| 不注入环境变量 | 减少隐式通道,调用所需的一切都在 stdin 里 |
+| 退出码 0 表示成功 | 非零即失败,stderr 作为失败说明上报 |
 
-## 3. Core 边界
+载荷的判别字段是 **`phase`**;各阶段的额外字段(coder 的 `previousVerification`、reviewer 的
+`fileChanges`)见契约。
 
-Core 应该只关心：
+## 4. 如何参与决策
 
-```text
-Agent Request
-Agent Result
-Execution Context
-Execution Lifecycle
-Provider Error
-```
+**Provider 本身不参与任何判定。** 它只返回「成功/失败 + 载荷」,是否通过由两处独立逻辑决定:
 
-Core 不应该关心：
+| 判定 | 位置 | 依据 |
+| ---------------- | -------------------- | ------------------------------------------------------------ |
+| Tester 是否通过 | `core/approval-gate.ts` | Harness 的闸门结果 **且** Provider 返回的 `approved` |
+| Reviewer 是否通过 | `core/approval-gate.ts` | Provider 返回的 `approved` **且** 无越界文件 |
 
-```text
-Claude Code
-Codex
-其他 Coding Agent
-具体 CLI 参数
-Provider 私有配置
-Provider 内部输出格式
-```
+这是刻意的边界:Provider 的返回只是**证据之一**,而不是结论。Agent 说「我做完了」不构成通过理由;
+Agent 说「没问题」也不能覆盖 Harness 自己发现的范围越界。
 
-Provider-specific 行为由 Adapter 封装。
+阶段失败如何影响流程:
 
-因此：
+| 阶段失败 | 后果 |
+| -------- | ------------------------------------------ |
+| planner | 直接终止,不重试 |
+| coder | 直接终止,不重试 |
+| tester | 回到 Coder 重试,受 `maxIterations` 限制 |
+| reviewer | 直接终止,不重试 |
 
-```text
-Core
-  │
-  │ AgentAdapter
-  ▼
-Adapter
-  │
-  │ Provider-specific protocol
-  ▼
-Agent Runtime
-```
+## 5. 边界
 
----
+Provider **不负责**:策略判定、范围检查、验证执行、审计记录。这些全部留在 Runtime。某个 Agent 的
+特殊能力也不改变 Harness 的核心领域模型。
 
-## 4. Provider 执行协议
+Provider **不追求覆盖面**。抽象的价值是可替换性,而不是支持尽量多的 Agent;模型路由同样不属于
+Provider——Harness 不根据任务自动选择模型。
 
-Provider Adapter 与外部 Agent 之间采用进程协议。
+## 6. 当前状态与目标
 
-### stdin
+当前的适配器实现(`scripts/harness/claude-adapter.ts`)是本仓库的**示例**,不是发布物,其中存在
+指向仓库自身路径的硬编码与部分闸门名称的耦合。
 
-stdin 传递 Agent Request：
+> **目标(M13)** 建立可移植的 Agent Provider Adapter:去掉仓库路径硬编码,使适配器能作为独立
+> 发布物复用。当前**未实现**。
 
-```json
-{
-  "task": {},
-  "policy": {},
-  "stage": "coder",
-  "context": {}
-}
-```
+## 7. 相关文档
 
-### stdout
-
-stdout 只输出 Agent Result：
-
-```json
-{
-  "status": "success",
-  "output": {},
-  "changes": {}
-}
-```
-
-### stderr
-
-stderr 用于诊断信息：
-
-```text
-starting provider...
-loading configuration...
-executing agent...
-```
-
-stderr 不属于 Agent Result。
-
-### Exit Code
-
-进程退出码表示执行层面的最终状态：
-
-```text
-0    success
-!=0  failure
-```
-
-Harness 必须综合处理：
-
-```text
-stdout
-stderr
-exit code
-timeout
-process error
-```
-
-不能仅根据 stdout 判断执行是否成功。
-
----
-
-## 5. 工作目录
-
-Provider 执行必须具有明确的工作目录。
-
-原则：
-
-> **Agent 的工作目录由 Harness Runtime 控制，而不是由 Provider 自行决定。**
-
-例如：
-
-```text
-project/
-├── src/
-├── package.json
-└── .harness/
-```
-
-Agent 应在：
-
-```text
-project/
-```
-
-中执行。
-
-Provider 不应该自行切换到其他 Repository。
-
-工作目录属于当前 Task 的执行上下文。
-
----
-
-## 6. 环境模型
-
-Provider 可以接收 Runtime 提供的执行环境。
-
-概念上至少需要区分：
-
-```text
-Harness Configuration
-        │
-Provider Configuration
-        │
-Agent Environment
-        │
-Project Environment
-```
-
-这些配置不应该全部合并成一个无边界的对象。
-
-例如：
-
-```ts
-interface AgentContext {
-  cwd: string
-  env?: Record<string, string>
-}
-```
-
-其中：
-
-* `cwd`：由 Harness Runtime 控制
-* `env`：Runtime 提供给 Agent 的执行环境
-
-Provider 可以消费这些信息，但不应该反向决定 Harness 的全局配置。
-
----
-
-## 7. Provider 生命周期
-
-一次 Provider 执行可以抽象为：
-
-```text
-Create Request
-      ↓
-Resolve Provider
-      ↓
-Prepare Environment
-      ↓
-Start Process
-      ↓
-Write stdin
-      ↓
-Read stdout/stderr
-      ↓
-Wait Process
-      ↓
-Parse Result
-      ↓
-Map Errors
-      ↓
-Return AgentResult
-```
-
-### Runtime 负责
-
-* Provider Resolution
-* 执行生命周期
-* 工作目录控制
-* 环境准备
-* Process 启动与等待
-* Timeout
-* Process Error
-* 生命周期状态管理
-
-### Adapter 负责
-
-* Provider 命令构造
-* Request → Provider Input 转换
-* Provider Output → AgentResult 转换
-* Provider-specific 错误映射
-
-因此：
-
-```text
-Runtime
-= 控制执行过程
-
-Adapter
-= 适配 Provider 协议
-```
-
----
-
-## 8. Provider 错误与 Agent 失败
-
-必须区分：
-
-### Provider Error
-
-表示 Harness 无法正常完成 Provider 执行。
-
-例如：
-
-```text
-provider-not-found
-provider-start-failed
-provider-timeout
-provider-invalid-output
-provider-exit-failed
-```
-
-这些属于执行基础设施错误。
-
-### Agent Execution Failure
-
-表示 Agent 已经成功启动并执行，但任务本身失败：
-
-```text
-AgentExecutionStatus = "failed"
-```
-
-关系：
-
-```text
-Provider Error
-    ↓
-执行基础设施失败
-
-Agent Failure
-    ↓
-Agent 已执行
-任务本身失败
-```
-
-两者不能混为一个状态。
-
----
-
-## 9. Provider 与 Policy
-
-Provider 不负责决定 Agent 可以做什么。
-
-错误设计：
-
-```text
-Provider
-    ↓
-决定 Agent 可以修改哪些文件
-```
-
-正确关系：
-
-```text
-Policy
-    ↓
-决定允许什么
-    ↓
-Provider
-    ↓
-执行 Agent
-    ↓
-Diff / Scope
-    ↓
-检查实际发生了什么
-```
-
-因此：
-
-```text
-Provider ≠ Security Policy
-Provider ≠ Verification
-Provider ≠ Review
-```
-
-Provider 只是执行适配层。
-
----
-
-## 10. Provider 与 Verification / Review
-
-Provider 负责：
-
-```text
-启动 Agent
-传递 Request
-获取 Result
-映射执行错误
-```
-
-Provider 不负责：
-
-```text
-验证 Task 是否完成
-验证代码是否通过
-验证 Diff 是否符合 Scope
-最终 Review
-```
-
-这些职责分别属于：
-
-```text
-Verification
-Diff / Scope
-Review
-```
-
-Provider 的输出应该成为后续流程的输入，而不是直接决定任务最终是否通过。
-
----
-
-## 11. Doctor
-
-CLI 应提供 Provider 环境检查：
-
-```bash
-pedyc-harness doctor
-```
-
-Doctor 至少可以检查：
-
-```text
-Provider command
-Provider configuration
-Required scripts
-Working directory
-Writable directories
-```
-
-例如：
-
-```text
-Provider: codex
-
-✓ command found
-✓ configuration valid
-✓ working directory exists
-✓ project is writable
-```
-
-Doctor 的作用是：
-
-> **在执行 Task 之前发现 Provider 环境问题。**
-
-因此：
-
-```text
-Doctor
-= 环境诊断
-
-Verification
-= Task / Result 验证
-```
-
-二者不能混为一谈。
-
----
-
-## 12. Provider Resolution
-
-Provider 的解析最终应逐步收敛为：
-
-```text
-Provider Registry
-      ↓
-Provider Config
-      ↓
-Adapter Factory
-      ↓
-AgentAdapter
-```
-
-其中：
-
-### Provider Registry
-
-负责 Provider 标识与 Adapter 的注册关系。
-
-### Provider Config
-
-负责 Provider-specific 配置。
-
-### Adapter Factory
-
-根据 Provider 配置创建对应 Adapter。
-
-### AgentAdapter
-
-向 Runtime 提供统一执行能力。
-
----
-
-## 13. 当前实现与演进
-
-当前 Provider / Adapter 仍可能存在实现耦合，例如：
-
-* Adapter 对 Repository 路径存在硬编码；
-* 部分 Gate 名称存在固定约定；
-* Provider 配置尚未完全抽象。
-
-这些问题应逐步收敛，但不应该为了支持更多 Provider 而提前设计复杂插件系统。
-
-目标不是：
-
-```text
-支持无限 Provider
-```
-
-而是：
-
-```text
-替换 Provider
-不修改 Core
-```
-
----
-
-## 14. 架构边界
-
-Provider 层最终保持以下边界：
-
-```text
-                 ┌──────────────┐
-                 │  Harness Core │
-                 └──────┬───────┘
-                        │
-                 AgentAdapter
-                        │
-                 ┌──────▼───────┐
-                 │    Adapter    │
-                 └──────┬───────┘
-                        │
-              Provider-specific
-                  protocol
-                        │
-                 ┌──────▼───────┐
-                 │ Agent Runtime │
-                 └───────────────┘
-```
-
-Provider 层不向上泄漏 Provider-specific 实现细节。
-
----
-
-## 15. 设计原则
-
-1. Core 不依赖具体 Provider。
-2. Provider-specific 逻辑放在 Adapter。
-3. stdin / stdout / stderr / exit code 语义明确。
-4. 工作目录由 Harness Runtime 控制。
-5. Provider 不负责 Policy。
-6. Provider 不负责独立 Verification。
-7. Provider 不负责最终 Review。
-8. Provider 可以被替换。
-9. Provider 数量不是产品目标。
-10. 不为了 Provider 数量提前设计复杂插件系统。
-
----
-
-## 16. 相关文档
-
-* [Provider Interface](../interfaces/provider.md)
-* [Policy 架构](./policy.md)
-* [Preset 架构](./preset.md)
-* [Verification 设计](../Verification设计.md)
-* [核心架构](../核心架构.md)
-* [CLI 设计](../CLI设计.md)
+- [Provider 契约](../interfaces/provider.md) — 载荷、配置与失败语义
+- [系统架构](./system.md) — Provider 在分层中的位置
+- [验证架构](./verification.md) — Provider 的返回如何被判定
+- [Policy 架构](./policy.md) — 命令白名单如何拦截调用

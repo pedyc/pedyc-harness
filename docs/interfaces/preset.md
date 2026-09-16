@@ -1,261 +1,89 @@
-# Preset Interface
+# Preset 契约
 
-> Preset 的类型、加载、注册与最终配置契约。
+> `Preset` 是 `pedyc-harness init` 写入目标项目的配置来源,也是技术栈差异的唯一载体。
+>
+> 来源:`packages/core/src/contracts/preset.ts`、`packages/cli/src/presets.ts`。
 
-## 1. HarnessPreset
+## 1. 类型
 
 ```ts
-export type HarnessPreset = {
+interface PresetDetection {
+  requiredFiles: string[]
+  requiredDependencies: string[]
+}
+
+interface Preset {
   name: string
-
-  extends?: PresetRef[]
-
-  allowedProductPaths?: string[]
-  protectedPaths?: string[]
-
-  requiredChecks?: CheckDefinition[]
-
-  instructionTemplates?: string[]
-  agentTemplates?: string[]
-  skillTemplates?: string[]
+  detection: PresetDetection
+  defaultProductPaths: string[]
+  verificationScripts: string[]
+  skills: string[]
+  policy: Policy
+  agents: AgentsConfig
+  instruction: string
 }
 ```
 
-Preset 只描述能力与默认配置，不负责 Runtime orchestration。
+## 2. 字段是否真的被读取
 
----
+这是使用本契约时最容易出错的地方——八个字段里**只有四个被任何代码消费**:
 
-## 2. PresetRef
+| 字段 | 是否被读取 | 作用 |
+| ---------------------- | ---------- | ------------------------------------------------ |
+| `name` | ✅ | `init/diff/update --preset <name>` 的表键 |
+| `policy` | ✅ | 原样写成 `.harness/policy.json` |
+| `agents` | ✅ | 原样写成 `.harness/agents.json` |
+| `instruction` | ✅ | 原样写成 `AGENTS.md` |
+| `detection` | ❌ | 声明了 `requiredFiles`/`requiredDependencies`,无人读取 |
+| `defaultProductPaths` | ❌ | 同上 |
+| `verificationScripts` | ❌ | 同上(闸门实际来自 `policy.requiredChecks`) |
+| `skills` | ❌ | 同上,且没有对应的落盘机制 |
 
-```ts
-export type PresetRef =
-  | string
-  | {
-      name: string
-    }
-```
+四个死字段意味着:改动它们不会产生任何效果。若要依赖其中任何一项,必须先让它被消费。
 
-`extends` 使用 package name 标识 Preset。
+## 3. 落盘结果
 
-版本不由 Preset Reference 管理，而由 npm：
+`init` 把 Preset 展开成目标项目里的文件:
 
-```text
-package.json
-+
-lockfile
-```
+| 产物 | 来源 |
+| ------------------------------------------- | ------------------------------ |
+| `.harness/policy.json` | `preset.policy` |
+| `.harness/agents.json` | `preset.agents` |
+| `AGENTS.md` | `preset.instruction` |
+| `.harness/task.example.json` | CLI 内置模板,**与 Preset 无关** |
+| `.harness/input.schema.json` | CLI 内置模板 |
+| `.harness/output.schema.json` | CLI 内置模板 |
+| `.harness/agent-response.schema.json` | CLI 内置模板 |
 
-负责。
+`schema` 与 `task.example.json` 来自 `packages/cli/templates/`,任何 Preset 都得到同一份。
 
----
+## 4. Preset 如何被解析
 
-## 3. Preset Manifest
-
-`preset.json` 描述 Preset package：
-
-```ts
-export interface PresetManifest {
-  name: string
-  extends?: string[]
-
-  policy?: string
-  verification?: string
-  rules?: string[]
-}
-```
-
-相对路径只能引用当前 Preset package 内的资源。
-
----
-
-## 4. Preset Registry
+`packages/cli/src/presets.ts` 是一张**两个表项的静态 `Map`**:
 
 ```ts
-export interface PresetRegistry {
-  resolve(name: string): Promise<HarnessPreset>
-
-  has(name: string): boolean
-}
+const presets = new Map([
+  [genericPreset.name, genericPreset],
+  [vuePreset.name, vuePreset],
+])
 ```
 
-Registry 负责发现和加载 Preset。
+因此当前:
 
-它不负责：
+- 只有 `generic` 与 `vue` 可选,`--preset` 传其他值会报错并列出可用项;
+- 没有 npm 发现机制、没有 `extends`、没有依赖图、没有环检测、没有配置合并;
+- 第三方无法通过发布 npm 包新增 Preset,必须改这张表。
 
-* Preset 合并
-* Policy Evaluation
-* Execution
-* Verification
+## 5. 目标形态
 
----
+> **目标(M16)** Preset 将成为独立的 npm package,提供 `preset.json` 清单、`extends` 继承、
+> DAG 解析(去重 + 环检测 + 拓扑排序)与字段级合并语义,最终合成为 Effective Governance 交给
+> Runtime。当前以上均**未实现**。
 
-## 5. Preset Resolver
+完整设计与合并语义见[Preset 设计](../architecture/preset.md),阶段与依赖顺序见
+[里程碑路线](../milestones/milestones.md)。
 
-```ts
-export interface PresetResolver {
-  resolve(
-    roots: readonly PresetRef[]
-  ): Promise<ResolvedPresets>
-}
-```
+## 6. 相关文档
 
-```ts
-export interface ResolvedPresets {
-  presets: readonly HarnessPreset[]
-  order: readonly string[]
-}
-```
-
-`order` 表示依赖优先的解析顺序。
-
----
-
-## 6. Config Resolver
-
-Preset Resolution 与 Config Resolution 是两个职责。
-
-```ts
-export interface ConfigResolver {
-  resolve(
-    presets: readonly HarnessPreset[],
-    project?: ProjectConfig,
-    task?: TaskConfig
-  ): EffectiveHarnessConfig
-}
-```
-
-流程：
-
-```text
-Preset Resolver
-      ↓
-Resolved Presets
-      ↓
-Config Resolver
-      ↓
-EffectiveHarnessConfig
-```
-
----
-
-## 7. Merge Strategy
-
-配置字段必须声明合并语义：
-
-```ts
-export type MergeStrategy =
-  | 'replace'
-  | 'append'
-  | 'merge'
-  | 'deny-wins'
-  | 'immutable'
-```
-
-Resolver 不应该使用无差别的 `deepMerge`。
-
----
-
-## 8. EffectiveHarnessConfig
-
-Runtime 的唯一配置入口：
-
-```ts
-export interface EffectiveHarnessConfig {
-  readonly policies: readonly Policy[]
-  readonly checks: readonly CheckDefinition[]
-  readonly allowedPaths: readonly string[]
-  readonly protectedPaths: readonly string[]
-
-  readonly instructions: readonly string[]
-  readonly agentTemplates: readonly string[]
-  readonly skillTemplates: readonly string[]
-
-  readonly provenance: ConfigProvenance
-}
-```
-
-Runtime 不需要知道配置来自哪个 Preset。
-
----
-
-## 9. Config Provenance
-
-为了支持审计，需要保留配置来源：
-
-```ts
-export interface ConfigProvenance {
-  readonly sources: readonly ConfigSource[]
-}
-```
-
-```ts
-export interface ConfigSource {
-  readonly field: string
-  readonly value: unknown
-  readonly source: string
-}
-```
-
-例如：
-
-```text
-protectedPaths
-    ↓
-@company/harness-preset
-    ↓
-security.json
-```
-
----
-
-## 10. Preset Errors
-
-Preset Resolver 至少需要区分：
-
-```ts
-export class PresetNotFoundError extends Error {}
-
-export class InvalidPresetError extends Error {}
-
-export class CircularPresetError extends Error {}
-```
-
-循环依赖错误应包含完整路径：
-
-```text
-A → B → C → A
-```
-
----
-
-## 11. Interface Boundaries
-
-Preset Interface 可以依赖：
-
-```text
-Policy
-Verification
-Config
-Template
-```
-
-但不应该直接依赖：
-
-```text
-Provider implementation
-CLI implementation
-Execution engine
-具体技术栈
-```
-
-Preset 是配置与能力描述层。
-
----
-
-## 12. 相关文档
-
-* [Preset Architecture](../architecture/preset.md)
-* [Graph Algorithm](../architecture/algorithms/01-graph.md)
-* [Config Resolution](../architecture/algorithms/02-config-resolution.md)
-* [Policy Interface](./policy.md)
-* [Core Interface](./core.md)
+- [Core 契约](./core.md) · [Policy 契约](./policy.md) · [Provider 契约](./provider.md)
+- [Preset 设计](../architecture/preset.md) · [CLI 契约](./cli.md)

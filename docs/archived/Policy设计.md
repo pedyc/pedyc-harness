@@ -728,7 +728,7 @@ Runtime 只使用 `EffectivePolicy`，不关心某个字段来自哪一层。
 
 > **Runtime 不需要知道来源，但审计必须能够还原来源。**
 
-类型定义见 [核心接口设计](./核心接口设计.md)，配置分层见 [核心架构](./核心架构.md)。
+类型定义见 [核心接口设计](../interfaces/README.md)，配置分层见 [系统架构](../architecture/system.md)。
 
 ---
 

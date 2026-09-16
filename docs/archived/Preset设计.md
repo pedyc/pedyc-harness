@@ -704,7 +704,7 @@ node_modules/
 ```
 
 版本冲突、peer 依赖、嵌套安装全部复用 npm 的解析机制，Harness 不再实现一个版本解析器。
-这与 [发布与版本规则](./release.md) 中「workspace 内四包同步版本」是两件事：前者约束官方
+这与 [发布与版本规则](../release.md) 中「workspace 内四包同步版本」是两件事：前者约束官方
 发布单元，后者只是 npm 消费者侧的依赖解析。
 
 ---
@@ -956,7 +956,7 @@ Preset Resolver 与 Config Resolver 是两个不同的职责：
 Runtime 只接受 `EffectiveHarnessConfig`，不关心某个值来自哪个 Preset、哪一层配置。
 
 但来源信息必须保留为 provenance 并写入 Run Record：审计需要回答「这次运行为什么用这条
-Policy」。类型定义见 [核心接口设计](./核心接口设计.md)。
+Policy」。类型定义见 [核心接口设计](../interfaces/README.md)。
 
 用户不需要理解多层 Preset：安装一个包，在 `harness.json` 中声明一次，其余由 Harness 自动解析。
 
@@ -993,7 +993,7 @@ Config Resolver = 按字段合并语义合成 EffectiveHarnessConfig
 | 配置合并语义               | 未定义       | MergeStrategy 表   |
 | EffectiveHarnessConfig     | 无           | Runtime 唯一输入   |
 
-阶段目标与验收标准见 [里程碑路线](./milestones.md)。
+阶段目标与验收标准见 [里程碑路线](../milestones/milestones.md)。
 
 ---
 

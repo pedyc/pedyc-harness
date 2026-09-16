@@ -1,8 +1,8 @@
 > **本文是设计讨论的输入材料，不是规范。**
 >
-> 结论已经并入 [项目目标](../项目目标.md)、[核心架构](../核心架构.md)、
-> [Preset 设计](../Preset设计.md)、[Policy 设计](../Policy设计.md) 与
-> [核心接口设计](../核心接口设计.md)。两者不一致时，以设计文档为准。
+> 结论已经并入 [项目目标](../项目目标.md)、[系统架构](../architecture/system.md)、
+> [Preset 设计](../architecture/preset.md)、[Policy 设计](../architecture/policy.md) 与
+> [核心接口设计](../interfaces/README.md)。两者不一致时，以设计文档为准。
 
 ---
 

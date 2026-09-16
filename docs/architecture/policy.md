@@ -1,196 +1,91 @@
-# Policy Architecture
+# Policy 架构
 
-> Policy 的架构设计与运行机制。
+> Policy 决定**一次任务允许 Agent 做什么**,以及不满足约束时如何拒绝。它是 Harness 的约束面。
+>
+> 字段表、函数签名与类型形状见 [Policy 契约](../interfaces/policy.md);配置如何继承与合并见
+> [Preset 设计](./preset.md)。本目录只回答:是什么、什么时候执行、如何参与决策。
 
-## 1. 职责
+## 1. 是什么
 
-Policy 用于描述和约束 Harness 的执行行为。
+Policy 是 `.harness/policy.json` 这一份**扁平设置对象**。它不是规则引擎:没有条件、没有效果、
+没有优先级、没有冲突解决,也没有决策对象。它只回答四个问题:
 
-Policy 不负责具体执行任务，而负责：
+| 它约束什么 | 依据 | 在哪个决策点生效 |
+| ------------------ | ---------------------- | -------------------------------------- |
+| 允许改哪些文件 | `allowedProductPaths` | Coder 返回后,Harness 比对文件快照 |
+| 允许跑哪些命令 | `allowedAgentCommands` | 每次启动 Provider 之前 |
+| 必须通过哪些闸门 | `requiredChecks` | Tester 阶段逐个执行 |
+| 最多重试几次 | `maxIterations` | 编排循环的迭代上限 |
 
-* 判断当前执行上下文是否满足约束
-* 决定某项行为是否允许
-* 对执行过程施加约束
-* 为后续 Execution 提供决策结果
+Policy 描述的是「**这一次**允许做什么」,不是「Agent 理论上能做什么」。允许集合之外的一切都视为
+越界,不需要额外声明禁止项。
 
-核心关系：
+## 2. 什么时候执行
 
-```text
-Preset
-   ↓
-Config Resolution
-   ↓
-Policy Evaluation
-   ↓
-Execution
-   ↓
-Verification
-```
+Policy 在五个不同时机被读取,后果各不相同:
 
----
+| 时机 | 动作 | 不满足时 |
+| -------------------- | -------------------------------------------- | ------------------------ |
+| `init` | Preset 的 `policy` 原样写成 `.harness/policy.json` | — |
+| `verify`(命令) | `validatePolicy` 校验形状,并断言 `requiredChecks` 的脚本确实存在于 `package.json` | 非零退出,不进入执行 |
+| `run` 加载阶段 | `validatePolicy`,不通过即终止 | 运行失败,不调用任何 Agent |
+| 每次 Provider 调用前 | `isCommandAllowed` | 该阶段失败 |
+| 每次 Coder 返回后 | `findOutOfScopeChanges`(快照 diff) | Reviewer 判定不通过 |
 
-## 2. Policy 模型
+范围判定的位置很关键:**它在 Coder 之后、Reviewer 之前**,依据是 Harness 自己的文件快照比较,
+而不是 Agent 的声明。这是「实际改了什么」与「允许改什么」的直接比对。
 
-一个 Policy 可以抽象为：
+## 3. 如何参与决策
 
-```text
-Policy
-├── Identity
-├── Condition
-├── Effect
-├── Priority
-└── Metadata
-```
+三个函数各自是一个决策点,且都只读 Policy、不产生副作用:
 
-其中：
+| 函数 | 决策 | 语义要点 |
+| ------------------------ | -------------------------- | ---------------------------------------------------- |
+| `validatePolicy` | 这份配置能不能用 | 输入是不受信任的 JSON;返回问题描述或 `null` |
+| `isCommandAllowed` | 这次调用放不放行 | 允许列表为空 = 不限制 |
+| `findOutOfScopeChanges` | 这批改动算不算越界 | **前缀匹配**,不是 glob |
 
-* **Identity**：Policy 的唯一标识
-* **Condition**：Policy 生效条件
-* **Effect**：条件满足后的策略效果
-* **Priority**：多个 Policy 冲突时的优先级
-* **Metadata**：描述、来源、版本等附加信息
+编排层消费它们的返回值:命令不被允许 → 该 Provider 阶段失败;存在越界文件 →
+`reviewerApproved` 直接不通过,**即使 Reviewer 自己批准了**。范围检查留在 Harness 侧,是刻意的
+设计——把判定权交给被检查的一方没有意义。
 
----
+前缀匹配的实际含义:允许 `src/` 会同时允许 `src/anything` 与 `src-other/file.ts`。要表达「目录
+之内」,路径必须以 `/` 结尾。
 
-## 3. Policy 生命周期
+## 4. 已知的执行缺口
 
-```text
-Load
-  ↓
-Resolve
-  ↓
-Evaluate
-  ↓
-Decision
-  ↓
-Execution
-```
+当前 Policy 的**表达能力强于它的执行力**。以下字段会被 schema 接受,但不产生任何效果:
 
-Policy 本身不执行具体任务。
+| 字段 | 现状 |
+| ------------------ | ------------------------------------------------------------ |
+| `protectedPaths` | 只校验形状,从不与改动比对 |
+| `forbiddenCommands` | 没有任何代码读取 |
+| `agentTimeoutMs` | `runCommand` 不设置超时,挂起的 Provider 会一直挂起 |
 
-它产生一个 Decision，由 Execution 根据 Decision 决定后续行为。
+还有一处容易误判:**`maxIterations`、`protectedPaths`、`requiredChecks` 在类型上可选,但不写就会被
+`validatePolicy` 拒绝**。契约中给出了完整的字段与约束对照表。
 
----
+这些缺口是当前实现的状态,不是设计意图。要依赖其中任何一项,必须先让它在代码中被强制执行。
 
-## 4. Policy Evaluation
+## 5. 目标形态
 
-Policy Evaluation 的职责是：
+> **目标(M19)** 规划中的方向是**配置组合语义**,而不是把 Policy 变成规则引擎:多个 Preset 合并
+> 时,默认值类配置可以被覆盖,安全类约束只能收紧(deny-wins),不可被普通 Override 解除。
+>
+> 这解决的是「谁的配置说了算」,不是「匹配哪条规则」。当前既没有合并语义,也没有规则匹配。
 
-```text
-Policy + Context
-       ↓
-   Evaluation
-       ↓
-     Result
-```
+见 [Preset 设计](./preset.md)与[里程碑路线](../milestones/milestones.md)。
 
-Evaluation 需要考虑：
+## 6. 边界
 
-* Policy 是否适用
-* Condition 是否满足
-* Policy 是否被覆盖
-* Policy 优先级
-* 多个 Policy 之间的冲突
-* 默认行为
+Policy **不负责**:调用 Provider、执行验证、构建 Preset 依赖图、解析 CLI 参数。它只根据上下文与
+规则产生判定结果,由编排层据此决定后续行为。
 
-具体求值算法见：
+Policy 也**不感知技术栈**。Vue 或 React 的特殊规则属于 Preset,不属于 Policy 的字段。
 
-[03 Policy Evaluation](./algorithms/03-policy-evaluation.md)
+## 7. 相关文档
 
----
-
-## 5. Policy 与 Preset
-
-Preset 负责提供配置与 Policy 组合关系。
-
-```text
-Preset
-├── Config
-├── Policies
-└── Provider
-```
-
-当 Preset 存在继承或组合关系时，Policy 也需要经过 Resolution。
-
-因此：
-
-```text
-Preset Graph
-     ↓
-Policy Collection
-     ↓
-Policy Resolution
-     ↓
-Policy Evaluation
-```
-
-Policy 不应该自行解析 Preset 继承关系。
-
----
-
-## 6. Policy 与 Execution
-
-Policy Evaluation 应发生在 Execution 的决策阶段。
-
-```text
-Execution Request
-        ↓
-   Build Context
-        ↓
- Policy Evaluation
-        ↓
-    Decision
-     ↙     ↘
-  Allow    Deny
-    ↓        ↓
- Execute    Stop
-```
-
-Policy 的职责是产生决策，而不是直接调用 Provider。
-
----
-
-## 7. 多 Policy
-
-当一次 Execution 对应多个 Policy 时：
-
-```text
-Policy A ─┐
-Policy B ─┼→ Evaluation → Decision
-Policy C ─┘
-```
-
-系统需要定义：
-
-* Evaluation 顺序
-* Priority
-* 冲突解决
-* Allow / Deny 关系
-* 默认决策
-
-这些规则属于 Policy Evaluation 算法的一部分。
-
----
-
-## 8. 边界
-
-Policy 不负责：
-
-* Provider 的具体实现
-* Execution 的具体执行
-* Verification 的具体验证
-* Preset Graph 的构建
-* CLI 参数解析
-
-Policy 只负责：
-
-> **根据上下文与规则产生执行决策。**
-
----
-
-## 9. 相关文档
-
-* [Policy Interface](../interfaces/policy.md)
-* [Policy Evaluation Algorithm](./algorithms/03-policy-evaluation.md)
-* [Preset Architecture](./preset.md)
-* [Execution Algorithm](./algorithms/04-execution.md)
+- [Policy 契约](../interfaces/policy.md) — 字段表、约束与三个函数
+- [系统架构](./system.md) — 一次 Run 的执行顺序
+- [Preset 架构](./preset.md) — 目标形态下的配置合成
+- [验证架构](./verification.md) — `requiredChecks` 如何被判定

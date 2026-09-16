@@ -1,3 +1,7 @@
+> **本文是历史设计材料,描述的是尚未实现的系统,不是规范。**
+> 这些算法当时被规划但从未构建;现行契约见 [Core 契约](../../interfaces/core.md)、
+> [Policy 契约](../../interfaces/policy.md) 与 [验证契约](../../interfaces/verification.md)。
+
 # Evidence and Audit Algorithms
 
 ## 1. Purpose

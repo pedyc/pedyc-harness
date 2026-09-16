@@ -1,181 +1,83 @@
-# Policy Interface
+# Policy 契约
 
-> Policy 的代码契约与扩展接口。
+> `.harness/policy.json` 的形状,以及三个真正执行它的函数。
+>
+> 来源:`packages/core/src/contracts/policy.ts`、`packages/core/src/core/policy-engine.ts`。
 
-## 1. Core Interface
+## 1. 类型
 
 ```ts
-export interface Policy<TContext = PolicyContext, TResult = PolicyResult> {
-  readonly id: string
-  readonly priority?: number
+type AgentMode = 'internal' | 'external'
+type AgentRole = 'planner' | 'coder' | 'tester' | 'reviewer'
 
-  evaluate(
-    context: TContext
-  ): TResult | Promise<TResult>
+interface CommandPolicy {
+  allowedAgentCommands?: string[]
+}
+
+interface Policy extends CommandPolicy {
+  allowedProductPaths: string[]
+  maxIterations?: number
+  protectedPaths?: string[]
+  requiredChecks?: string[]
+  forbiddenCommands?: string[]
+  agentTimeoutMs?: number
 }
 ```
 
-Policy Interface 只定义：
+## 2. 字段与真实约束
 
-* Identity
-* Priority
-* Evaluation
+类型上的可选性与运行时的实际要求**不一致**,下表是实际行为:
 
-不包含 Execution 或 Provider 逻辑。
+| 字段 | 类型上必需 | `validatePolicy` 的要求 | 是否被强制执行 |
+| ------------------------ | ---------- | ------------------------ | ---------------------------------------------------------- |
+| `allowedProductPaths` | ✅ | 非空数组 | ✅ `findOutOfScopeChanges`,前缀匹配 |
+| `maxIterations` | ❌ | **正整数**(缺失即拒绝) | ✅ `executor` 用它钳制 Coder 重试上限 |
+| `protectedPaths` | ❌ | **必须是数组**(缺失即拒绝) | ❌ 只校验形状,从不与改动比对 |
+| `requiredChecks` | ❌ | **必须是数组**(缺失即拒绝) | ✅ 逐个作为验证闸门执行 |
+| `forbiddenCommands` | ❌ | 不校验 | ❌ 未被任何代码读取 |
+| `agentTimeoutMs` | ❌ | 不校验 | ❌ 未被读取(`runCommand` 没有超时) |
+| `allowedAgentCommands` | ❌ | 不校验 | ✅ `isCommandAllowed` |
 
----
+**要点:`maxIterations`、`protectedPaths`、`requiredChecks` 在类型上可选,但不写就会被
+`validatePolicy` 拒绝。** 只有 `allowedProductPaths`、`maxIterations`、`protectedPaths`、
+`requiredChecks` 四项齐全的文档才能通过校验。
 
-## 2. Policy Context
+`protectedPaths`、`forbiddenCommands`、`agentTimeoutMs` 目前是**已声明但未强制执行**的字段:
+写在配置里不会产生效果。
 
-```ts
-export interface PolicyContext {
-  readonly preset?: PresetRef
-  readonly config: ResolvedConfig
-  readonly execution?: ExecutionContext
-  readonly metadata?: Record<string, unknown>
-}
-```
-
-Context 是 Policy Evaluation 的输入。
-
-Policy 不应该直接依赖具体 Provider 实现。
-
----
-
-## 3. Policy Result
+## 3. 三个函数
 
 ```ts
-export type PolicyResult =
-  | {
-      readonly effect: 'allow'
-      readonly reason?: string
-    }
-  | {
-      readonly effect: 'deny'
-      readonly reason: string
-    }
+validatePolicy(policy: unknown): string | null
+findOutOfScopeChanges(files: string[], policy: Policy): string[]
+isCommandAllowed(command: string, policy: CommandPolicy): boolean
 ```
 
-Result 表达 Policy 的决策结果，而不是实际执行结果。
+- **`validatePolicy`** —— 校验从磁盘读到的文档。输入是 `unknown`(不受信任的 JSON),返回第一个
+  问题的描述,或 `null`。返回 `null` 的调用方可以把它当作 `Policy` 使用。
+- **`findOutOfScopeChanges`** —— 返回 Coder 改过、但 Policy 不允许的文件名。
+- **`isCommandAllowed`** —— 允许列表为空或未定义表示"不限制"。
 
----
+## 4. 语义细节
 
-## 4. Policy Evaluation
-
-多个 Policy 的求值由 Evaluation 层负责：
+`findOutOfScopeChanges` 使用**前缀匹配**,不是 glob:
 
 ```ts
-export interface PolicyEvaluator {
-  evaluate(
-    policies: readonly Policy[],
-    context: PolicyContext
-  ): Promise<PolicyDecision>
-}
+files.filter((file) => !policy.allowedProductPaths.some((p) => file.startsWith(p)))
 ```
 
-```ts
-export interface PolicyDecision {
-  readonly effect: 'allow' | 'deny'
-  readonly matched: readonly string[]
-  readonly reasons: readonly string[]
-}
-```
+因此 `allowedProductPaths: ["src/"]` 会允许 `src/anything`,也会允许前缀相同的
+`src-other/file.ts`。路径必须以 `/` 结尾才能表达"目录之内"。
 
-`Policy` 负责单个规则的判断。
+## 5. 目标形态
 
-`PolicyEvaluator` 负责多个 Policy 的组合与冲突处理。
+> **目标(M19)** 规则化的 Policy(条件与效果)、多 Policy 优先级与冲突解决、deny-wins 合并、
+> 不可被普通 Override 解除的安全约束——以上均**未实现**。当前 Policy 是一个扁平的设置对象,
+> 不存在规则列表,也不存在决策对象。
 
----
+见[架构:Preset 与 Policy](../architecture/preset.md)与[里程碑路线](../milestones/milestones.md)。
 
-## 5. Policy Reference
+## 6. 相关文档
 
-Preset 不直接嵌入 Policy 实现，而通过引用关联：
-
-```ts
-export interface PolicyRef {
-  readonly id: string
-  readonly version?: string
-}
-```
-
-这样可以保持：
-
-```text
-Preset
-  ↓
-PolicyRef
-  ↓
-Policy Registry
-  ↓
-Policy
-```
-
----
-
-## 6. Policy Registry
-
-```ts
-export interface PolicyRegistry {
-  get(id: string): Policy | undefined
-
-  register(policy: Policy): void
-
-  has(id: string): boolean
-}
-```
-
-Registry 负责 Policy 的发现与管理，不负责 Evaluation。
-
----
-
-## 7. 错误模型
-
-Policy Evaluation 错误与 Policy Deny 应保持区别：
-
-```text
-Policy Result
-├── allow
-└── deny
-
-Evaluation Error
-└── evaluation failed
-```
-
-例如：
-
-* `deny`：规则正常求值，结果是不允许
-* `error`：规则无法正常求值
-
-这两个状态不能混为一谈。
-
----
-
-## 8. 依赖边界
-
-Policy Interface 可以依赖：
-
-```text
-PolicyContext
-ResolvedConfig
-ExecutionContext
-```
-
-但不应直接依赖：
-
-```text
-Provider implementation
-CLI
-Verification implementation
-具体 Execution engine
-```
-
-保持 Policy 的独立性。
-
----
-
-## 9. 相关文档
-
-* [Policy Architecture](../architecture/policy.md)
-* [Policy Evaluation](../architecture/algorithms/03-policy-evaluation.md)
-* [Preset Interface](./preset.md)
-* [Core Interface](./core.md)
+- [Core 契约](./core.md) · [Provider 契约](./provider.md) · [验证契约](./verification.md)
+- [Preset 契约](./preset.md) · [Policy 设计](../architecture/policy.md)

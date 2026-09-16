@@ -1,490 +1,130 @@
-# Provider Interface
+# Provider 契约
 
-## 1. AgentAdapter
+> Harness 如何调用一个外部 Agent。这是 Harness 与 Coding Agent 之间唯一的协议面。
+>
+> 来源:`packages/core/src/contracts/agent.ts`、`packages/core/src/adapters/provider-runner.ts`。
 
-Core 依赖统一的 `AgentAdapter` 协议。
+## 1. 配置类型
 
-```ts
-interface AgentAdapter {
-  readonly id: string
-
-  execute(
-    request: AgentRequest
-  ): Promise<AgentResult>
-}
-```
-
-`AgentAdapter` 是 Core 与具体 Provider 之间的稳定边界。
-
-Core 不应该依赖：
-
-```ts
-ClaudeAdapter
-CodexAdapter
-```
-
-而只依赖：
-
-```ts
-AgentAdapter
-```
-
----
-
-## 2. AgentRequest
-
-`AgentRequest` 表示一次 Agent 执行请求。
-
-```ts
-interface AgentRequest {
-  task: TaskContext
-  policy: PolicyContext
-  stage: string
-  context: AgentContext
-}
-```
-
-其中：
-
-```text
-task
-    Task 执行上下文
-
-policy
-    当前 Policy 上下文
-
-stage
-    当前执行阶段
-
-context
-    Agent 执行环境
-```
-
-具体字段应根据 Core 的 Task / Policy 模型继续收敛。
-
----
-
-## 3. AgentContext
-
-Agent Context 描述 Agent 的运行环境。
-
-```ts
-interface AgentContext {
-  cwd: string
-  env?: Record<string, string>
-}
-```
-
-### cwd
-
-Agent 的工作目录。
-
-该目录由 Harness Runtime 决定。
-
-Adapter 不应该自行修改工作目录。
-
-### env
-
-传递给 Agent Process 的环境变量。
-
-Provider-specific 配置不应该全部直接塞入 `AgentContext`。
-
----
-
-## 4. AgentResult
-
-`AgentResult` 表示 Agent 执行产生的统一结果。
-
-```ts
-interface AgentResult {
-  status: AgentExecutionStatus
-  output: unknown
-  changes?: unknown
-}
-```
-
-其中：
-
-```ts
-type AgentExecutionStatus =
-  | "success"
-  | "failed"
-```
-
-`AgentResult` 是 Provider Adapter 对外部 Agent 输出进行归一化后的结果。
-
-Core 不应该直接消费 Provider-specific output。
-
----
-
-## 5. Provider Process Result
-
-Provider Adapter 在处理外部进程时，需要同时考虑：
-
-```ts
-interface ProcessResult {
-  stdout: string
-  stderr: string
-  exitCode: number | null
-}
-```
-
-实际实现还必须处理：
-
-```text
-timeout
-process error
-signal
-```
-
-因此 `ProcessResult` 更适合作为 Adapter / Runtime 内部执行模型，而不是 Core 的最终 Agent Result。
-
----
-
-## 6. Provider Error
-
-Provider 错误表示执行基础设施问题。
-
-```ts
-type ProviderErrorCode =
-  | "provider-not-found"
-  | "provider-start-failed"
-  | "provider-timeout"
-  | "provider-invalid-output"
-  | "provider-exit-failed"
-```
-
-建议统一为错误对象：
-
-```ts
-interface ProviderError {
-  code: ProviderErrorCode
-  message: string
-  cause?: unknown
-}
-```
-
-这些错误与：
-
-```ts
-AgentExecutionStatus = "failed"
-```
-
-保持区别。
-
----
-
-## 7. ProviderConfig
-
-Provider 配置应与 Harness Configuration、Agent Environment 分离。
-
-建议抽象为：
+`.harness/agents.json` 的形状:
 
 ```ts
 interface ProviderConfig {
-  id: string
   command: string
-  args?: string[]
-  env?: Record<string, string>
+  args: string[]
+}
+
+interface AgentRoleConfig {
+  mode: AgentMode          // 'internal' | 'external'
+  provider?: string        // 仅 external 有意义
+}
+
+interface AgentsConfig {
+  providers?: Record<string, ProviderConfig>
+  planner?: AgentRoleConfig
+  coder?: AgentRoleConfig
+  tester?: AgentRoleConfig
+  reviewer?: AgentRoleConfig
 }
 ```
 
-这里的具体字段仍属于待收敛的 Provider 配置模型。
+`ProviderConfig` 只有两个字段:命令与参数数组。没有 `id`、没有 `env`。
 
-核心原则是：
+## 2. 阶段路由
 
-```text
-Harness Config
-    ≠
-Provider Config
-    ≠
-Agent Environment
-```
+`createProviderRunner` 按下面的顺序决定一次阶段调用做什么:
 
----
+| 情况 | 结果 |
+| ---------------------------------------------------- | ------------------------------------------ |
+| `agents[role]` 缺失或 `mode === 'internal'` | 直接通过,不启动任何进程 |
+| `mode === 'external'` 但缺 `provider` | 失败:要求配置 provider |
+| provider 名在 `agents.providers` 中不存在 | 失败:provider 未配置 |
+| 命令不在 `policy.allowedAgentCommands` 中 | 失败:命令未被允许 |
+| 以上都通过 | 启动进程并解码响应 |
 
-## 8. ProviderRegistry
+不存在 Provider Registry、Adapter Factory 或 Resolver。**路由就是一次两级查表**:
+`agents[role].provider` → `agents.providers[name]`。
 
-Provider Registry 负责 Provider 与 Adapter 的注册关系。
+## 3. 调用协议
+
+一次阶段调用等于一次进程调用:
+
+| 项 | 约定 |
+| -------- | ---------------------------------------------------------------- |
+| 启动 | `command` + `args`,不追加任何隐式参数 |
+| 工作目录 | 项目根(`cwd` 由 Runtime 决定,Provider 不自行切换) |
+| stdin | 一个 JSON 对象,见下一节 |
+| stdout | 一个 JSON 对象(或空) |
+| stderr | 失败时作为 `details` 上报 |
+| 退出码 | `0` 表示成功;非零即失败 |
+
+## 4. stdin 载荷
+
+实际写入 stdin 的是 `StageRequest` 加上 `provider` 字段。各阶段共有 `input` 与
+`implementationPlan`:
+
+| 阶段 | 判别字段 | 额外字段 |
+| -------- | ------------------------ | ---------------------------------------- |
+| planner | `phase: 'planner'` | 无 |
+| coder | `phase: 'coder'` | `iteration`,`previousVerification` |
+| tester | `phase: 'tester'` | `iteration`,`verification` |
+| reviewer | `phase: 'reviewer'` | `iteration`,`verification`,`fileChanges` |
+
+判别字段名是 **`phase`**,不是 `stage`。载荷里没有 `task`、`policy` 或 `context` 字段——任务信息
+在 `input`(`NormalizedTask`)里。
+
+Coder 会收到**上一轮**的 `previousVerification`,这是重试时 Agent 能看到失败原因的唯一通道。
+
+## 5. stdout 载荷
+
+解码结果是 `AgentPayload`,每个字段都是可选的——它来自不受信任的 stdout:
 
 ```ts
-interface ProviderRegistry {
-  register(
-    id: string,
-    factory: AgentAdapterFactory
-  ): void
-
-  resolve(
-    id: string
-  ): AgentAdapterFactory | undefined
+interface AgentPayload {
+  details?: string
+  approved?: boolean
+  implementationPlan?: string[]
+  evidence?: VerificationCheck[]
+  issues?: string[]
+  changedFiles?: string[]
 }
 ```
 
-Registry 不负责：
+**空 stdout 视为成功**,因为内置阶段本就不产生载荷。非空时必须是单个符合
+`agent-response.schema.json` 的 JSON 对象;不符合则阶段失败。
 
-* Agent 执行
-* Policy Evaluation
-* Verification
-* Review
-
-它只负责 Provider → Adapter 的解析。
-
----
-
-## 9. Adapter Factory
-
-Adapter Factory 根据 Provider 配置创建 Adapter。
+## 6. 调用结果
 
 ```ts
-interface AgentAdapterFactory {
-  readonly id: string
-
-  create(
-    config: ProviderConfig
-  ): AgentAdapter
-}
-```
-
-整体关系：
-
-```text
-ProviderRegistry
-      ↓
-AgentAdapterFactory
-      ↓
-AgentAdapter
-      ↓
-Agent Runtime
-```
-
----
-
-## 10. Provider Resolver
-
-Runtime 可以通过 Resolver 获取最终 Adapter。
-
-```ts
-interface ProviderResolver {
-  resolve(
-    id: string,
-    config?: ProviderConfig
-  ): AgentAdapter
-}
-```
-
-解析过程：
-
-```text
-Provider ID
-    ↓
-Provider Registry
-    ↓
-Adapter Factory
-    ↓
-Provider Config
-    ↓
-AgentAdapter
-```
-
-具体 Resolver 是否独立于 Registry，可以在实现阶段继续确定。
-
----
-
-## 11. Provider Doctor
-
-Doctor 不属于 AgentAdapter 执行协议。
-
-如果需要抽象 Provider 环境诊断，可以定义：
-
-```ts
-interface ProviderDoctor {
-  check(
-    context: DoctorContext
-  ): Promise<DoctorResult>
-}
-```
-
-例如：
-
-```ts
-interface DoctorContext {
-  cwd: string
+interface AgentCallResult {
+  ok: boolean
+  details: string
+  payload: AgentPayload
 }
 
-interface DoctorResult {
-  status: "ok" | "failed"
-  checks: DoctorCheck[]
-}
-
-interface DoctorCheck {
-  name: string
-  status: "ok" | "failed"
-  message?: string
-}
+type RunAgent = (name: AgentRole, request: StageRequest) => Promise<AgentCallResult>
 ```
 
-典型检查：
+`RunAgent` 是整个适配层协议的全部:一个函数,不是接口层次。
 
-```text
-Provider command
-Provider configuration
-Working directory
-Writable directories
-Required scripts
-```
+## 7. 失败如何表达
 
-Doctor 与 Task Verification 保持独立。
+所有失败都折叠成 `{ ok: false, details: <字符串> }`,没有错误码分类、没有超时、没有重试策略:
 
----
+| 失败 | `details` 内容 |
+| ------------------ | -------------------------------------------- |
+| 非零退出 | stderr,或 `"<role> exited with code <n>."` |
+| stdout 不是合法 JSON | `"<role> must return one JSON object on stdout."` |
+| 不符合响应 schema | `"<role> returned an invalid response: …"` |
+| 不满足阶段要求 | 由 `validateStageResponse` 给出的描述 |
 
-## 12. Adapter 责任边界
+阶段要求(见 [Core 契约 §6](./core.md)):planner 需要非空 `implementationPlan`;tester 需要布尔
+`approved` 与非空 `evidence`;reviewer 需要布尔 `approved`。
 
-Adapter 负责 Provider-specific 的转换：
+`agentTimeoutMs` 存在于 Policy 中但**未被使用**:`runCommand` 不设置超时,因此一个挂起的
+Provider 会一直挂起。
 
-```text
-AgentRequest
-      ↓
-Provider Input
-      ↓
-External Agent
-      ↓
-Provider Output
-      ↓
-AgentResult
-```
+## 8. 相关文档
 
-因此 Adapter 可以包含：
-
-```text
-Command construction
-Argument construction
-Input serialization
-Output parsing
-Provider-specific error mapping
-```
-
-但不应该包含：
-
-```text
-Policy decision
-Security decision
-Task verification
-Review decision
-```
-
----
-
-## 13. stdin / stdout / stderr
-
-Provider Adapter 与外部 Agent 的进程协议：
-
-```text
-stdin
-  AgentRequest
-
-stdout
-  AgentResult
-
-stderr
-  Diagnostics
-
-exit code
-  Process execution status
-```
-
-约束：
-
-```text
-stdout
-    必须保持机器可解析
-
-stderr
-    可以输出诊断信息
-
-exit code
-    必须参与最终执行状态判断
-```
-
-不能简单使用：
-
-```ts
-stdout !== ""
-```
-
-判断 Provider 是否执行成功。
-
----
-
-## 14. Process Lifecycle
-
-Provider 执行过程中至少存在以下状态：
-
-```text
-created
-  ↓
-starting
-  ↓
-running
-  ↓
-completed
-```
-
-异常情况下可能进入：
-
-```text
-start-failed
-timeout
-process-error
-invalid-output
-exit-failed
-```
-
-这些属于 Provider / Runtime 执行状态，不应直接等同于 Agent Task 的业务结果。
-
----
-
-## 15. Interface Boundary
-
-最终接口关系：
-
-```text
-┌─────────────────────────────┐
-│        Harness Core         │
-│                             │
-│  AgentRequest / AgentResult │
-└──────────────┬──────────────┘
-               │
-         AgentAdapter
-               │
-┌──────────────▼──────────────┐
-│          Adapter            │
-│                             │
-│ Provider-specific mapping   │
-└──────────────┬──────────────┘
-               │
-       Process Protocol
-               │
-┌──────────────▼──────────────┐
-│       Agent Runtime         │
-└─────────────────────────────┘
-```
-
-Core 的稳定依赖点只有：
-
-```ts
-AgentAdapter
-AgentRequest
-AgentResult
-```
-
-Provider-specific 类型应尽量限制在 Adapter 边界内部。
-
----
-
-## 16. 相关文档
-
-* [Provider 架构](../architecture/provider.md)
-* [Policy Interface](./policy.md)
-* [Preset Interface](./preset.md)
-* [核心接口设计](../核心接口设计.md)
-* [CLI 设计](../CLI设计.md)
+- [Core 契约](./core.md) · [Policy 契约](./policy.md) · [验证契约](./verification.md)
+- [Provider 设计](../architecture/provider.md) · [系统架构](../architecture/system.md)

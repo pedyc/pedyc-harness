@@ -1,570 +1,107 @@
-# CLI Interface
+# CLI 契约
 
-## 1. CLI Command Model
+> `pedyc-harness` 暴露的命令、参数、写入的产物与退出码。
+>
+> 来源:`packages/cli/src/{bin,cli,run,presets}.ts`。
 
-CLI Command 可以抽象为：
+## 1. 包与入口
 
-```ts
-interface CliCommand<TOptions, TResult> {
-  readonly name: string
+| 项 | 值 |
+| -------- | ------------------------------------------------ |
+| 包名 | `pedyc-harness` |
+| `bin` | `dist/bin.js` |
+| `exports` | `.` → `dist/index.js`;`./run` → `dist/run.js` |
+| `files` | `dist`、`templates`、`README.md` |
 
-  execute(
-    options: TOptions
-  ): Promise<TResult>
-}
-```
+`dist/cli.js` 同样是必需文件,但**不是** bin:它通过 `..` 定位包内的 `templates/`,只有在 `dist/`
+这一层深度才能正确解析。因此发布物必须同时包含 `dist` 与 `templates`。
 
-CLI Command 负责：
+## 2. 命令
 
-```text
-参数 → Runtime Request → Runtime Result → CLI Output
-```
+| 命令 | 参数 | 行为 |
+| ---------- | --------------------------------------------- | ------------------------------------------------------ |
+| `init` | `--preset <name>`、`--force` | 幂等写入模板;已存在且内容不同则跳过,除非 `--force` |
+| `diff` | `--preset <name>` | 只打印状态,**不写任何文件** |
+| `update` | `--preset <name>`、`--force` | 写回 `missing`;`modified` 仅在 `--force` 时写回 |
+| `verify` | 无 | 配置闸门,见第 6 节 |
+| `doctor` | 无 | 打印 4 行环境信息 |
+| `run` | 见第 3 节 | 编排一次任务 |
+| `help` | 无 | 打印用法,退出码 0 |
 
-不负责实现 Runtime 内部治理逻辑。
+未知命令打印同一份用法并退出码 1;不带参数等同于 `help`。
 
----
+`diff` / `update` 的状态取值只有三种:`missing`、`unchanged`、`modified`。
 
-## 2. Common CLI Options
+## 3. `run` 的参数
 
-通用参数：
+| 参数 | 默认值 | 说明 |
+| ------------------ | ---------------------- | ---------------------------------------------- |
+| `--input <path>` | `.harness/task.json` | 已归一化的任务 JSON |
+| `--task <path>` | — | 人类任务文件,经 `readTaskFile` 归一化 |
+| `--prompt <text>` | — | 直接把一段文字当作 task 与 goal |
+| `--output <path>` | — | 把结果写到该文件 |
+| `--root <dir>` | 当前目录 | 项目根 |
+| `--dry-run` | 关 | 只做预览 |
+| `--json` | 关 | 结果写入 stdout |
 
-```ts
-interface CommonCliOptions {
-  root?: string
-  json?: boolean
-}
-```
+输入解析优先级:**`--task` > `--prompt` > `--input`**。`--task` 指向的文件不存在即失败;既无
+`--task` 也无 `--prompt`、且 `--input` 不存在时同样失败。第一个不带 `-` 的参数也可作为 input 路径。
 
-其中：
+输出行为:给了 `--output` 就写文件;当 `--json` 存在或未给 `--output` 时,序列化结果同时写 stdout。
 
-```text
-root
-    目标项目 Root
+## 4. `init` 写入的文件
 
-json
-    是否使用机器可读输出
-```
+| 产物 | 来源 |
+| ------------------------------------------- | ---------------------- |
+| `.harness/policy.json` | Preset 的 `policy` |
+| `.harness/agents.json` | Preset 的 `agents` |
+| `AGENTS.md` | Preset 的 `instruction` |
+| `.harness/task.example.json` | CLI 内置模板 |
+| `.harness/input.schema.json` | CLI 内置模板 |
+| `.harness/output.schema.json` | CLI 内置模板 |
+| `.harness/agent-response.schema.json` | CLI 内置模板 |
 
-`run` 可以从任意目录调用。
+`--preset` 只能是 `generic` 或 `vue`;其他取值报错并列出可用项。见 [Preset 契约](./preset.md)。
 
-默认：
+## 5. `run` 的产物
 
-```text
-当前工作目录
-```
+结果文档是 `RunResult`(见 [Core 契约 §3](./core.md)),匹配 `schemas/output.schema.json`。
+运行产物写入 `.harness/runs/<runId>/`,文件清单见[验证契约 §5](./verification.md)。
 
-底层 Runtime 允许显式指定：
+`--dry-run` 不调用任何 Provider、不执行任何闸门、**不修改产品文件**;但它仍会写出
+`.harness/runs/<runId>/` 下的运行产物(`input.json`、`policy.json`、`output.json`),并输出与正式
+运行相同的四阶段记录,因此调用方可以用同一套输出契约消费它。
 
-```bash
---root <path>
-```
+## 6. `verify` 做什么
 
----
+依次检查,任一步失败即返回非零:
 
-## 3. Init Options
+1. `.harness/policy.json` 与 `.harness/agents.json` 是否存在;
+2. 三个 schema 文件是否存在,且全部 JSON 可解析;
+3. `validatePolicy` 是否通过(要求见 [Policy 契约 §2](./policy.md));
+4. `agents.providers` 中每个 provider 都有 `command` 与 `args`;
+5. 四个阶段的 `mode` 均为 `internal` 或 `external`;
+6. `requiredChecks` 里的每个脚本名都存在于目标项目 `package.json` 的 `scripts` 中;
+7. 若存在 `.harness/verify.mjs`,以 `--root <项目根>` 调用并**透传其退出码**。
 
-```ts
-interface InitOptions extends CommonCliOptions {
-  preset?: string
-  force?: boolean
-}
-```
+第 7 步的钩子只在 `verify` 命令中执行,`run` 流程不会调用它。
 
-对应：
+## 7. `doctor` 输出
 
-```bash
-pedyc-harness init
-pedyc-harness init --preset vue
-pedyc-harness init --preset vue --force
-```
-
-### Init Result
-
-```ts
-interface InitResult {
-  status: "created" | "unchanged" | "updated"
-  files: FileChange[]
-}
-```
-
-```ts
-interface FileChange {
-  path: string
-  status:
-    | "created"
-    | "unchanged"
-    | "modified"
-    | "skipped"
-}
-```
-
-具体 Result 字段可以随着 CLI 输出协议继续收敛。
-
----
-
-## 4. Run Options
-
-```ts
-interface RunOptions extends CommonCliOptions {
-  input: string
-  dryRun?: boolean
-}
-```
-
-例如：
-
-```bash
-pedyc-harness run \
-  --input .harness/task.json \
-  --dry-run \
-  --json
-```
-
-### Run Result
-
-```ts
-interface RunResult {
-  runId: string
-  taskId: string
-  status: RunStatus
-  changes?: unknown
-  validation?: unknown
-  review?: unknown
-}
-```
-
-```ts
-type RunStatus =
-  | "passed"
-  | "failed"
-  | "rejected"
-  | "error"
-```
-
-最终详细执行结果由 Run Record 保存。
-
----
-
-## 5. Verify Options
-
-```ts
-interface VerifyOptions extends CommonCliOptions {
-  json?: boolean
-}
-```
-
-Verify Result：
-
-```ts
-interface VerifyResult {
-  status: "passed" | "failed"
-  checks: VerificationCheck[]
-}
-```
-
-```ts
-interface VerificationCheck {
-  name: string
-  status: "passed" | "failed" | "skipped"
-  message?: string
-}
-```
-
-Verify 本身不实现 Verification Logic。
-
-它只负责调用 Runtime Verification。
-
----
-
-## 6. Doctor Options
-
-```ts
-interface DoctorOptions extends CommonCliOptions {
-  json?: boolean
-}
-```
-
-Doctor Result：
-
-```ts
-interface DoctorResult {
-  status: "ok" | "failed"
-  checks: DoctorCheck[]
-}
-```
-
-```ts
-interface DoctorCheck {
-  name: string
-  status: "ok" | "failed"
-  message?: string
-}
-```
-
-典型检查：
+固定 4 行,不做任何检查或断言:
 
 ```text
-Node / Runtime
-Provider
-Configuration
-Required Scripts
-Working Directory
-Writable Directories
-Package Manager
+Project root: <绝对路径>
+Configuration: found | missing (.harness)
+Package manager: pnpm | yarn | npm
+Node.js: v<版本>
 ```
 
----
+## 8. 退出码
 
-## 7. Diff Options
+**只有 `0` 与 `1`。** 没有区分"策略拒绝""验证失败""输入非法"等情形的错误码分类。
 
-```ts
-interface DiffOptions extends CommonCliOptions {
-  preset?: string
-  json?: boolean
-}
-```
+## 9. 相关文档
 
-Diff Result：
-
-```ts
-interface DiffResult {
-  files: DiffFile[]
-}
-```
-
-```ts
-interface DiffFile {
-  path: string
-  status:
-    | "missing"
-    | "unchanged"
-    | "modified"
-}
-```
-
-Diff 是只读操作。
-
----
-
-## 8. Update Options
-
-```ts
-interface UpdateOptions extends CommonCliOptions {
-  preset?: string
-  force?: boolean
-  json?: boolean
-}
-```
-
-对应：
-
-```bash
-pedyc-harness update --preset generic
-pedyc-harness update --preset generic --force
-```
-
-Update 应返回文件级变更结果：
-
-```ts
-interface UpdateResult {
-  files: FileChange[]
-}
-```
-
-默认：
-
-```text
-missing   → create
-unchanged → skip
-modified  → skip
-```
-
-`--force` 才允许覆盖 modified 文件。
-
----
-
-## 9. List Presets
-
-规划中的：
-
-```bash
-pedyc-harness list-presets
-```
-
-建议：
-
-```ts
-interface ListPresetsOptions extends CommonCliOptions {
-  json?: boolean
-}
-```
-
-结果：
-
-```ts
-interface PresetListResult {
-  presets: PresetInfo[]
-}
-```
-
-```ts
-interface PresetInfo {
-  name: string
-  version?: string
-  extends?: string[]
-}
-```
-
-目标形态下数据来自已安装 npm Preset，而不是 CLI 内置静态表。
-
----
-
-## 10. Explain
-
-规划中的：
-
-```bash
-pedyc-harness explain
-```
-
-用于展示：
-
-```text
-EffectiveHarnessConfig
-+
-Provenance
-```
-
-建议：
-
-```ts
-interface ExplainResult {
-  config: EffectiveHarnessConfig
-  provenance: ConfigProvenance[]
-}
-```
-
-其中：
-
-```ts
-interface ConfigProvenance {
-  path: string
-  source: string
-}
-```
-
-例如：
-
-```text
-policy.rules.no-direct-prod-write
-    ↓
-@acme/harness-preset
-```
-
-该接口用于解释配置来源，而不是重新执行 Policy。
-
----
-
-## 11. CLI Output
-
-CLI 至少支持两种输出模式：
-
-```text
-Human-readable
-JSON
-```
-
-Human-readable：
-
-```text
-[task] loading contract
-[policy] checking policy
-[agent] executing
-[diff] inspecting changes
-[verify] running checks
-
-Status: PASSED
-Run ID: ...
-```
-
-JSON：
-
-```json
-{
-  "runId": "...",
-  "taskId": "...",
-  "status": "passed",
-  "changes": {},
-  "validation": {},
-  "review": {}
-}
-```
-
-JSON 输出必须保持结构稳定，以支持：
-
-```text
-CI
-Scripts
-GitHub Actions
-Automation
-```
-
----
-
-## 12. Exit Codes
-
-CLI 使用稳定 Exit Code。
-
-建议定义：
-
-```ts
-enum CliExitCode {
-  Success = 0,
-  TaskFailed = 1,
-  ValidationFailed = 2,
-  PolicyRejected = 3,
-  ReviewRejected = 4,
-  ConfigurationError = 5,
-  ProviderError = 6,
-  InvalidInput = 7,
-  InternalError = 8,
-}
-```
-
-语义：
-
-| Code | Meaning             |
-| ---: | ------------------- |
-|  `0` | Success             |
-|  `1` | Task failed         |
-|  `2` | Validation failed   |
-|  `3` | Policy rejected     |
-|  `4` | Review rejected     |
-|  `5` | Configuration error |
-|  `6` | Provider error      |
-|  `7` | Invalid input       |
-|  `8` | Internal error      |
-
-具体编号仍可以在实现阶段统一调整，但一旦作为公开 CLI 协议使用，应保持稳定。
-
----
-
-## 13. CLI Runtime Boundary
-
-CLI 不应该直接调用：
-
-```ts
-PolicyEngine
-Validator
-DiffEngine
-```
-
-推荐：
-
-```ts
-interface HarnessRuntime {
-  run(request: RunRequest): Promise<RunResult>
-
-  verify(request: VerifyRequest): Promise<VerifyResult>
-
-  doctor(request: DoctorRequest): Promise<DoctorResult>
-}
-```
-
-CLI 负责：
-
-```text
-CLI Arguments
-    ↓
-Request
-    ↓
-HarnessRuntime
-    ↓
-Result
-    ↓
-CLI Output
-```
-
-这样 CLI 可以保持为薄适配层。
-
----
-
-## 14. Configuration Sources
-
-CLI 可以定位以下配置来源：
-
-```text
-.harness/harness.json
-.harness/policy.json
-.harness/agents.json
-AGENTS.md
-package.json
-Preset packages
-Task Contract
-```
-
-但解析后的配置模型应该进入 Runtime / Core。
-
-CLI 不应该自行实现：
-
-```text
-Preset DAG
-Config Merge
-Policy Evaluation
-Verification
-```
-
----
-
-## 15. Command / Runtime Mapping
-
-| CLI Command    | Runtime / Core                |
-| -------------- | ----------------------------- |
-| `init`         | Initialization / Preset entry |
-| `run`          | Harness Runtime               |
-| `verify`       | Verification                  |
-| `doctor`       | Environment Diagnostics       |
-| `diff`         | Template / Project Diff       |
-| `update`       | Project Template Update       |
-| `list-presets` | Preset Discovery              |
-| `explain`      | Effective Config / Provenance |
-
-CLI 本身只负责调用对应能力。
-
----
-
-## 16. Interface Boundary
-
-最终保持：
-
-```text
-┌─────────────────────────┐
-│          CLI            │
-│                         │
-│ args / output / exit    │
-└────────────┬────────────┘
-             │
-        Runtime API
-             │
-┌────────────▼────────────┐
-│       Harness Core      │
-│                         │
-│ Policy / Agent / Diff   │
-│ Verification / Review   │
-└─────────────────────────┘
-```
-
-核心原则：
-
-> **CLI 是 Runtime 的用户界面，而不是 Runtime 的实现。**
-
----
-
-## 17. 相关文档
-
-* [CLI 架构](../architecture/cli.md)
-* [核心接口设计](./core.md)
-* [Preset Interface](./preset.md)
-* [Provider Interface](./provider.md)
-* [Policy Interface](./policy.md)
-* [发布与版本规则](../release.md)
+- [Core 契约](./core.md) · [Preset 契约](./preset.md) · [验证契约](./verification.md)
+- [CLI 设计](../architecture/cli.md) · [Release](../release.md)
