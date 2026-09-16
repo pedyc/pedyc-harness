@@ -40,11 +40,15 @@ Build、Test、Typecheck 与 Release 编排，不承载 Runtime。workspace 范�
 当前四个发布单元的清单事实：
 
 | Package | 版本 | `files` | `exports` 子路径数 |
-| ----------------------------- | ----- | ------------------------------- | --- |
-| `@pedyc/harness-core` | 1.1.0 | `dist`, `README.md` | 11 |
+| ----------------------------- | ----- | -------------------------------------------------------------- | ----------------- |
+| `@pedyc/harness-core` | 1.1.0 | `dist`, `README.md` | 12 |
 | `pedyc-harness` | 1.1.0 | `dist`, `templates`, `README.md` | 2 |
-| `@pedyc/harness-preset-generic` | 1.1.0 | `dist`, `README.md` | 1 |
-| `@pedyc/harness-preset-vue` | 1.1.0 | `dist`, `README.md` | 1 |
+| `@pedyc/harness-preset-generic` | 1.1.0 | `preset.json`, `policy.json`, `agents.json`, `AGENTS.md`, `README.md` | 1(`./preset.json`) |
+| `@pedyc/harness-preset-vue` | 1.1.0 | 同上 | 1(`./preset.json`) |
+
+两个 Preset 包是**数据包**:它们不携带 `dist/`、`src/` 或任何 `scripts`,因此 `pnpm -r run build`
+不会构建它们。`release:check` 会断言这一点——一个仍然发布代码的预设会成为「什么是该预设」的第二份、
+且静默权威的定义。
 
 四个包均为 `publishConfig.access: public`，`engines.node` 为 `>=20`。仓库固定使用
 `pnpm@10.15.0`（`packageManager` 字段）。目标项目使用 npm、pnpm 或 yarn 均可，与发布流程无关。
@@ -188,6 +192,8 @@ pnpm run test:unit
 - `LICENSE` 不在任何 `files` 数组中，但四个包目录下都有 `LICENSE` 文件。npm 始终自动包含
   `package.json`、`README`、`LICENSE`/`LICENCE`，因此这是有意的依赖，不需要写进 `files`。
 - 四个包都**没有** `main`、`module`、`types` 顶层字段；入口完全由 `exports` 描述（见下一节）。
+- 两个 Preset 包是**数据包**：`files` 只列 `preset.json`、`policy.json`、`agents.json`、`AGENTS.md`
+  与 `README.md`；它们没有 `dist/`，也没有构建脚本。
 
 原则：npm package 应该是最小可运行发布物，而不是整个 Repository 的压缩包。
 
@@ -208,24 +214,26 @@ Package 必须明确公开 API，且入口键统一使用 `types` + `default`：
 }
 ```
 
-`@pedyc/harness-core` 公开 11 个子路径，`pedyc-harness` 公开 2 个：
+`@pedyc/harness-core` 公开 12 个子路径，`pedyc-harness` 公开 2 个：
 
 | 子路径 | 对应实现 |
 | ---------------------- | ---------------------------- |
 | `.` | `dist/index.js` |
-| `./package-manager` | `dist/core/package-manager.js` |
-| `./intake` | `dist/core/intake.js` |
-| `./command` | `dist/core/command.js` |
-| `./snapshots` | `dist/core/diff-inspector.js` |
-| `./schema` | `dist/core/validator.js` |
-| `./agent` | `dist/core/agent.js` |
-| `./policy` | `dist/core/policy-engine.js` |
-| `./provider` | `dist/adapters/provider-runner.js` |
-| `./orchestrator` | `dist/core/executor.js` |
+| `./config` | `dist/config/index.js` |
+| `./package-manager` | `dist/runtime/package-manager.js` |
+| `./intake` | `dist/runtime/intake.js` |
+| `./command` | `dist/runtime/command.js` |
+| `./snapshots` | `dist/runtime/diff-inspector.js` |
+| `./schema` | `dist/config/schema.js` |
+| `./agent` | `dist/runtime/agent.js` |
+| `./policy` | `dist/runtime/policy-engine.js` |
+| `./provider` | `dist/runtime/provider-runner.js` |
+| `./orchestrator` | `dist/runtime/executor.js` |
 | `./contracts` | `dist/contracts/index.js` |
 
-注意子路径名与文件名并不一一对应（例如 `./snapshots` → `diff-inspector.js`、`./orchestrator`
-→ `executor.js`），这是公开 API 与内部命名的隔离层，改动内部文件名不应改变子路径名。
+注意子路径名与文件名并不一一对应(例如 `./snapshots` → `diff-inspector.js`、`./orchestrator`
+→ `executor.js`、`./schema` → `config/schema.js`),这是公开 API 与内部命名的隔离层,改动内部文件
+名不应改变子路径名。
 
 用户不得依赖 `@pedyc/harness-core/dist/xxx` 这类内部路径。内部模块可以变化，公开 API 应保持稳定；
 `exports` 从未暴露 `src/`，因此深路径不属于公开接口。
@@ -263,28 +271,33 @@ pedyc-harness run --input .harness/task.example.json --dry-run --json
 
 ## 10. Preset Package
 
-当前 Preset package 的发布物是**编译后的 TypeScript 模块**加 README：
+Preset 是**数据包**：一个 npm 包加一份 `preset.json` 清单，不含任何代码。
 
 ```text
 @pedyc/harness-preset-vue/
 ├── package.json
-├── dist/index.js
-├── dist/index.d.ts
+├── preset.json      # 清单:name / extends / policy / agents / instruction
+├── policy.json
+├── agents.json
+├── AGENTS.md
 └── README.md
 ```
 
-它以 `dependencies: { "@pedyc/harness-core": "workspace:*" }` 依赖 Core。安装 Preset 不需要用户
-直接依赖任何内部源码路径。
+| 项 | 值 |
+| ------------ | ---------------------------------------------------------- |
+| `exports` | `./preset.json` |
+| `files` | 上述五个文件（`package.json` 由 npm 自动包含） |
+| `scripts` | 无 |
+| 依赖 | 无（含 `peerDependencies`） |
 
-> **目标（M16）** 以下三条属于目标形态，**当前尚未实现**，不要据此操作：
->
-> 1. 发布物包含 `preset.json`（Preset Manifest），声明继承关系与本 Preset 提供的配置。
->     现状：仓库中不存在 `preset.json`，Preset 是 TS 模块（`packages/preset-*/src/index.ts`）。
-> 2. 通过 `peerDependencies` 声明兼容的 `pedyc-harness` 版本范围。
->     现状：四个包都没有 `peerDependencies`。
-> 3. CLI 通过 Preset Registry 解析 Preset；项目在 `.harness/harness.json` 中只声明包名，版本落在
->     `package.json` 与 lockfile。
->     现状：`packages/cli/src/presets.ts` 是只有两个表项的硬编码 `Map`，不存在 `harness.json`。
+`preset.json` 声明继承关系（`extends`，只写包名）与本包提供的文档路径；所有相对路径只能指向包内。
+字段与解析语义见 [Preset 契约](./interfaces/preset.md)。
+
+两点需要说明：
+
+- **`peerDependencies` 尚未声明。** 预设目前不声明兼容的 `pedyc-harness` 范围，因此一个预设可以被
+  安装到版本不兼容的 CLI 上而不被 npm 拦下。
+- 版本不由清单管理：项目在 `.harness/harness.json` 里只写包名，版本落在 `package.json` 与 lockfile。
 
 Preset 生态与解析规则见 [Preset 设计](./architecture/preset.md)。Harness 不自建 Preset Registry，
 分发与权限复用 npm 生态，见 [项目目标](./项目目标.md)。第三方 Preset 不参与下一节的同步版本约束。

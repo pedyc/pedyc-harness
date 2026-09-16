@@ -2,12 +2,12 @@
 
 > 一次运行里"通过"是如何被判定的,以及判定依据被记录成什么。
 >
-> 来源:`packages/core/src/contracts/validation.ts`、`packages/core/src/core/approval-gate.ts`、
+> 来源:`packages/core/src/contracts/validation.ts`、`packages/core/src/runtime/approval-gate.ts`、
 > `packages/cli/src/run.ts`。
 
 ## 1. 闸门如何执行
 
-验证闸门来自 `policy.requiredChecks`,而不是 Preset 的 `verificationScripts`。每个条目是一个
+验证闸门来自 `policy.requiredChecks`。每个条目是一个
 **包脚本名**,由探测到的包管理器执行:
 
 | 锁文件 | 实际调用 |

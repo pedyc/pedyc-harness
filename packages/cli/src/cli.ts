@@ -21,7 +21,7 @@ import { runHarness } from './run.js'
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const templatesRoot = join(packageRoot, 'templates')
 
-// Exit codes from `docs/CLI设计.md` §8. Only the ones this entry point can
+// Exit codes from `docs/interfaces/cli.md` §8. Only the ones this entry point can
 // produce are named here; a run's own outcome codes come from `runHarness`.
 const EXIT_OK = 0
 const EXIT_FAILED = 1

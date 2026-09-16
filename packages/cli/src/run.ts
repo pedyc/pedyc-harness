@@ -10,7 +10,7 @@ import { createProviderRunner } from '@pedyc/harness-core/provider'
 import { runOrchestrator } from '@pedyc/harness-core/orchestrator'
 import type { IntakeResult, NormalizedTask, RunResult } from '@pedyc/harness-core/contracts'
 
-// Exit codes from `docs/CLI设计.md` §8.
+// Exit codes from `docs/interfaces/cli.md` §8.
 const EXIT_FAILED = 1
 const EXIT_CONFIG = 5
 

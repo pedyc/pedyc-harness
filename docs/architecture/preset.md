@@ -5,9 +5,9 @@
 >
 > Preset 不属于 Core,也不让 Core 感知具体技术栈或业务领域。
 >
-> **本文描述的是目标形态。** §7 至 §14 中的 `preset.json`、Preset Manifest、依赖解析与
-> `EffectiveHarnessConfig` 都**尚未实现**;当前实现与差距的逐项对照见 §15,字段与函数形状见
-> [Preset 契约](../interfaces/preset.md)。
+> **本文同时包含现状与目标。** §7(npm 分发与 `preset.json`)、§8(依赖图与解析)以及 §14 的 Init
+> 部分**已经实现**;配置层级、字段级合并语义、安全模型与 provenance(§9–§11、§13)仍属**目标**。
+> §15 给出逐项对照,契约形状见 [Preset 契约](../interfaces/preset.md)。
 
 ## 1. 定位
 
@@ -260,35 +260,38 @@ Project Update 这条链路。
 当前实现是:
 
 ```text
-packages/core/src/contracts/preset.ts
-packages/cli/src/presets.ts        ← 一张两个表项的静态 Map
-packages/preset-generic
+packages/core/src/contracts/{preset,harness}.ts
+packages/core/src/config/           ← 清单、加载、校验、预设解析
+packages/cli/src/presets.ts         ← 约定式包名展开与安装,没有预设表
+packages/preset-generic             ← 数据包:preset.json / policy.json / agents.json / AGENTS.md
 packages/preset-vue
 harness init --preset <name>
+harness list-presets
 ```
 
-也就是说,当前 Preset 更接近一个 **Default Capability Bundle**,而不是治理规范。目标结构是
+也就是说 Preset 已经从 **Default Capability Bundle** 变成**声明式的数据包**,但还没有成为完整的
+Governance Specification:它可以被发现、安装、继承与解析,而多个来源尚未被**合成**。目标结构
 `harness.json → Preset Resolver → DAG → Preset Composition → Config Resolution → Effective
-Governance → Runtime`。
+Governance → Runtime` 的前三段已经实现,后两段(M17)没有。
 
 能力演进逐项对照:
 
 | 能力 | 当前 | 目标 |
-| ---------------- | ---------------- | ---------------------------------- |
-| Preset 发现 | CLI 静态表 | Package Registry |
+| ---------------- | ------------------------------------------------------ | ---------------------------------- |
+| Preset 发现 | **约定式包名 + npm 安装**(CLI 无静态表) | Package Registry |
 | Preset 类型 | 技术栈为主 | Technology / Domain / Organization |
-| Preset 继承 | 不支持 | DAG |
+| Preset 继承 | **DAG:`extends` + 去重 + 环检测** | DAG + 拓扑序 |
 | Contract | 基础 | Preset Contract |
-| Policy | 默认值 | Governance Policy |
+| Policy | 预设提供一份 policy 文档 | Governance Policy |
 | Verification | 默认 Check | Domain Verification |
-| Agent Guidance | Template | Structured Guidance |
-| 配置入口 | 初步 | `harness.json` |
-| 合并语义 | 未完整定义 | 字段级 Merge Strategy |
-| 安全约束 | 初步 | Immutable / Deny-wins |
+| Agent Guidance | **预设的 instruction 文件**(`init` 据此播种 `AGENTS.md`) | Structured Guidance |
+| 配置入口 | **`.harness/harness.json`** | `harness.json` |
+| 合并语义 | 未定义——解析结果是有序列表,不是合并后的配置 | 字段级 Merge Strategy |
+| 安全约束 | 未实现 | Immutable / Deny-wins |
 | Effective Config | 未实现 | Effective Governance |
-| Provenance | 未实现 | 完整来源追踪 |
+| Provenance | 部分:`LoadedHarnessConfig.sources` 报告来源 | 完整来源追踪随 Run Record 保存 |
 
-字段级现状(`Preset` 的八个字段里只有四个被读取)见 [Preset 契约](../interfaces/preset.md)。
+`preset.json` 的字段与 `ResolvedPreset` 的形状见 [Preset 契约](../interfaces/preset.md)。
 
 ## 16. 设计原则
 

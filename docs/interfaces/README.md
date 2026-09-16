@@ -9,11 +9,11 @@
 
 | 文档 | 对应实现 | 内容 |
 | ------------------------------ | ------------------------------------------------------ | ------------------------------------------ |
-| [core](./core.md) | `packages/core/src/{index,contracts,core,adapters}` | `@pedyc/harness-core` 的导出面与核心契约 |
-| [preset](./preset.md) | `contracts/preset.ts`、`packages/cli/src/presets.ts` | `Preset` 与 `PresetDetection` |
-| [policy](./policy.md) | `contracts/policy.ts`、`core/policy-engine.ts` | `Policy` 与三个执行函数 |
-| [provider](./provider.md) | `contracts/agent.ts`、`adapters/provider-runner.ts` | Agent 调用协议(stdin/stdout) |
-| [verification](./verification.md) | `contracts/validation.ts`、`core/approval-gate.ts` | 验证结果与阶段通过条件 |
+| [core](./core.md) | `packages/core/src/{index,contracts,config,runtime}` | `@pedyc/harness-core` 的导出面与核心契约 |
+| [preset](./preset.md) | `contracts/preset.ts`、`config/presets.ts` | `PresetManifest` 与 `ResolvedPreset` |
+| [policy](./policy.md) | `contracts/policy.ts`、`config/policy.ts`、`runtime/policy-engine.ts` | `Policy` 与执行函数 |
+| [provider](./provider.md) | `contracts/agent.ts`、`runtime/provider-runner.ts` | Agent 调用协议(stdin/stdout) |
+| [verification](./verification.md) | `contracts/validation.ts`、`runtime/approval-gate.ts` | 验证结果与阶段通过条件 |
 | [cli](./cli.md) | `packages/cli/src/*` | 命令、参数、运行产物与退出码 |
 
 ## 一条跨模块规则

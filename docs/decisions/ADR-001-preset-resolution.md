@@ -45,10 +45,12 @@ ADR-001 把 Topological Sort 列为备选,指的是"以入度队列实现排序"
 
 ## 7. 当前状态
 
-> **未实现。** 当前 `packages/cli/src/presets.ts` 是一张两个表项的静态 `Map`,不存在继承、依赖图、
-> 循环检测或拓扑排序。
+**已实现。** 解析位于 `packages/core/src/config/presets.ts`：递归加载 `extends`、按包去重、检测循环
+并给出完整环路。CLI 一侧只做约定式包名展开与安装（`packages/cli/src/presets.ts`），**没有**预设表
+——本 ADR 记录的决定已经成为现状。
 
-本 ADR 记录的是**规划决定**,不是现状。阶段与依赖顺序见[里程碑路线](../milestones/milestones.md)。
+契约见 [Preset 契约](../interfaces/preset.md)，解析语义见 [Preset 架构](../architecture/preset.md)
+的依赖图与 Resolution 一节。
 
 ## 8. 相关文档
 

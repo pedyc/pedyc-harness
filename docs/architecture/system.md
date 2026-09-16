@@ -61,7 +61,7 @@ Core 中不得出现任何技术栈分支。技术栈差异通过 Preset 表达,
 
 ## 3. 一次 Run 的执行顺序
 
-`run` 由 `packages/cli/src/run.ts` 驱动,核心循环在 `packages/core/src/core/executor.ts`。
+`run` 由 `packages/cli/src/run.ts` 驱动,核心循环在 `packages/core/src/runtime/executor.ts`。
 
 | # | 阶段 | 关键行为 | 产物 |
 | - | ---------------- | ------------------------------------------------------------------------ | ---------------------------------- |
@@ -91,17 +91,17 @@ Core 中不得出现任何技术栈分支。技术栈差异通过 Preset 表达,
 
 | 模块 | 回答的问题 | 实现 |
 | ------------- | ---------------------- | --------------------------------------------- |
-| Intake | 输入是什么 | `packages/core/src/core/intake.ts` |
-| Contract | 任务要求是什么 | `core/validator.ts` + `schemas/input.schema.json` |
-| Policy | 允许做什么 | `core/policy-engine.ts` |
-| Executor | 如何推进一次 Run | `core/executor.ts` |
-| Adapter | 如何调用 Agent | `adapters/provider-runner.ts` |
-| Diff | 实际改了什么 | `core/diff-inspector.ts` |
-| Validator | 是否通过独立检查 | `core/validator.ts` + `core/approval-gate.ts` |
-| Review | 是否满足要求 | `core/approval-gate.ts` + Reviewer 阶段 |
+| Intake | 输入是什么 | `packages/core/src/runtime/intake.ts` |
+| Contract | 任务要求是什么 | `config/schema.ts` + `schemas/input.schema.json` |
+| Policy | 允许做什么 | `runtime/policy-engine.ts` |
+| Executor | 如何推进一次 Run | `runtime/executor.ts` |
+| Adapter | 如何调用 Agent | `runtime/provider-runner.ts` |
+| Diff | 实际改了什么 | `runtime/diff-inspector.ts` |
+| Validator | 是否通过独立检查 | `config/schema.ts` + `runtime/approval-gate.ts` |
+| Review | 是否满足要求 | `runtime/approval-gate.ts` + Reviewer 阶段 |
 | Run Record | 如何留下证据 | `.harness/runs/<run-id>/` |
 
-Policy 当前的执行能力需要准确理解(`core/policy-engine.ts` 共三个函数):
+Policy 当前的执行能力需要准确理解(`runtime/policy-engine.ts` 共三个函数):
 
 - `validatePolicy` 校验字段形状,`allowedProductPaths` 是唯一必填项。
 - `findOutOfScopeChanges` 用**前缀匹配**比对改动路径与 `allowedProductPaths`。
@@ -151,19 +151,31 @@ Agent ──self-report──→ Agent 的自述
 
 ## 7. 配置从哪里来
 
-当前:Runtime 直接读取 `.harness/policy.json` 与 `.harness/agents.json`。不存在 `harness.json`,
-也不存在 Preset 继承与配置合成——CLI 的 `presets.ts` 是一张两个表项的静态表。
+配置由一个独立的**配置层**解析(`packages/core/src/config/`),它拥有所有对项目配置文档的读取:
 
-> **目标(M15/M16)** 配置解析将变成一条管线:
-> `.harness/harness.json` → Preset Resolver(依赖图 / 循环检测 / 拓扑排序)→ Config Resolver
-> (字段级合并语义)→ Effective Governance → Runtime。届时 Runtime 只消费合成结果,不再关心某个值
-> 来自 Preset、项目还是任务,并由 provenance 回答"为什么用这条 Policy"。
->
-> 该管线**尚未实现**。完整设计与合并语义见 [Preset 设计](./preset.md);阶段与依赖顺序见
-> [里程碑路线](../milestones/milestones.md)。
+```text
+.harness/harness.json (Manifest)
+        ↓
+resolvePresets            预设解析:递归 extends、去重、环检测
+        ↓
+policy / agents           来自预设,或项目自己的 .harness/ 文档
+        ↓
+LoadedHarnessConfig       含 sources:每个值是从哪读到的
+```
 
-`.harness/` 的两类内容必须分开:治理定义(`policy.json`、`agents.json`,应提交)与运行时状态
-(`runs/`,应 gitignore)。
+`.harness/harness.json` 是**入口配置**,不是全部配置:它只回答「这个项目加载哪些配置」。`run` 与
+`verify` 都不再直接读 `.harness/policy.json`——配置在**任何阶段执行之前**解析完毕,一个无法解析的
+项目绝不会被部分执行,也不会在与 Agent 交互到一半时才发现配置有问题(退出码 5)。
+
+解析结果带 `sources`(`kind` / `location` / `active`),`doctor` 会把它们打印出来。这是刻意的:
+一次运行实际用到哪些值原本不可见,而**回退到内置默认值与刻意配置在外观上完全一样**。
+
+> **目标(M17)** 把多个来源**合成**为 `EffectiveHarnessConfig`——字段级合并语义、安全约束的
+> deny-wins、provenance 随 Run Record 保存——**尚未实现**。当前解析出的是一个有序的预设列表
+> (依赖在前),「更具体者胜出」目前只体现在 `instruction` 的选取上。
+
+`.harness/` 的两类内容必须分开:治理定义(`harness.json`、`policy.json`、`agents.json`、schema,
+应提交)与运行时状态(`runs/`,应 gitignore)。
 
 ## 8. 边界
 

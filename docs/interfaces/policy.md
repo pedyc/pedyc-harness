@@ -2,7 +2,7 @@
 
 > `.harness/policy.json` 的形状,以及三个真正执行它的函数。
 >
-> 来源:`packages/core/src/contracts/policy.ts`、`packages/core/src/core/policy-engine.ts`。
+> 来源:`packages/core/src/contracts/policy.ts`、`packages/core/src/config/policy.ts`、`packages/core/src/runtime/policy-engine.ts`。
 
 ## 1. 类型
 

@@ -3,7 +3,7 @@ import { createRequire } from 'node:module'
 // Three layers, with dependencies pointing one way: `contracts/` holds pure
 // types and schema compilation, `config/` owns every read of a project's
 // configuration documents, and `runtime/` executes a run against values the
-// config layer already resolved. See `docs/核心架构.md`.
+// config layer already resolved. See `docs/architecture/system.md`.
 export type * from './contracts/index.js'
 export type { ConfigProblem, ManifestResult } from './config/index.js'
 export {

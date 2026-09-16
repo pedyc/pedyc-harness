@@ -2,7 +2,7 @@
 
 > Harness 如何调用一个外部 Agent。这是 Harness 与 Coding Agent 之间唯一的协议面。
 >
-> 来源:`packages/core/src/contracts/agent.ts`、`packages/core/src/adapters/provider-runner.ts`。
+> 来源:`packages/core/src/contracts/agent.ts`、`packages/core/src/runtime/provider-runner.ts`。
 
 ## 1. 配置类型
 
@@ -118,7 +118,7 @@ type RunAgent = (name: AgentRole, request: StageRequest) => Promise<AgentCallRes
 | 不符合响应 schema | `"<role> returned an invalid response: …"` |
 | 不满足阶段要求 | 由 `validateStageResponse` 给出的描述 |
 
-阶段要求(见 [Core 契约 §6](./core.md)):planner 需要非空 `implementationPlan`;tester 需要布尔
+阶段要求(见 [Core 契约 §7](./core.md)):planner 需要非空 `implementationPlan`;tester 需要布尔
 `approved` 与非空 `evidence`;reviewer 需要布尔 `approved`。
 
 `agentTimeoutMs` 存在于 Policy 中但**未被使用**:`runCommand` 不设置超时,因此一个挂起的

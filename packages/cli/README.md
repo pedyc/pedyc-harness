@@ -60,7 +60,7 @@ and Core never learns the words `generic` or `vue`.
 
 A Provider is a local command that receives one JSON request on stdin and writes one
 JSON response to stdout. Diagnostics go to stderr. See the repository
-[Provider design](https://github.com/pedyc/pedyc-harness/blob/main/docs/Provider%E8%AE%BE%E8%AE%A1.md).
+[Provider design](https://github.com/pedyc/pedyc-harness/blob/main/docs/architecture/provider.md).
 
 ## Changelog
 

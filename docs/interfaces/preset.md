@@ -1,89 +1,102 @@
 # Preset 契约
 
-> `Preset` 是 `pedyc-harness init` 写入目标项目的配置来源,也是技术栈差异的唯一载体。
+> Preset 是**数据,不是代码**:它是一个 npm 包,用 `preset.json` 声明自己继承什么、提供了哪些文档。
+> 包内没有任何东西会被执行。
 >
-> 来源:`packages/core/src/contracts/preset.ts`、`packages/cli/src/presets.ts`。
+> 来源:`packages/core/src/contracts/preset.ts`、`packages/core/src/config/presets.ts`、
+> `packages/cli/src/presets.ts`。
 
 ## 1. 类型
 
 ```ts
-interface PresetDetection {
-  requiredFiles: string[]
-  requiredDependencies: string[]
+interface PresetManifest {
+  name: string                  // 必须等于所在包的包名
+  extends?: string[]            // 包名,不含版本
+  policy?: string               // 包内相对路径
+  agents?: string               // 包内相对路径
+  instruction?: string          // 包内相对路径,init 用它播种 AGENTS.md
+  verification?: string         // 声明保留;暂无运行时消费
+  rules?: string[]              // 声明保留;暂无运行时消费
 }
 
-interface Preset {
-  name: string
-  detection: PresetDetection
-  defaultProductPaths: string[]
-  verificationScripts: string[]
-  skills: string[]
-  policy: Policy
-  agents: AgentsConfig
-  instruction: string
+interface ResolvedPreset {
+  packageName: string           // 来自哪个 npm 包
+  name: string                  // 清单里的名字,等于 packageName
+  directory: string             // 包目录的绝对路径
+  extends: string[]             // 直接依赖,声明顺序,已去重
+  manifest: PresetManifest      // 校验过的 preset.json
 }
 ```
 
-## 2. 字段是否真的被读取
+`name` 必须等于解析它的那个包,否则 `extends` 会有歧义,循环报告也会指向一个读者找不到的包。
+所有相对路径只能指向**本包之内**,不得越出包目录。
 
-这是使用本契约时最容易出错的地方——八个字段里**只有四个被任何代码消费**:
+`verification` 与 `rules` 是当前仅有的两个「声明了但无人消费」的字段。相比之下旧模型有四个死字段
+(`detection`、`defaultProductPaths`、`verificationScripts`、`skills`)——那一组类型已不存在。
 
-| 字段 | 是否被读取 | 作用 |
-| ---------------------- | ---------- | ------------------------------------------------ |
-| `name` | ✅ | `init/diff/update --preset <name>` 的表键 |
-| `policy` | ✅ | 原样写成 `.harness/policy.json` |
-| `agents` | ✅ | 原样写成 `.harness/agents.json` |
-| `instruction` | ✅ | 原样写成 `AGENTS.md` |
-| `detection` | ❌ | 声明了 `requiredFiles`/`requiredDependencies`,无人读取 |
-| `defaultProductPaths` | ❌ | 同上 |
-| `verificationScripts` | ❌ | 同上(闸门实际来自 `policy.requiredChecks`) |
-| `skills` | ❌ | 同上,且没有对应的落盘机制 |
-
-四个死字段意味着:改动它们不会产生任何效果。若要依赖其中任何一项,必须先让它被消费。
-
-## 3. 落盘结果
-
-`init` 把 Preset 展开成目标项目里的文件:
-
-| 产物 | 来源 |
-| ------------------------------------------- | ------------------------------ |
-| `.harness/policy.json` | `preset.policy` |
-| `.harness/agents.json` | `preset.agents` |
-| `AGENTS.md` | `preset.instruction` |
-| `.harness/task.example.json` | CLI 内置模板,**与 Preset 无关** |
-| `.harness/input.schema.json` | CLI 内置模板 |
-| `.harness/output.schema.json` | CLI 内置模板 |
-| `.harness/agent-response.schema.json` | CLI 内置模板 |
-
-`schema` 与 `task.example.json` 来自 `packages/cli/templates/`,任何 Preset 都得到同一份。
-
-## 4. Preset 如何被解析
-
-`packages/cli/src/presets.ts` 是一张**两个表项的静态 `Map`**:
+## 2. 解析
 
 ```ts
-const presets = new Map([
-  [genericPreset.name, genericPreset],
-  [vuePreset.name, vuePreset],
-])
+resolvePresets(root: string, requested: string[]): PresetsResult
+presetPackageName(requested: string): string
 ```
 
-因此当前:
+- `presetPackageName` 按**约定**展开:`vue` → `@pedyc/harness-preset-vue`;任何含 `/` 的值本身
+  就是包名。**CLI 里没有预设表**——一张表意味着每出现一个新预设都要重新发布 CLI。
+- `resolvePresets` 递归加载 `extends`,去重、检测循环,返回**依赖在前**的 `ResolvedPreset[]`:
+  靠后的条目总是比它继承的更具体。继承关系只在解析结果里可见——项目能从 `harness.json` 看到自己
+  声明了哪些包,但只有解析器知道它们拉进了什么。
 
-- 只有 `generic` 与 `vue` 可选,`--preset` 传其他值会报错并列出可用项;
-- 没有 npm 发现机制、没有 `extends`、没有依赖图、没有环检测、没有配置合并;
-- 第三方无法通过发布 npm 包新增 Preset,必须改这张表。
+解析失败返回结构化的 `HarnessConfigError[]`,相关错误码见 [Core 契约](./core.md):
+`preset_not_installed`、`preset_manifest_unreadable`、`preset_manifest_invalid_json`、
+`preset_manifest_invalid`、`preset_cyclic`、`preset_path_outside_package`。
 
-## 5. 目标形态
+## 3. Preset 包长什么样
 
-> **目标(M16)** Preset 将成为独立的 npm package,提供 `preset.json` 清单、`extends` 继承、
-> DAG 解析(去重 + 环检测 + 拓扑排序)与字段级合并语义,最终合成为 Effective Governance 交给
-> Runtime。当前以上均**未实现**。
+两个官方预设的实际清单:
 
-完整设计与合并语义见[Preset 设计](../architecture/preset.md),阶段与依赖顺序见
-[里程碑路线](../milestones/milestones.md)。
+| 项 | 值 |
+| ------------ | ---------------------------------------------------------------- |
+| `exports` | `./preset.json` |
+| `files` | `preset.json`、`policy.json`、`agents.json`、`AGENTS.md`、`README.md` |
+| `scripts` | 无 |
+| 依赖 | 无(含 `peerDependencies`) |
+| `src/`、`dist/` | 无 |
+
+没有 `build` 脚本,因此 `pnpm -r run build` 不构建它们;`release:check` 也断言预设包不携带
+`src/` 或 `dist/`——一个仍然发布代码的预设会成为「什么是该预设」的第二份、且静默权威的定义。
+
+`policy.json` / `agents.json` 由**解析器**在运行时读取;`instruction` 指向的 markdown 由 `init`
+读取并写入目标项目的 `AGENTS.md`(取最后一个提供了 instruction 的预设)。**预设的内容不会被复制
+进目标项目**,这正是升级时不会覆盖项目自身修改的原因。
+
+## 4. CLI 如何使用 Preset
+
+```bash
+pedyc-harness init --preset vue               # 展开为 @pedyc/harness-preset-vue
+pedyc-harness init --preset @acme/harness-preset-motion
+pedyc-harness init --preset vue --no-install  # 包已就位时跳过安装
+```
+
+`init` 先解析目标预设;若失败且原因**仅仅是包未安装**,则用探测到的包管理器安装它
+(`npm install --save-dev` / `yarn add --dev` / `pnpm add --save-dev`),然后重新解析。也就是说
+`init` 只安装真正缺失的东西——重复执行 `init`、以及示例与测试里的场景都不会触网。
+
+`list-presets` 用**同一次解析**列出项目跟随的预设及各自的继承,并标注 `declared`(来自
+`harness.json`)或 `inherited`,顺序即解析器应用的顺序。列表因此不会与实际加载的内容漂移。
+
+## 5. 配置合并尚未实现
+
+> **目标(M17)** 把多个来源合成为 `EffectiveHarnessConfig`、字段级合并语义
+> (见 [Preset 设计](../architecture/preset.md) 的合并策略表)、以及安全约束的 deny-wins——
+> **均未实现**。
+
+当前解析出的是一个**有序的预设列表**,不是合并后的配置。`ResolvedPreset[]` 依赖在前,「更具体者
+胜出」目前只体现在 `instruction` 的选取上(取最后一个),尚未推广到 policy 与 agents 的字段级合并。
 
 ## 6. 相关文档
 
-- [Core 契约](./core.md) · [Policy 契约](./policy.md) · [Provider 契约](./provider.md)
-- [Preset 设计](../architecture/preset.md) · [CLI 契约](./cli.md)
+- [Core 契约](./core.md) — `HarnessManifest`、`ConfigSource`、配置错误码
+- [CLI 契约](./cli.md) — `init` / `list-presets` / `verify` 的行为
+- [Policy 契约](./policy.md) · [Provider 契约](./provider.md)
+- [Preset 设计](../architecture/preset.md) · [里程碑路线](../milestones/milestones.md)
