@@ -14,6 +14,12 @@ dist-ssr
 *.local
 .npmrc
 
+# VitePress (docs site). Paths are written out in full because a pattern
+# containing a slash is anchored to this file's directory: `.vitepress/cache`
+# would never match `docs/.vitepress/cache`.
+docs/.vitepress/cache
+docs/.vitepress/dist
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -25,6 +25,7 @@
     "harness:verify": "node scripts/harness/cli.mjs verify",
     "harness:run": "node scripts/harness/cli.mjs run",
     "verify:examples": "node scripts/dist/verify-examples.js",
+    "docs:check": "pnpm --dir docs run check",
     "release:check": "node scripts/dist/release-check.js",
     "release:publish": "node scripts/dist/publish.js",
     "test:unit": "pnpm run build && vitest run"

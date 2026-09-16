@@ -1,2 +1,7 @@
 packages:
   - packages/*
+  # The documentation site. It is a workspace member so one `pnpm install`
+  # covers it and CI needs no separate install step. It is private, defines no
+  # `build` script, and is therefore never picked up by the root build or by
+  # the release pipeline.
+  - docs

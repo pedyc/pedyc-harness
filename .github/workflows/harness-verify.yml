@@ -26,6 +26,8 @@ jobs:
       # The derived schema copies must match schemas/ before anything ships.
       - run: pnpm run schemas:check
       - run: pnpm run verify:examples
+      # Documentation is a product surface: every relative link must resolve.
+      - run: pnpm run docs:check
       - run: pnpm run release:check
       - run: pnpm run type-check
       - run: pnpm run test:unit

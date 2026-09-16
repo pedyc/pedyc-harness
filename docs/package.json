@@ -1,0 +1,17 @@
+{
+  "name": "@pedyc/harness-docs",
+  "version": "1.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Documentation site for pedyc-harness",
+  "scripts": {
+    "dev": "vitepress dev",
+    "docs:build": "vitepress build",
+    "preview": "vitepress preview",
+    "docs:conventions": "node scripts/check-conventions.mjs",
+    "check": "pnpm run docs:conventions && pnpm run docs:build"
+  },
+  "devDependencies": {
+    "vitepress": "^1.6.4"
+  }
+}
