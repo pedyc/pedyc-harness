@@ -6,6 +6,7 @@ import type { PackageScriptCommand } from '@pedyc/harness-core'
 export const getVerificationCommand = (root: string, script: string): PackageScriptCommand =>
   packageScriptCommand(root, script)
 
-export { availablePresets, getPreset } from './presets.js'
+export { installPreset, presetPackageName, resolveProjectPresets } from './presets.js'
+export type { PresetsResult } from './presets.js'
 export { runCli } from './cli.js'
 export { runHarness } from './run.js'

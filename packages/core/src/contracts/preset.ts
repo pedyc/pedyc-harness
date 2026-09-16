@@ -1,28 +1,52 @@
-import type { AgentsConfig } from './agent.js'
-import type { Policy } from './policy.js'
-
-/** What a preset looks for when deciding whether it applies to a project. */
-export interface PresetDetection {
-  requiredFiles: string[]
-  requiredDependencies: string[]
+/**
+ * The `preset.json` document shipped inside a preset package.
+ *
+ * A preset is data, not code. It declares what it inherits and where the
+ * documents it provides live inside its own package; nothing in it is executed,
+ * and no field may point outside the package directory.
+ */
+export interface PresetManifest {
+  /**
+   * The package name, e.g. `@pedyc/harness-preset-vue`.
+   *
+   * It must equal the package the manifest was resolved from. Two packages
+   * claiming one identity would make `extends` ambiguous and make a cycle
+   * report name a package the reader cannot find.
+   */
+  name: string
+  /**
+   * Package names this preset inherits from, never versions: versions belong to
+   * `package.json` and the lockfile, so a project upgrades a preset the same way
+   * it upgrades any other dependency.
+   */
+  extends?: string[]
+  /** Path to a policy document inside this package. */
+  policy?: string
+  /** Path to an agent configuration document inside this package. */
+  agents?: string
+  /** Path to the markdown `init` uses to seed the target project's `AGENTS.md`. */
+  instruction?: string
+  /** Declared for forward compatibility; no runtime consumes it yet. */
+  verification?: string
+  /** Declared for forward compatibility; no runtime consumes it yet. */
+  rules?: string[]
 }
 
 /**
- * A project preset: the files `pedyc-harness init` writes into a target project
- * and the defaults it derives from them.
+ * A preset that has been located and whose inheritance has been resolved.
  *
- * The shape is declared here rather than in the preset packages so the packages
- * stay independent of each other. Presets import this as a type only, so nothing
- * is coupled at runtime.
+ * `ResolvedPreset[]` is ordered dependencies-first, so a later entry is always
+ * more specific than the ones it inherits from.
  */
-export interface Preset {
+export interface ResolvedPreset {
+  /** The npm package name this preset came from. */
+  packageName: string
+  /** The name the preset manifests under. Equal to `packageName`. */
   name: string
-  detection: PresetDetection
-  defaultProductPaths: string[]
-  verificationScripts: string[]
-  skills: string[]
-  policy: Policy
-  agents: AgentsConfig
-  /** Written to the target project's `AGENTS.md`. */
-  instruction: string
+  /** Absolute path of the package directory. */
+  directory: string
+  /** Direct dependencies in declaration order, deduplicated by the resolver. */
+  extends: string[]
+  /** The validated `preset.json` contents. */
+  manifest: PresetManifest
 }

@@ -13,44 +13,48 @@
       "default": "./dist/index.js"
     },
     "./package-manager": {
-      "types": "./dist/core/package-manager.d.ts",
-      "default": "./dist/core/package-manager.js"
+      "types": "./dist/runtime/package-manager.d.ts",
+      "default": "./dist/runtime/package-manager.js"
     },
     "./intake": {
-      "types": "./dist/core/intake.d.ts",
-      "default": "./dist/core/intake.js"
+      "types": "./dist/runtime/intake.d.ts",
+      "default": "./dist/runtime/intake.js"
     },
     "./command": {
-      "types": "./dist/core/command.d.ts",
-      "default": "./dist/core/command.js"
+      "types": "./dist/runtime/command.d.ts",
+      "default": "./dist/runtime/command.js"
     },
     "./snapshots": {
-      "types": "./dist/core/diff-inspector.d.ts",
-      "default": "./dist/core/diff-inspector.js"
+      "types": "./dist/runtime/diff-inspector.d.ts",
+      "default": "./dist/runtime/diff-inspector.js"
     },
     "./schema": {
-      "types": "./dist/core/validator.d.ts",
-      "default": "./dist/core/validator.js"
+      "types": "./dist/config/schema.d.ts",
+      "default": "./dist/config/schema.js"
     },
     "./agent": {
-      "types": "./dist/core/agent.d.ts",
-      "default": "./dist/core/agent.js"
+      "types": "./dist/runtime/agent.d.ts",
+      "default": "./dist/runtime/agent.js"
     },
     "./policy": {
-      "types": "./dist/core/policy-engine.d.ts",
-      "default": "./dist/core/policy-engine.js"
+      "types": "./dist/runtime/policy-engine.d.ts",
+      "default": "./dist/runtime/policy-engine.js"
     },
     "./provider": {
-      "types": "./dist/adapters/provider-runner.d.ts",
-      "default": "./dist/adapters/provider-runner.js"
+      "types": "./dist/runtime/provider-runner.d.ts",
+      "default": "./dist/runtime/provider-runner.js"
     },
     "./orchestrator": {
-      "types": "./dist/core/executor.d.ts",
-      "default": "./dist/core/executor.js"
+      "types": "./dist/runtime/executor.d.ts",
+      "default": "./dist/runtime/executor.js"
     },
     "./contracts": {
       "types": "./dist/contracts/index.d.ts",
       "default": "./dist/contracts/index.js"
+    },
+    "./config": {
+      "types": "./dist/config/index.d.ts",
+      "default": "./dist/config/index.js"
     }
   },
   "repository": {
@@ -79,6 +83,7 @@
   },
   "files": [
     "dist",
+    "schemas",
     "README.md"
   ]
 }

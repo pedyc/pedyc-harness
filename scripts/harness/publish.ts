@@ -33,7 +33,9 @@ const run = (command: string, args: string[], cwd: string) => {
   return spawnSync(line, { ...options, shell: true })
 }
 
-// Dependency order: the CLI depends on Core and both presets.
+// Dependency order. Since the presets became data packages only the CLI depends on
+// Core, so Core still has to go first; the presets go before the CLI to keep the
+// published order matching the order this repository describes.
 const packages = [
   { dir: 'packages/core', name: '@pedyc/harness-core' },
   { dir: 'packages/preset-generic', name: '@pedyc/harness-preset-generic' },

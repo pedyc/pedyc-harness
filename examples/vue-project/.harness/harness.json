@@ -1,0 +1,7 @@
+{
+  "$schema": "https://pedyc.dev/schema/harness.json",
+  "version": 1,
+  "presets": [
+    "@pedyc/harness-preset-vue"
+  ]
+}

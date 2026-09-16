@@ -207,7 +207,15 @@ harness init --preset generic
 harness init --preset vue
 ```
 
-初始化后，项目会生成 `.harness/` 配置和相关规则。
+初始化后，项目会得到 `.harness/harness.json`、契约文件和 `AGENTS.md`。Preset 本身是一个 npm
+依赖：`init` 在它不可解析时会安装它，而 `policy.json` / `agents.json` 仍然留在 Preset 包里，
+由运行时按 Manifest 声明读取——不复制进项目，因此升级 Preset 就是升级依赖。
+
+想确认实际解析到了什么：
+
+```bash
+harness list-presets
+```
 
 ---
 
@@ -360,8 +368,11 @@ Core 不依赖 Vue，也不依赖具体 Agent Provider。
 | ------------------------------- | -------------------------------- |
 | `@pedyc/harness-core`           | Harness 核心 Runtime / Domain    |
 | `pedyc-harness`                 | CLI                              |
-| `@pedyc/harness-preset-generic` | 通用 Preset                      |
-| `@pedyc/harness-preset-vue`     | Vue 3 + TypeScript + Vite Preset |
+| `@pedyc/harness-preset-generic` | 通用 Preset（纯数据包）          |
+| `@pedyc/harness-preset-vue`     | Vue 3 + TypeScript + Vite Preset（纯数据包） |
+
+两个 Preset 包只有 `preset.json`、`policy.json`、`agents.json`、`AGENTS.md`，没有代码、没有构建
+步骤、也不依赖 Core：Preset 是数据，不是模块。
 
 设计目标：
 
@@ -461,9 +472,25 @@ Preset                   复用默认治理能力
 其中 `.harness/` 是 Harness 的项目控制面，治理定义（Policy、Verification、Rules、Tasks）进入
 版本库，运行记录（`.harness/runs/`）不进入。
 
-> 规划中：`.harness/harness.json` 将作为入口配置（Harness Manifest），只声明使用哪些 Preset 和
-> 配置来源；Preset 将以 npm package 分发并支持继承。Packages 目前尚未实现这些能力，详见
-> [`docs/核心架构.md`](docs/核心架构.md) 与 [`docs/Preset设计.md`](docs/Preset设计.md)。
+`.harness/harness.json` 是入口配置（Harness Manifest），只声明使用哪些 Preset 和配置来源：
+
+```json
+{
+  "$schema": "https://pedyc.dev/schema/harness.json",
+  "version": 1,
+  "presets": ["@pedyc/harness-preset-vue"]
+}
+```
+
+配置来源按 Manifest → 约定位置（`.harness/policy.json`、`.harness/agents.json`）→ Preset →
+内置默认值的顺序选择，取整份文档而不是逐字段合并。没有 `harness.json` 的项目行为不变；
+`pedyc-harness doctor` 会报告实际生效的来源。
+
+`presets` 里的名字就是 npm 包名：不含 `/` 的短名会被展开为 `@pedyc/harness-preset-<name>`，
+含 `/` 的原样使用，因此团队 Preset 不需要在本仓库注册任何东西。解析支持 `extends` 继承，
+同一个 Preset 无论被多少条链引用都只加载一次，循环依赖会报出完整环路。字段级合并、
+provenance 与 `EffectiveHarnessConfig` 仍属规划中（M17），详见
+[`docs/Preset设计.md`](docs/Preset设计.md)。
 
 Harness 的目标不是接管项目本身的工程配置，而是在项目现有工程规则之上增加一层可验证的执行治理。
 
@@ -605,7 +632,7 @@ M11
 TypeScript Migration（已完成）
     ↓
 M15 → M16
-Config Foundation / Preset Resolution
+Config Foundation / Preset Resolution（已完成）
     ↓
 M7 → M8
 Policy Enforcement / Independent Verification

@@ -4,17 +4,15 @@ import { normalizeTask, readTaskFile } from '@pedyc/harness-core/intake'
 import { detectPackageManager } from '@pedyc/harness-core/package-manager'
 import { runCommand } from '@pedyc/harness-core/command'
 import { changedFiles, snapshotFiles } from '@pedyc/harness-core/snapshots'
+import { formatConfigError, loadHarnessConfig } from '@pedyc/harness-core/config'
 import { loadSchemas, createValidators, validationDetails } from '@pedyc/harness-core/schema'
-import { validatePolicy } from '@pedyc/harness-core/policy'
 import { createProviderRunner } from '@pedyc/harness-core/provider'
 import { runOrchestrator } from '@pedyc/harness-core/orchestrator'
-import type {
-  AgentsConfig,
-  IntakeResult,
-  NormalizedTask,
-  Policy,
-  RunResult,
-} from '@pedyc/harness-core/contracts'
+import type { IntakeResult, NormalizedTask, RunResult } from '@pedyc/harness-core/contracts'
+
+// Exit codes from `docs/CLI设计.md` §8.
+const EXIT_FAILED = 1
+const EXIT_CONFIG = 5
 
 interface RunOptions {
   argv?: string[]
@@ -71,24 +69,27 @@ export const runHarness = async ({
     if (jsonOnly || !outputPath) process.stdout.write(serialized)
   }
 
-  const validators = createValidators(loadSchemas(root))
-  const policy = readJson(join(root, '.harness/policy.json'))
-  const agents = readJson(join(root, '.harness/agents.json')) as AgentsConfig
-  const policyError = validatePolicy(policy)
-  if (policyError) {
-    emit(fail(policyError, 'policy'))
-    return 1
+  // Configuration is resolved before anything runs, and a project that cannot
+  // be resolved is never partially executed: a bad policy must not fail
+  // halfway through a run with a provider already paid for.
+  const loaded = loadHarnessConfig(root)
+  if (!loaded.ok) {
+    const details = loaded.errors.map(formatConfigError).join(' ')
+    emit(fail(details, 'config'))
+    for (const error of loaded.errors) console.error(formatConfigError(error))
+    return EXIT_CONFIG
   }
-  // `validatePolicy` returned null, which is what licenses this narrowing.
-  const checkedPolicy = policy as Policy
+  const { policy: checkedPolicy, agents } = loaded.config
+
+  const validators = createValidators(loadSchemas(root))
 
   if (taskPath && !existsSync(resolve(root, taskPath))) {
     emit(fail(`Human task was not found: ${taskPath}`, 'intake'))
-    return 1
+    return EXIT_FAILED
   }
   if (!taskPath && !prompt && !existsSync(inputPath)) {
     emit(fail(`Task input was not found: ${relative(root, inputPath)}`))
-    return 1
+    return EXIT_FAILED
   }
 
   let input: NormalizedTask
@@ -100,17 +101,17 @@ export const runHarness = async ({
         : { status: 'ready', normalizedTask: readJson(inputPath) as NormalizedTask, questions: [] }
     if (intake.status !== 'ready') {
       emit(fail(`Intake requires clarification: ${intake.questions.join(' ')}`, 'intake'))
-      return 1
+      return EXIT_FAILED
     }
     input = intake.normalizedTask
   } catch (error) {
     emit(fail(`Task input is not valid JSON: ${error instanceof Error ? error.message : 'unknown error'}`))
-    return 1
+    return EXIT_FAILED
   }
 
   if (!validators.input(input)) {
     emit(fail(`Task input violates input.schema.json: ${validationDetails(validators.ajv, validators.input)}`))
-    return 1
+    return EXIT_FAILED
   }
 
   const runPackageScript = (script: string) => {
@@ -174,9 +175,9 @@ export const runHarness = async ({
 
   if (!validators.output(result)) {
     emit(fail(`Harness output violates output.schema.json: ${validationDetails(validators.ajv, validators.output)}`, 'output'))
-    return 1
+    return EXIT_FAILED
   }
 
   emit(result)
-  return orchestration.completed ? 0 : 1
+  return orchestration.completed ? 0 : EXIT_FAILED
 }

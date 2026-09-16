@@ -14,19 +14,18 @@
     "paths": {
       "pedyc-harness": ["./packages/cli/src/index.ts"],
       "pedyc-harness/run": ["./packages/cli/src/run.ts"],
-      "@pedyc/harness-preset-generic": ["./packages/preset-generic/src/index.ts"],
-      "@pedyc/harness-preset-vue": ["./packages/preset-vue/src/index.ts"],
       "@pedyc/harness-core": ["./packages/core/src/index.ts"],
-      "@pedyc/harness-core/package-manager": ["./packages/core/src/core/package-manager.ts"],
-      "@pedyc/harness-core/intake": ["./packages/core/src/core/intake.ts"],
-      "@pedyc/harness-core/command": ["./packages/core/src/core/command.ts"],
-      "@pedyc/harness-core/snapshots": ["./packages/core/src/core/diff-inspector.ts"],
-      "@pedyc/harness-core/schema": ["./packages/core/src/core/validator.ts"],
-      "@pedyc/harness-core/agent": ["./packages/core/src/core/agent.ts"],
-      "@pedyc/harness-core/policy": ["./packages/core/src/core/policy-engine.ts"],
-      "@pedyc/harness-core/provider": ["./packages/core/src/adapters/provider-runner.ts"],
-      "@pedyc/harness-core/orchestrator": ["./packages/core/src/core/executor.ts"],
-      "@pedyc/harness-core/contracts": ["./packages/core/src/contracts/index.ts"]
+      "@pedyc/harness-core/package-manager": ["./packages/core/src/runtime/package-manager.ts"],
+      "@pedyc/harness-core/intake": ["./packages/core/src/runtime/intake.ts"],
+      "@pedyc/harness-core/command": ["./packages/core/src/runtime/command.ts"],
+      "@pedyc/harness-core/snapshots": ["./packages/core/src/runtime/diff-inspector.ts"],
+      "@pedyc/harness-core/schema": ["./packages/core/src/config/schema.ts"],
+      "@pedyc/harness-core/agent": ["./packages/core/src/runtime/agent.ts"],
+      "@pedyc/harness-core/policy": ["./packages/core/src/runtime/policy-engine.ts"],
+      "@pedyc/harness-core/provider": ["./packages/core/src/runtime/provider-runner.ts"],
+      "@pedyc/harness-core/orchestrator": ["./packages/core/src/runtime/executor.ts"],
+      "@pedyc/harness-core/contracts": ["./packages/core/src/contracts/index.ts"],
+      "@pedyc/harness-core/config": ["./packages/core/src/config/index.ts"]
     }
   },
   "include": ["tests/**/*.ts", "vitest.config.ts"]

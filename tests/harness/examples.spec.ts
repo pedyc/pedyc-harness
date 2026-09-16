@@ -1,4 +1,4 @@
-import { copyFile, cp, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { copyFile, cp, mkdir, mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { spawn } from 'node:child_process'
@@ -84,12 +84,18 @@ const createProject = async ({
   return root
 }
 
-const copyExample = async (name: string) => {
+const copyExample = async (name: string, preset: string) => {
   const root = await mkdtemp(join(tmpdir(), `pedyc-example-${name}-`))
   await cp(join(repoRoot, 'examples', name), root, {
     recursive: true,
     filter: (source) => !source.includes(join('.harness', 'runs')),
   })
+  // The example declares a preset, and a preset is resolved like any other
+  // dependency: outside the workspace that means an install, so the copy needs
+  // the package resolvable from its own directory.
+  const scope = join(root, 'node_modules', '@pedyc')
+  await mkdir(scope, { recursive: true })
+  await symlink(join(repoRoot, `packages/preset-${preset}`), join(scope, `harness-preset-${preset}`), 'junction')
   return root
 }
 
@@ -101,7 +107,7 @@ const examples = [
 
 describe('external project examples', () => {
   it.each(examples)('passes init, verify, doctor and dry-run for $directory', async ({ directory, preset, manager }) => {
-    const root = await copyExample(directory)
+    const root = await copyExample(directory, preset)
     const policyPath = join(root, '.harness/policy.json')
     const before = await readFile(policyPath, 'utf8')
 
@@ -130,10 +136,13 @@ describe('external project compatibility', () => {
 
     const result = await runCli(root, 'run', '--dry-run', '--json')
 
-    expect(result.code).toBe(1)
+    // A project that cannot be resolved is a configuration error, which
+    // `docs/CLI设计.md` §8 gives its own exit code rather than folding into a
+    // failed run.
+    expect(result.code).toBe(5)
     const output = JSON.parse(result.stdout) as { status: string; phases: { name: string }[]; issues: string[] }
     expect(output.status).toBe('failed')
-    expect(output.phases[0].name).toBe('policy')
+    expect(output.phases[0].name).toBe('config')
     expect(output.issues.join(' ')).toContain('allowedProductPaths')
   })
 

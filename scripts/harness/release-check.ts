@@ -77,8 +77,14 @@ const packages: PackageDefinition[] = [
       // entry points and their declarations rather than the TypeScript sources.
       'package/dist/index.js',
       'package/dist/index.d.ts',
-      'package/dist/core/executor.js',
+      'package/dist/runtime/executor.js',
       'package/dist/contracts/index.js',
+      // Load-bearing, not documentation: `loadHarnessConfig` validates
+      // `harness.json` against this bundled copy, so a tarball without it
+      // cannot load any manifest at all. The preset schema is the same argument
+      // one step further out, and only matters once a project declares a preset.
+      'package/schemas/harness.schema.json',
+      'package/schemas/preset.schema.json',
     ],
   },
   {
@@ -96,18 +102,36 @@ const packages: PackageDefinition[] = [
       'package/templates/input.schema.json',
       'package/templates/output.schema.json',
       'package/templates/agent-response.schema.json',
+      'package/templates/harness.schema.json',
       'package/templates/task.example.json',
     ],
   },
   {
+    // Presets are data packages. There is no build step and no compiled entry
+    // point to check: the resolver reads these four files and nothing else, so
+    // their presence in the tarball is the whole contract.
     dir: 'packages/preset-generic',
     name: '@pedyc/harness-preset-generic',
-    require: ['package/package.json', 'package/README.md', 'package/dist/index.js'],
+    require: [
+      'package/package.json',
+      'package/README.md',
+      'package/preset.json',
+      'package/policy.json',
+      'package/agents.json',
+      'package/AGENTS.md',
+    ],
   },
   {
     dir: 'packages/preset-vue',
     name: '@pedyc/harness-preset-vue',
-    require: ['package/package.json', 'package/README.md', 'package/dist/index.js'],
+    require: [
+      'package/package.json',
+      'package/README.md',
+      'package/preset.json',
+      'package/policy.json',
+      'package/agents.json',
+      'package/AGENTS.md',
+    ],
   },
 ]
 
@@ -249,6 +273,22 @@ try {
   //    otherwise `verify` is not actually enforcing requiredChecks.
   if (cli(['init', '--preset', 'vue']).status !== 0) fail('init --preset vue failed')
   else ok('init --preset vue')
+
+  // `init` names the preset and gets out of the way: copying the preset's policy
+  // into the tree is what makes a project's own edits unmergeable later, and it
+  // would hide a broken resolver behind a stale local copy.
+  const copied = ['.harness/policy.json', '.harness/agents.json'].filter((file) => existsSync(join(consumerDir, file)))
+  if (copied.length > 0) fail(`init copied preset content into the project: ${copied.join(', ')}`)
+  else ok('init writes the manifest and the contracts, not the preset')
+
+  // The policy `verify` enforces here is not in the consumer's tree at all: it
+  // is read out of the installed preset package, which is the only way this
+  // passes. `init` deliberately writes no `.harness/policy.json`.
+  const listed = cli(['list-presets'])
+  if (listed.status !== 0) fail(`list-presets exited ${listed.status}`)
+  else if (!outputOf(listed).includes('@pedyc/harness-preset-vue\tdeclared')) {
+    fail(`list-presets did not report the declared preset: ${outputOf(listed).trim()}`)
+  } else ok('list-presets resolves the installed preset package')
 
   const ungated = cli(['verify'])
   if (ungated.status === 0) fail('verify passed even though the preset gates are missing from package.json')

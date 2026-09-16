@@ -1,26 +1,31 @@
 # @pedyc/harness-preset-generic
 
 Stack-agnostic preset for [`pedyc-harness`](https://www.npmjs.com/package/pedyc-harness).
-It generates only the shared contracts and safety policy, so it fits non-Node projects
-and custom stacks.
+It provides only the shared safety policy, so it fits non-Node projects and custom
+stacks.
 
 ```bash
 npx pedyc-harness init --preset generic
 ```
 
-Generated defaults:
+This package is data, not code: `preset.json`, `policy.json`, `agents.json` and
+`AGENTS.md`. There is no entry point, no build step and no dependency on the Harness
+core. `init` records `@pedyc/harness-preset-generic` in `.harness/harness.json`; the
+policy and agent documents are read from this package at run time rather than copied
+into the project.
 
-- `.harness/policy.json` — `allowedProductPaths: ["src/"]`, protected harness, CI and
-  script directories, no required checks, three forbidden commands.
-- `.harness/agents.json` — no Provider configured; roles are external and reference
-  the `custom` provider until the project adds one. `verify` and
-  `run --dry-run` work without a Provider.
-- `.harness/*.schema.json` and `.harness/task.example.json` — task, output and Agent
-  response contracts.
-- `AGENTS.md` — project instructions placeholder.
+What it supplies:
 
-Real (non dry-run) execution requires configuring a Provider command in
-`.harness/agents.json`.
+- `policy.json` — `allowedProductPaths: ["src/"]`, protected harness, CI and script
+  directories, no required checks, three forbidden commands.
+- `agents.json` — no Provider configured; roles are external and reference the
+  `custom` provider until the project adds one. `verify` and `run --dry-run` work
+  without a Provider.
+- `AGENTS.md` — project instructions placeholder, used to seed the project's own copy
+  when `init` writes it for the first time.
+
+Real (non dry-run) execution requires configuring a Provider command in the project's
+own `.harness/agents.json`.
 
 ## Changelog
 

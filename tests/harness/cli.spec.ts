@@ -1,10 +1,10 @@
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { detectPackageManager } from '../../scripts/harness/package-manager.mjs'
-import { availablePresets, getPreset } from '../../packages/cli/src/presets.js'
+import { presetPackageName } from '../../packages/cli/src/presets.js'
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const cliPath = join(projectRoot, 'scripts/harness/cli.mjs')
@@ -18,83 +18,116 @@ const runCli = (cwd: string, ...args: string[]) => new Promise<{ code: number; s
   child.on('close', (code) => resolve({ code: code ?? 1, stdout, stderr }))
 })
 
+/**
+ * A project with the official presets resolvable from it.
+ *
+ * A preset is a dependency, so `init` can only resolve one the project can see.
+ * Linking the workspace package is what an install would have produced.
+ */
+const createProject = async (presets: string[] = ['generic', 'vue']): Promise<string> => {
+  const root = await mkdtemp(join(tmpdir(), 'pedyc-harness-'))
+  await writeFile(join(root, 'package.json'), '{"name":"pedyc-cli-fixture","version":"0.0.0"}\n')
+  if (presets.length > 0) {
+    const scope = join(root, 'node_modules', '@pedyc')
+    await mkdir(scope, { recursive: true })
+    for (const preset of presets) {
+      await symlink(join(projectRoot, `packages/preset-${preset}`), join(scope, `harness-preset-${preset}`), 'junction')
+    }
+  }
+  return root
+}
+
 describe('pedyc-harness CLI', () => {
-  it('initializes generic preset without overwriting existing configuration', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'pedyc-harness-'))
-    await writeFile(join(root, 'package.json'), '{}')
-    await runCli(root, 'init', '--preset', 'generic')
-    const policyPath = join(root, '.harness/policy.json')
-    const original = await readFile(policyPath, 'utf8')
-    await writeFile(policyPath, '{"custom":true}\n')
+  it('initializes a project by declaring the preset rather than copying it', async () => {
+    const root = await createProject()
 
     const result = await runCli(root, 'init', '--preset', 'generic')
+
     expect(result.code).toBe(0)
-    expect(await readFile(policyPath, 'utf8')).toBe('{"custom":true}\n')
-    expect(original).toContain('"allowedProductPaths"')
+    expect(JSON.parse(await readFile(join(root, '.harness/harness.json'), 'utf8'))).toEqual({
+      $schema: 'https://pedyc.dev/schema/harness.json',
+      version: 1,
+      presets: ['@pedyc/harness-preset-generic'],
+    })
+    // The governance stays in the package, so upgrading the preset is a version
+    // bump rather than a diff the project has to merge by hand.
+    await expect(readFile(join(root, '.harness/policy.json'), 'utf8')).rejects.toThrow()
+    await expect(readFile(join(root, '.harness/agents.json'), 'utf8')).rejects.toThrow()
   })
 
-  it('overwrites generated files only with --force', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'pedyc-harness-'))
-    await writeFile(join(root, 'package.json'), '{}')
+  it('leaves a project file alone unless --force is given', async () => {
+    const root = await createProject()
     await runCli(root, 'init', '--preset', 'generic')
-    const policyPath = join(root, '.harness/policy.json')
-    await writeFile(policyPath, '{"custom":true}\n')
+    const agentsPath = join(root, 'AGENTS.md')
+    await writeFile(agentsPath, '# house rules\n')
 
-    const result = await runCli(root, 'init', '--preset', 'generic', '--force')
-    expect(result.code).toBe(0)
-    expect(await readFile(policyPath, 'utf8')).toContain('"allowedProductPaths"')
+    const again = await runCli(root, 'init', '--preset', 'generic')
+    expect(again.code).toBe(0)
+    expect(await readFile(agentsPath, 'utf8')).toBe('# house rules\n')
+
+    const forced = await runCli(root, 'init', '--preset', 'generic', '--force')
+    expect(forced.code).toBe(0)
+    expect(await readFile(agentsPath, 'utf8')).toContain('Harness project instructions')
   })
 
-  it('initializes the Vue preset with Vue-specific checks and instructions', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'pedyc-harness-vue-'))
-    await writeFile(join(root, 'package.json'), '{}')
+  it('is idempotent, producing the same tree on a second run', async () => {
+    const root = await createProject()
+    await runCli(root, 'init', '--preset', 'generic')
+    const first = await readFile(join(root, '.harness/harness.json'), 'utf8')
+
+    const second = await runCli(root, 'init', '--preset', 'generic')
+
+    expect(second.code).toBe(0)
+    expect(await readFile(join(root, '.harness/harness.json'), 'utf8')).toBe(first)
+  })
+
+  it('seeds the Vue preset instructions and policy', async () => {
+    const root = await createProject()
 
     const result = await runCli(root, 'init', '--preset', 'vue')
 
     expect(result.code).toBe(0)
-    expect(await readFile(join(root, '.harness/policy.json'), 'utf8')).toContain('"type-check"')
     expect(await readFile(join(root, 'AGENTS.md'), 'utf8')).toContain('Vue 3')
+    const verify = await runCli(root, 'verify')
+    expect(verify.code).toBe(5)
+    expect(verify.stderr).toContain('type-check')
   })
 
-  it('reports template differences and updates only missing files by default', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'pedyc-harness-sync-'))
-    await writeFile(join(root, 'package.json'), '{}')
+  it('reports contract differences and updates only missing files by default', async () => {
+    const root = await createProject()
     await runCli(root, 'init', '--preset', 'generic')
-    const policyPath = join(root, '.harness/policy.json')
-    await writeFile(policyPath, '{"custom":true}\n')
-    const diffResult = await runCli(root, 'diff', '--preset', 'generic')
+    const taskPath = join(root, '.harness/task.example.json')
+    await writeFile(taskPath, '{"custom":true}\n')
+
+    const diffResult = await runCli(root, 'diff')
     expect(diffResult.code).toBe(0)
-    expect(diffResult.stdout).toContain('modified\t.harness/policy.json')
-    expect(diffResult.stdout).toContain('unchanged\t.harness/agents.json')
+    expect(diffResult.stdout).toContain('modified\t.harness/task.example.json')
+    expect(diffResult.stdout).toContain('unchanged\t.harness/input.schema.json')
 
-    await runCli(root, 'update', '--preset', 'generic')
-    expect(await readFile(policyPath, 'utf8')).toBe('{"custom":true}\n')
+    await runCli(root, 'update')
+    expect(await readFile(taskPath, 'utf8')).toBe('{"custom":true}\n')
   })
 
-  it('updates modified templates only with --force', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'pedyc-harness-force-'))
-    await writeFile(join(root, 'package.json'), '{}')
+  it('updates modified contracts only with --force', async () => {
+    const root = await createProject()
     await runCli(root, 'init', '--preset', 'generic')
-    const policyPath = join(root, '.harness/policy.json')
-    await writeFile(policyPath, '{"custom":true}\n')
+    const taskPath = join(root, '.harness/task.example.json')
+    await writeFile(taskPath, '{"custom":true}\n')
 
-    const result = await runCli(root, 'update', '--preset', 'generic', '--force')
+    const result = await runCli(root, 'update', '--force')
+
     expect(result.code).toBe(0)
-    expect(await readFile(policyPath, 'utf8')).toContain('"allowedProductPaths"')
+    expect(await readFile(taskPath, 'utf8')).toContain('"acceptanceCriteria"')
   })
 })
 
-describe('preset registry', () => {
-  it('exposes independent generic and Vue presets', () => {
-    expect(availablePresets()).toEqual(['generic', 'vue'])
-
-    const generic = getPreset('generic')
-    const vue = getPreset('vue')
-
-    expect(generic?.name).toBe('generic')
-    expect(vue?.name).toBe('vue')
-    expect(getPreset('unknown')).toBeUndefined()
-    expect(vue?.verificationScripts).toContain('build')
+describe('preset naming', () => {
+  it('expands a short name into the package it must be, and only that', () => {
+    expect(presetPackageName('generic')).toBe('@pedyc/harness-preset-generic')
+    expect(presetPackageName('vue')).toBe('@pedyc/harness-preset-vue')
+    // A name with a scope is already a package name: that is what lets a team
+    // preset work without an entry in any list this repository ships.
+    expect(presetPackageName('@acme/web')).toBe('@acme/web')
   })
 })
 

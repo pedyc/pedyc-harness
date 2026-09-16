@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pedyc.dev/schema/preset.json",
+  "title": "Harness preset manifest",
+  "description": "Describes what a preset package inherits and what it provides. A preset is data, not code: it declares paths to documents inside its own package and nothing else.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "minLength": 1
+    },
+    "name": {
+      "description": "The package name. It must match the package the manifest was resolved from, otherwise two presets could claim one identity.",
+      "type": "string",
+      "minLength": 1
+    },
+    "extends": {
+      "description": "Package names this preset inherits from. Names only, never versions: versions belong to package.json and the lockfile.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "default": []
+    },
+    "policy": {
+      "description": "Path to a policy document inside this package.",
+      "type": "string",
+      "minLength": 1
+    },
+    "agents": {
+      "description": "Path to an agent configuration document inside this package.",
+      "type": "string",
+      "minLength": 1
+    },
+    "instruction": {
+      "description": "Path to a markdown document used to seed the target project's AGENTS.md.",
+      "type": "string",
+      "minLength": 1
+    },
+    "verification": {
+      "description": "Declared for forward compatibility; no runtime consumes it yet.",
+      "type": "string",
+      "minLength": 1
+    },
+    "rules": {
+      "description": "Declared for forward compatibility; no runtime consumes it yet.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  }
+}
