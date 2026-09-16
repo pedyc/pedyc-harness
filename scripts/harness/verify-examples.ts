@@ -26,6 +26,8 @@ const examples: ExampleProject[] = [
 
 const managedFiles = [
   'AGENTS.md',
+  '.harness/harness.json',
+  '.harness/harness.schema.json',
   '.harness/policy.json',
   '.harness/agents.json',
   '.harness/input.schema.json',

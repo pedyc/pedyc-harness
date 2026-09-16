@@ -16,7 +16,17 @@ export interface PresetDetection {
  * is coupled at runtime.
  */
 export interface Preset {
+  /** The short name a user types, e.g. `generic`. */
   name: string
+  /**
+   * The package a project depends on, e.g. `@pedyc/harness-preset-generic`.
+   *
+   * This is what `init` writes into `harness.json`, because a manifest records
+   * what to resolve rather than what to type. Versions never appear here: they
+   * belong to `package.json` and the lockfile, so a project upgrades the same
+   * way it upgrades any other dependency.
+   */
+  packageName: string
   detection: PresetDetection
   defaultProductPaths: string[]
   verificationScripts: string[]

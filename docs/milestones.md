@@ -1029,7 +1029,7 @@ pnpm run build
 
 ### 状态
 
-**计划中**
+**已完成**
 
 ### 目标
 
@@ -1113,6 +1113,35 @@ packages/core/src/
 * `contracts/` 保持无副作用，不依赖 Node 文件系统。
 * 模块依赖单向，不出现 `runtime → cli` 或 `config → runtime` 的回指。
 * 当前 `core/` 下的模块按职责迁移，不为了目录整齐而重写实现。
+
+### 已交付
+
+* `schemas/harness.schema.json`，并同步到 `.harness/`、CLI 模板与 `packages/core/schemas/`。
+* `contracts/harness.ts`：`HarnessManifest`、`ConfigSource`、`HarnessConfigError`、`LoadConfigResult`。
+* `config/`：`json`、`schema`、`manifest`、`loader`、`policy`、`agents`、`defaults`、`errors`。
+  `loadHarnessConfig` 是读取配置的唯一入口。
+* `core/` 与 `adapters/` 合并为 `runtime/`；`core/validator.ts` 拆成纯编译
+  （`contracts/validator.ts`）与文件读取（`config/schema.ts`）。
+* CLI：`init` 生成 `harness.json`，`verify` 校验 Manifest，`doctor` 报告实际生效的来源。
+* `Preset` 契约新增 `packageName`，`init` 写入 Manifest 的是包名而不是短名。
+* 配置错误退出码 `5`；`.harness/verify.mjs` 的退出码原样透传。
+* `tests/harness/config-foundation.spec.ts` 覆盖加载、错误分类、路径越界、
+  CLI 退出码、最小项目与模块边界。
+
+实现期的两处收敛，与本文档早期草稿不同：
+
+* Manifest 字段名用复数 `agents`，与 `AgentsConfig` 对齐；单数 `agent` 不保留。
+* 不提供 `extends` 别名。它从未被消费，而 schema 是 `additionalProperties: false`，
+  误用会直接报错而不是被静默忽略。
+
+`presets` 在 M15 只记录、不消费（`doctor` 中标记为 `declared, not yet consumed`），
+M16 接管。
+
+### 版本影响
+
+新增可选配置（`.harness/harness.json`）属于向后兼容的新能力，按
+[发布与版本规则](./release.md) §11 判定为 MINOR。配置错误退出码从 `1` 变为 `5`，属于
+对齐既有 CLI 设计，不是不兼容变化。版本号在发布时统一提升，四个包保持同步。
 
 ### 验收标准
 

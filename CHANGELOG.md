@@ -6,6 +6,43 @@
 所有 workspace 包共享同一个版本号，同步发布。升级规则见 [发布与版本规则](./docs/release.md)。
 
 
+## [Unreleased]
+
+### Added
+
+- `.harness/harness.json`（Harness Manifest）与 `schemas/harness.schema.json`。项目因此有了一个明确的
+  配置入口，而不是把治理定义散落在多个隐式位置。`harness.json` 由 `@pedyc/harness-core` 自带的
+  schema 副本校验，项目无法放宽自己的 Manifest 所受的约束。见
+  [M15](./docs/milestones.md#m15配置基础与-runtime-模块边界config-foundation)。
+- `@pedyc/harness-core/config` 子路径与 `loadHarnessConfig`：定位、读取并校验配置的唯一入口。
+  配置错误在执行前返回结构化错误（`code` / `file` / `field` / `message`），而不是在运行中途失败。
+- `@pedyc/harness-core` 根导出新增配置层 API：`loadHarnessConfig`、`readManifest`、`defaultPolicy`、
+  `defaultAgents`、`policyProblems`、`agentProblems`、`formatConfigError` 与相关类型。
+- `pedyc-harness doctor` 输出实际生效的配置来源，包括回退到 `built-in defaults` 的情况。
+- `Preset` 契约新增 `packageName`；`init` 写入 Manifest 的是包名而不是短名。
+
+### Changed
+
+- **可能需要关注的退出码变更**：配置错误现在返回 `5`（`docs/CLI设计.md` §8），而不再是 `1`。
+  `pedyc-harness run` 与 `verify` 在配置缺失、非法或路径越界时都会返回 `5`。项目自有的
+  `.harness/verify.mjs` 退出码仍然原样透传。
+- `@pedyc/harness-core` 源码目录由 `contracts/` + `core/` + `adapters/` 收敛为
+  `contracts/` + `config/` + `runtime/`。`exports` 子路径名全部保留，其中 `./schema` 现在指向
+  `dist/config/schema.js`，导出名不变并新增 `compileSchema` / `readSchema`。
+- `run` 的配置来源选择统一走 `loadHarnessConfig`：Manifest 声明 → 约定位置
+  `.harness/policy.json` / `.harness/agents.json` → 内置默认值。没有 `harness.json` 的项目
+  行为与之前一致，`policy.json` 与 `agents.json` 仍然被读取。
+
+### Compatibility
+
+- 没有 `harness.json` 的既有项目无需改动：配置来源、字段语义与 `run --dry-run --json` 的输出形状
+  都没有变化。
+- `harness.json` 的路径字段相对 `.harness/` 解析，且不允许绝对路径或 `..` 越出 `.harness/`。
+- 只有 `harness.json` 的最小项目可以完成 `verify` 与 `run --dry-run`。
+
+按 [发布与版本规则](./docs/release.md) §11，新增可选配置属于 MINOR；版本号在发布时统一提升。
+
+
 ## [1.1.0] - 2026-09-15
 
 Harness 运行时从零类型标注的 ESM `.mjs` 迁移到 TypeScript，由 `tsc` 编译到 `dist/` 发布。

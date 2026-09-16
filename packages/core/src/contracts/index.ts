@@ -4,6 +4,14 @@ export type { IntakeResult, NormalizedTask, RawTaskInput } from './task.js'
 export type { Preset, PresetDetection } from './preset.js'
 export type { FileChange, OrchestrationResult, PhaseRecord, PhaseStatus, RunResult, RunStatus } from './run.js'
 export type {
+  ConfigErrorCode,
+  ConfigSource,
+  HarnessConfigError,
+  HarnessManifest,
+  LoadConfigResult,
+  LoadedHarnessConfig,
+} from './harness.js'
+export type {
   AgentCallResult,
   AgentPayload,
   AgentRoleConfig,
@@ -16,3 +24,9 @@ export type {
   StageRequest,
   TesterRequest,
 } from './agent.js'
+export type {
+  HarnessSchemas,
+  HarnessValidators,
+  ResponseValidator,
+  SchemaErrorFormatter,
+} from './validator.js'

@@ -2,8 +2,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { detectPackageManager, validatePolicy } from '@pedyc/harness-core'
-import type { AgentsConfig, Preset } from '@pedyc/harness-core/contracts'
+import { detectPackageManager, formatConfigError, loadHarnessConfig } from '@pedyc/harness-core'
+import type { ConfigSource, Preset } from '@pedyc/harness-core/contracts'
 import { availablePresets, getPreset } from './presets.js'
 import { runHarness } from './run.js'
 
@@ -15,8 +15,31 @@ import { runHarness } from './run.js'
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const templatesRoot = join(packageRoot, 'templates')
 
-const schemas = ['input.schema.json', 'output.schema.json', 'agent-response.schema.json']
+// Exit codes from `docs/CLI设计.md` §8. Only the ones this entry point can
+// produce are named here; a run's own outcome codes come from `runHarness`.
+const EXIT_OK = 0
+const EXIT_FAILED = 1
+const EXIT_CONFIG = 5
+
+const schemaNames = ['input.schema.json', 'output.schema.json', 'agent-response.schema.json']
+const manifestSchema = 'harness.schema.json'
+const manifestName = 'harness.json'
 const taskExample = 'task.example.json'
+
+/**
+ * The manifest `init` writes.
+ *
+ * It declares what to resolve, never how to configure: the preset package name
+ * is recorded so `doctor` can report which governance a project follows, and
+ * the policy and agent documents are left at their conventional paths rather
+ * than pinned by a redundant `policy`/`agents` pointer. A project that later
+ * moves or deletes those files changes one thing, not two.
+ */
+const manifestContent = (preset: Preset): string => `${JSON.stringify({
+  $schema: 'https://pedyc.dev/schema/harness.json',
+  version: 1,
+  presets: [preset.packageName],
+}, null, 2)}\n`
 
 const writeIfMissing = (path: string, content: string, force: boolean): boolean => {
   if (!force && existsSync(path)) return false
@@ -27,12 +50,13 @@ const writeIfMissing = (path: string, content: string, force: boolean): boolean 
 
 const templateFiles = (preset: Preset): Map<string, string> => {
   const files = new Map([
+    [`.harness/${manifestName}`, manifestContent(preset)],
     ['.harness/policy.json', `${JSON.stringify(preset.policy, null, 2)}\n`],
     ['.harness/agents.json', `${JSON.stringify(preset.agents, null, 2)}\n`],
     ['.harness/task.example.json', readFileSync(join(templatesRoot, taskExample), 'utf8')],
     ['AGENTS.md', preset.instruction],
   ])
-  for (const schema of schemas) {
+  for (const schema of [...schemaNames, manifestSchema]) {
     files.set(`.harness/${schema}`, readFileSync(join(templatesRoot, schema), 'utf8'))
   }
   return files
@@ -93,12 +117,12 @@ export const runCli = async ({
     }
     const skipped = statuses.filter(({ status }) => status === 'modified' && !force).length
     console.log(`Updated ${written} template file(s); skipped ${skipped} modified file(s).`)
-    return 0
+    return EXIT_OK
   }
 
   const init = (): number => {
     const preset = resolvePreset()
-    if (!preset) return 1
+    if (!preset) return EXIT_FAILED
     const harnessRoot = join(projectRoot, '.harness')
     const force = argv.includes('--force')
     mkdirSync(harnessRoot, { recursive: true })
@@ -107,64 +131,51 @@ export const runCli = async ({
       writeIfMissing(join(projectRoot, relativePath), content, force)
     }
     console.log(`Initialized pedyc-harness with the '${preset.name}' preset in ${projectRoot}${force ? ' (forced)' : ''}`)
-    return 0
+    return EXIT_OK
+  }
+
+  // Prints every configuration problem rather than the first one: a document
+  // with two bad fields should be fixed in one edit, not two runs.
+  const reportConfigErrors = (errors: Parameters<typeof formatConfigError>[0][]): number => {
+    for (const error of errors) console.error(formatConfigError(error))
+    return EXIT_CONFIG
   }
 
   const verify = (): number => {
-    const policyPath = join(projectRoot, '.harness', 'policy.json')
-    const agentsPath = join(projectRoot, '.harness', 'agents.json')
-    if (!existsSync(policyPath) || !existsSync(agentsPath)) {
-      console.error('Harness configuration is incomplete. Run `pedyc-harness init` first.')
-      return 1
-    }
-    for (const schema of schemas) {
+    const loaded = loadHarnessConfig(projectRoot)
+    if (!loaded.ok) return reportConfigErrors(loaded.errors)
+
+    // The manifest schema is required exactly when the manifest is. A project
+    // that predates `harness.json` must keep verifying unchanged, so the file
+    // is not added to the set its older self was measured against.
+    const required = existsSync(join(projectRoot, '.harness', manifestName))
+      ? [...schemaNames, manifestSchema]
+      : schemaNames
+    for (const schema of required) {
       const schemaPath = join(projectRoot, '.harness', schema)
       if (!existsSync(schemaPath)) {
         console.error(`Harness schema is missing: .harness/${schema}`)
-        return 1
+        return EXIT_CONFIG
+      }
+      try {
+        readJson(schemaPath)
+      } catch (error) {
+        console.error(`Harness schema .harness/${schema} is not valid JSON: ${error instanceof Error ? error.message : 'unknown error'}`)
+        return EXIT_CONFIG
       }
     }
-    let policy: unknown
-    let agents: AgentsConfig
-    try {
-      policy = readJson(policyPath)
-      agents = readJson(agentsPath) as AgentsConfig
-      for (const schema of schemas) readJson(join(projectRoot, '.harness', schema))
-    } catch (error) {
-      console.error(`Harness configuration is not valid JSON: ${error instanceof Error ? error.message : 'unknown error'}`)
-      return 1
-    }
-    const policyError = validatePolicy(policy)
-    if (policyError) {
-      console.error(policyError)
-      return 1
-    }
-    if (!agents.providers || typeof agents.providers !== 'object') {
-      console.error('Harness agents must define a providers object.')
-      return 1
-    }
-    for (const [provider, config] of Object.entries(agents.providers)) {
-      if (!config || typeof config.command !== 'string' || !config.command.trim() || !Array.isArray(config.args)) {
-        console.error(`Harness provider ${provider} must define a command and args array.`)
-        return 1
-      }
-    }
-    for (const role of ['planner', 'coder', 'tester', 'reviewer'] as const) {
-      const config = agents[role]
-      if (!config || !['internal', 'external'].includes(config.mode)) {
-        console.error(`Harness agent ${role} must declare mode internal or external.`)
-        return 1
-      }
-    }
-    const requiredChecks = (policy as { requiredChecks?: unknown }).requiredChecks
+
+    const requiredChecks = loaded.config.policy.requiredChecks
     const packageJsonPath = join(projectRoot, 'package.json')
     if (existsSync(packageJsonPath) && Array.isArray(requiredChecks)) {
       const manifest = readJson(packageJsonPath) as { scripts?: Record<string, string> }
       const scripts = manifest.scripts ?? {}
-      const missingChecks = requiredChecks.filter((check) => !scripts[check as string])
+      const missingChecks = requiredChecks.filter((check) => !scripts[check])
       if (missingChecks.length > 0) {
         console.error(`Harness policy references missing npm scripts: ${missingChecks.join(', ')}`)
-        return 1
+        // A gate that names a script which does not exist is a configuration
+        // problem, not a failed run: it can be seen without running anything.
+        return EXIT_CONFIG
       }
     }
     const hook = join(projectRoot, '.harness', 'verify.mjs')
@@ -174,11 +185,14 @@ export const runCli = async ({
         stdio: 'inherit',
         shell: false,
       })
-      return result.status ?? 1
+      return result.status ?? EXIT_FAILED
     }
     console.log('Generic Harness configuration verified.')
-    return 0
+    return EXIT_OK
   }
+
+  const describeSource = ({ kind, location, active }: ConfigSource): string =>
+    `${kind}\t${location}${active ? '' : '\t(declared, not yet consumed)'}`
 
   const doctor = (): number => {
     const packageManager = detectPackageManager(projectRoot)
@@ -186,7 +200,16 @@ export const runCli = async ({
     console.log(`Configuration: ${existsSync(join(projectRoot, '.harness')) ? 'found' : 'missing (.harness)'}`)
     console.log(`Package manager: ${packageManager.name}`)
     console.log(`Node.js: ${process.version}`)
-    return 0
+
+    // Reporting the sources is the point of `doctor`: which values a run will
+    // actually use is otherwise invisible, and a fallback to built-in defaults
+    // would look the same as a deliberate configuration.
+    const loaded = loadHarnessConfig(projectRoot)
+    if (!loaded.ok) return reportConfigErrors(loaded.errors)
+
+    console.log('Configuration sources:')
+    for (const source of loaded.config.sources) console.log(`  ${describeSource(source)}`)
+    return EXIT_OK
   }
 
   switch (command) {
@@ -196,13 +219,13 @@ export const runCli = async ({
       return verify()
     case 'diff': {
       const preset = resolvePreset()
-      if (!preset) return 1
+      if (!preset) return EXIT_FAILED
       printTemplateDiff(preset)
-      return 0
+      return EXIT_OK
     }
     case 'update': {
       const preset = resolvePreset()
-      return preset ? syncTemplates(preset, argv.includes('--force')) : 1
+      return preset ? syncTemplates(preset, argv.includes('--force')) : EXIT_FAILED
     }
     case 'doctor':
       return doctor()
@@ -214,6 +237,6 @@ export const runCli = async ({
       console.log('  diff --preset generic|vue')
       console.log('  update --preset generic|vue [--force]')
       console.log('  run --input .harness/task.json [--dry-run] [--json]')
-      return command === 'help' ? 0 : 1
+      return command === 'help' ? EXIT_OK : EXIT_FAILED
   }
 }

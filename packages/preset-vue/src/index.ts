@@ -2,6 +2,7 @@ import type { Preset } from '@pedyc/harness-core/contracts'
 
 export const vuePreset: Preset = {
   name: 'vue',
+  packageName: '@pedyc/harness-preset-vue',
   detection: { requiredFiles: ['vite.config.ts'], requiredDependencies: ['vue'] },
   defaultProductPaths: ['src/'],
   verificationScripts: ['harness:verify', 'type-check', 'test:unit', 'build'],

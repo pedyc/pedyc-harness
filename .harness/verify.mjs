@@ -21,6 +21,8 @@ const requiredFiles = [
   '.github/agents/Reviewer.agent.md',
   '.agents/skills/verify-change/SKILL.md',
   '.agents/skills/review-change/SKILL.md',
+  '.harness/harness.json',
+  '.harness/harness.schema.json',
   '.harness/input.schema.json',
   '.harness/task.schema.json',
   '.harness/output.schema.json',
@@ -49,6 +51,7 @@ if (!instructions.includes('packages/') || !instructions.includes('产品代码'
 }
 
 const jsonFiles = [
+  '.harness/harness.json',
   '.harness/input.schema.json',
   '.harness/task.schema.json',
   '.harness/output.schema.json',

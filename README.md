@@ -461,9 +461,21 @@ Preset                   复用默认治理能力
 其中 `.harness/` 是 Harness 的项目控制面，治理定义（Policy、Verification、Rules、Tasks）进入
 版本库，运行记录（`.harness/runs/`）不进入。
 
-> 规划中：`.harness/harness.json` 将作为入口配置（Harness Manifest），只声明使用哪些 Preset 和
-> 配置来源；Preset 将以 npm package 分发并支持继承。Packages 目前尚未实现这些能力，详见
-> [`docs/核心架构.md`](docs/核心架构.md) 与 [`docs/Preset设计.md`](docs/Preset设计.md)。
+`.harness/harness.json` 是入口配置（Harness Manifest），只声明使用哪些 Preset 和配置来源：
+
+```json
+{
+  "$schema": "https://pedyc.dev/schema/harness.json",
+  "version": 1,
+  "presets": ["@pedyc/harness-preset-vue"]
+}
+```
+
+配置来源按 Manifest → 约定位置（`.harness/policy.json`、`.harness/agents.json`）→ 内置默认值
+的顺序选择。没有 `harness.json` 的项目行为不变；`pedyc-harness doctor` 会报告实际生效的来源。
+
+> 规划中：Preset 将以 npm package 分发并支持继承，`presets` 目前只被记录、尚未被消费。
+> 详见 [`docs/核心架构.md`](docs/核心架构.md) 与 [`docs/Preset设计.md`](docs/Preset设计.md)。
 
 Harness 的目标不是接管项目本身的工程配置，而是在项目现有工程规则之上增加一层可验证的执行治理。
 

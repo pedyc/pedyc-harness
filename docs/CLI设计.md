@@ -359,8 +359,6 @@ Update 必须识别：
 
 CLI 必须使用稳定 Exit Code。
 
-建议：
-
 ```text
 0   success
 1   task failed
@@ -373,7 +371,22 @@ CLI 必须使用稳定 Exit Code。
 8   internal error
 ```
 
-具体编号可以在实现阶段统一定义。
+当前已实现的编号：
+
+| 编号 | 含义                | 何时返回                                                            |
+| ---- | ------------------- | ------------------------------------------------------------------- |
+| 0    | success             | 命令成功                                                             |
+| 1    | task failed         | 运行未通过，或命令用法错误                                           |
+| 5    | configuration error | 配置缺失、非法、路径越界，或 `verify` / `doctor` 无法解析配置        |
+
+`2` / `3` / `4` / `6` / `7` / `8` 保留给后续里程碑：把它们预留出来而不是现在凑合映射，
+是为了让已经落地的编号以后不再变动。
+
+规则：
+
+> 配置错误（`5`）必须在执行前返回，不能等到运行中途。
+
+> 项目自有的 `.harness/verify.mjs` 退出码原样透传，不被 CLI 改写。
 
 重要的是：
 
@@ -415,10 +428,13 @@ GitHub Actions
 
 ## 10. Configuration Loading
 
+CLI 不再自行解析配置路径：定位、读取与校验统一由 Core 的 `loadHarnessConfig` 完成，
+CLI 只消费结果与结构化错误。
+
 CLI 负责加载：
 
 ```text
-.harness/harness.json      Manifest（目标形态）
+.harness/harness.json      Manifest
 .harness/policy.json
 .harness/agents.json
 AGENTS.md
@@ -427,10 +443,32 @@ Preset（已安装的 npm 包）
 Task Contract
 ```
 
-但配置解析完成后，应交给 Runtime。
+配置解析完成后，交给 Runtime。
 
-目标形态下，CLI 只负责定位和读取这些来源；Preset 依赖图的递归解析和配置合成属于 Core，
-见 [§11](#11-cli--npm--core-的职责边界) 与 [核心接口设计](./核心接口设计.md)。
+来源优先级（**来源选择**，不是字段合并；字段级合并属于 M17）：
+
+```text
+Manifest 声明的路径 / 内联对象
+      ↓
+约定位置 .harness/policy.json、.harness/agents.json
+      ↓
+内置默认值
+```
+
+没有 `harness.json` 的项目走同一条管线的后两级，行为与 Manifest 出现之前一致。
+迁移是增量的，不是破坏性的。
+
+`doctor` 打印实际生效的来源；回退到内置默认值也会被列出来：
+
+```text
+Configuration sources:
+  manifest   .harness/harness.json
+  policy     .harness/policy.json
+  agents     built-in defaults
+  preset     @pedyc/harness-preset-vue   (declared, not yet consumed)
+```
+
+静默回退与显式配置在结果上无法区分，所以回退必须被报告出来。
 
 不要让：
 

@@ -22,10 +22,15 @@ npx pedyc-harness update --preset generic
 npx pedyc-harness run --input .harness/task.json --dry-run --json
 ```
 
-- `init` is idempotent. Existing JSON configuration and `AGENTS.md` are only
-  overwritten with `--force`.
+- `init` is idempotent. It writes `.harness/harness.json` alongside the schemas and
+  the preset's `policy.json` / `agents.json`; existing configuration and `AGENTS.md`
+  are only overwritten with `--force`.
 - `verify` validates the generated configuration and runs the optional
-  `.harness/verify.mjs` project hook when present.
+  `.harness/verify.mjs` project hook when present. Configuration problems exit `5`
+  rather than `1`, so CI can tell "your configuration is broken" apart from "the run
+  failed".
+- `doctor` reports which configuration sources actually took effect, including a
+  fallback to built-in defaults.
 - `run --dry-run` is a safe preview: no Agent Provider is invoked, no verification
   command is executed and no product file is changed.
 - `run` without `--dry-run` requires a Provider configured in

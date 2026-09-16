@@ -5,10 +5,10 @@ import type {
   CommandPolicy,
   StageRequest,
 } from '../contracts/index.js'
-import { parseAgentResponse, validateStageResponse } from '../core/agent.js'
-import { runCommand } from '../core/command.js'
-import { isCommandAllowed } from '../core/policy-engine.js'
-import type { ResponseValidator, SchemaErrorFormatter } from '../core/validator.js'
+import { parseAgentResponse, validateStageResponse } from './agent.js'
+import { runCommand } from './command.js'
+import { isCommandAllowed } from './policy-engine.js'
+import type { ResponseValidator, SchemaErrorFormatter } from '../contracts/validator.js'
 
 export interface ProviderRunnerOptions {
   root: string

@@ -1,5 +1,5 @@
 import type { AgentPayload, AgentRole } from '../contracts/index.js'
-import type { ResponseValidator, SchemaErrorFormatter } from './validator.js'
+import type { ResponseValidator, SchemaErrorFormatter } from '../contracts/validator.js'
 
 export interface ParsedAgentResponse {
   ok: boolean

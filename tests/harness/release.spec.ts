@@ -37,6 +37,9 @@ describe('release configuration', () => {
       { file: 'input.schema.json', destinations: ['.harness', 'packages/cli/templates', 'examples/*/.harness'] },
       { file: 'output.schema.json', destinations: ['.harness', 'packages/cli/templates', 'examples/*/.harness'] },
       { file: 'agent-response.schema.json', destinations: ['.harness', 'packages/cli/templates', 'examples/*/.harness'] },
+      // The runtime validates `harness.json` against the copy bundled in the
+      // core package, so that copy is load-bearing rather than decorative.
+      { file: 'harness.schema.json', destinations: ['.harness', 'packages/cli/templates', 'packages/core/schemas', 'examples/*/.harness'] },
       { file: 'task.example.json', destinations: ['.harness', 'packages/cli/templates', 'examples/*/.harness'] },
       { file: 'task.schema.json', destinations: ['.harness'] },
     ]

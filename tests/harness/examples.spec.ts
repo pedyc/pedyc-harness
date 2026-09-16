@@ -130,10 +130,13 @@ describe('external project compatibility', () => {
 
     const result = await runCli(root, 'run', '--dry-run', '--json')
 
-    expect(result.code).toBe(1)
+    // A project that cannot be resolved is a configuration error, which
+    // `docs/CLI设计.md` §8 gives its own exit code rather than folding into a
+    // failed run.
+    expect(result.code).toBe(5)
     const output = JSON.parse(result.stdout) as { status: string; phases: { name: string }[]; issues: string[] }
     expect(output.status).toBe('failed')
-    expect(output.phases[0].name).toBe('policy')
+    expect(output.phases[0].name).toBe('config')
     expect(output.issues.join(' ')).toContain('allowedProductPaths')
   })
 

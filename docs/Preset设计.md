@@ -66,6 +66,26 @@ type HarnessPreset = {
 }
 ```
 
+上面的形状是目标形态。当前落地的契约（`packages/core/src/contracts/preset.ts`）更小：
+
+```ts
+interface Preset {
+  name: string          // 用户输入的名字，例如 generic
+  packageName: string   // npm 包名，例如 @pedyc/harness-preset-generic
+  detection: PresetDetection
+  defaultProductPaths: string[]
+  verificationScripts: string[]
+  skills: string[]
+  policy: Policy
+  agents: AgentsConfig
+  instruction: string
+}
+```
+
+`name` 与 `packageName` 是两个不同的东西：`name` 是 `--preset generic` 里输入的名字，
+`packageName` 是 `init` 写进 `harness.json` 的值。Manifest 记录的是「要解析什么」而不是
+「要输入什么」，所以写进 Manifest 的是包名，且不带版本——版本属于 `package.json` 与 lockfile。
+
 Preset 本质上是一组：
 
 ```text

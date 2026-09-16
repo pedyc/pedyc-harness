@@ -2,6 +2,7 @@ import type { Preset } from '@pedyc/harness-core/contracts'
 
 export const genericPreset: Preset = {
   name: 'generic',
+  packageName: '@pedyc/harness-preset-generic',
   detection: { requiredFiles: [], requiredDependencies: [] },
   defaultProductPaths: ['src/'],
   verificationScripts: [],

@@ -1,36 +1,61 @@
 import { createRequire } from 'node:module'
 
+// Three layers, with dependencies pointing one way: `contracts/` holds pure
+// types and schema compilation, `config/` owns every read of a project's
+// configuration documents, and `runtime/` executes a run against values the
+// config layer already resolved. See `docs/核心架构.md`.
 export type * from './contracts/index.js'
-
-export { detectPackageManager, packageScriptCommand } from './core/package-manager.js'
-export type { PackageManager, PackageScriptCommand } from './core/package-manager.js'
-
-export { normalizeTask, readTaskFile } from './core/intake.js'
-export { runCommand } from './core/command.js'
-export type { CommandResult } from './core/command.js'
-
-export { changedFiles, snapshotFiles } from './core/diff-inspector.js'
-export type { FileSnapshot } from './core/diff-inspector.js'
-
-export { loadSchemas, createValidators, validationDetails } from './core/validator.js'
+export type { ConfigProblem, ManifestResult } from './config/index.js'
+export {
+  agentProblems,
+  asRecord,
+  compileSchema,
+  configError,
+  createAjv,
+  createValidators,
+  defaultAgents,
+  defaultPolicy,
+  formatConfigError,
+  harnessDirectory,
+  loadHarnessConfig,
+  loadSchemas,
+  manifestFile,
+  manifestPath,
+  policyProblems,
+  readManifest,
+  readSchema,
+  validateAgents,
+  validatePolicy,
+  validationDetails,
+} from './config/index.js'
 export type {
   HarnessSchemas,
   HarnessValidators,
   ResponseValidator,
   SchemaErrorFormatter,
-} from './core/validator.js'
+} from './config/index.js'
 
-export { parseAgentResponse, validateStageResponse } from './core/agent.js'
-export type { ParsedAgentResponse } from './core/agent.js'
+export { detectPackageManager, packageScriptCommand } from './runtime/package-manager.js'
+export type { PackageManager, PackageScriptCommand } from './runtime/package-manager.js'
 
-export { validatePolicy, findOutOfScopeChanges, isCommandAllowed } from './core/policy-engine.js'
-export { testerApproved, reviewerApproved } from './core/approval-gate.js'
+export { normalizeTask, readTaskFile } from './runtime/intake.js'
+export { runCommand } from './runtime/command.js'
+export type { CommandResult } from './runtime/command.js'
 
-export { createProviderRunner } from './adapters/provider-runner.js'
-export type { ProviderRunnerOptions } from './adapters/provider-runner.js'
+export { changedFiles, snapshotFiles } from './runtime/diff-inspector.js'
+export type { FileSnapshot } from './runtime/diff-inspector.js'
 
-export { runOrchestrator } from './core/executor.js'
-export type { OrchestratorOptions } from './core/executor.js'
+export { parseAgentResponse, validateStageResponse } from './runtime/agent.js'
+export type { ParsedAgentResponse } from './runtime/agent.js'
+
+export { findOutOfScopeChanges, isCommandAllowed } from './runtime/policy-engine.js'
+export { testerApproved, reviewerApproved } from './runtime/approval-gate.js'
+
+export { createProviderRunner } from './runtime/provider-runner.js'
+export type { ProviderRunnerOptions } from './runtime/provider-runner.js'
+
+export { runOrchestrator } from './runtime/executor.js'
+export type { OrchestratorOptions } from './runtime/executor.js'
 
 // Read from the manifest rather than repeating the literal here: a hardcoded copy silently
 // kept reporting the previous release after the version was bumped.

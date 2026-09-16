@@ -19,6 +19,13 @@ import {
   validationDetails,
   parseAgentResponse,
   validateStageResponse,
+  loadHarnessConfig,
+  readManifest,
+  defaultPolicy,
+  defaultAgents,
+  policyProblems,
+  agentProblems,
+  formatConfigError,
   validatePolicy,
   findOutOfScopeChanges,
   isCommandAllowed,
@@ -32,13 +39,26 @@ Individual modules are also exported for narrower imports:
 ```js
 import { detectPackageManager } from '@pedyc/harness-core/package-manager'
 import { runOrchestrator } from '@pedyc/harness-core/orchestrator'
+import { loadHarnessConfig } from '@pedyc/harness-core/config'
 ```
 
+- `config` — the only module that reads a project's configuration documents.
+  `loadHarnessConfig(root)` resolves `.harness/harness.json` when there is one,
+  falls back to the conventional `.harness/policy.json` and `.harness/agents.json`,
+  and finally to built-in defaults. It returns either a complete configuration plus
+  the sources it came from, or a list of structured errors naming a file and a
+  field. Nothing is executed first, so a bad configuration fails before a run
+  starts rather than partway through one.
 - `package-manager` / `command` — lockfile detection and command execution.
 - `intake` / `schema` / `agent` — task normalization, Ajv validation and Agent
   response parsing.
 - `policy` / `provider` / `orchestrator` — path policy, Provider routing and the
   four-phase execution loop.
+
+The source is layered `contracts/` → `config/` → `runtime/`, with dependencies
+pointing one way: `contracts/` holds pure types and schema compilation and never
+touches the file system, `config/` owns every configuration read, and `runtime/`
+executes against values `config/` already resolved.
 
 `runOrchestrator({ dryRun: true })` skips every Agent Provider and verification gate
 and returns a structured passing result.

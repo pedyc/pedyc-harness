@@ -1,8 +1,6 @@
 // The default export is typed as a namespace under NodeNext; the named export is
 // the class, and ajv ships it on both the ESM and CJS sides.
 import { Ajv2020 } from 'ajv/dist/2020.js'
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import type { ErrorObject, ValidateFunction } from 'ajv'
 
 /** The raw JSON Schema documents a project commits under `.harness/`. */
@@ -28,19 +26,18 @@ export interface ResponseValidator {
 /** The only Ajv capability the agent-response parser needs. */
 export type SchemaErrorFormatter = Pick<Ajv2020, 'errorsText'>
 
-export const loadSchemas = (root: string): HarnessSchemas => {
-  const read = (name: string): object =>
-    JSON.parse(readFileSync(join(root, '.harness', name), 'utf8')) as object
+/** Creates an Ajv instance configured the way every Harness schema expects. */
+export const createAjv = (): Ajv2020 => new Ajv2020({ allErrors: true, strict: false })
 
-  return {
-    input: read('input.schema.json'),
-    output: read('output.schema.json'),
-    agentResponse: read('agent-response.schema.json'),
-  }
-}
-
+/**
+ * Compiles schema documents into validators.
+ *
+ * This half of the schema boundary is pure: it touches no file system, which is
+ * what lets `contracts/` stay free of I/O. Reading the documents off disk is the
+ * config layer's job.
+ */
 export const createValidators = (schemas: HarnessSchemas): HarnessValidators => {
-  const ajv = new Ajv2020({ allErrors: true, strict: false })
+  const ajv = createAjv()
   return {
     ajv,
     input: ajv.compile(schemas.input),

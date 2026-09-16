@@ -77,8 +77,12 @@ const packages: PackageDefinition[] = [
       // entry points and their declarations rather than the TypeScript sources.
       'package/dist/index.js',
       'package/dist/index.d.ts',
-      'package/dist/core/executor.js',
+      'package/dist/runtime/executor.js',
       'package/dist/contracts/index.js',
+      // Load-bearing, not documentation: `loadHarnessConfig` validates
+      // `harness.json` against this bundled copy, so a tarball without it
+      // cannot load any manifest at all.
+      'package/schemas/harness.schema.json',
     ],
   },
   {
@@ -96,6 +100,7 @@ const packages: PackageDefinition[] = [
       'package/templates/input.schema.json',
       'package/templates/output.schema.json',
       'package/templates/agent-response.schema.json',
+      'package/templates/harness.schema.json',
       'package/templates/task.example.json',
     ],
   },

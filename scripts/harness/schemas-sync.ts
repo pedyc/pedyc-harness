@@ -30,6 +30,11 @@ const contracts: Array<[string, string[]]> = [
   ['input.schema.json', ['.harness', 'packages/cli/templates', 'examples/*/.harness']],
   ['output.schema.json', ['.harness', 'packages/cli/templates', 'examples/*/.harness']],
   ['agent-response.schema.json', ['.harness', 'packages/cli/templates', 'examples/*/.harness']],
+  // The manifest schema is the one copy a project never gets to choose: the
+  // runtime validates `harness.json` against the copy bundled with the core
+  // package, so a project cannot loosen the rules its own manifest is held to.
+  // The copies listed here are for editors and for drift detection.
+  ['harness.schema.json', ['.harness', 'packages/cli/templates', 'packages/core/schemas', 'examples/*/.harness']],
   // The human intake contract is only used by this repository's own harness run.
   ['task.schema.json', ['.harness']],
   ['task.example.json', ['.harness', 'packages/cli/templates', 'examples/*/.harness']],
