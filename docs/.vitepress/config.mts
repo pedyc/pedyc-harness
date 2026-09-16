@@ -22,6 +22,7 @@ export default defineConfig({
   themeConfig: {
     outline: { level: [2, 3], label: '本页目录' },
     nav: [
+      { text: '开始', link: '/getting-started' },
       { text: '文档地图', link: '/README' },
       { text: '项目', link: '/项目目标' },
       { text: '架构', link: '/architecture/system' },
@@ -29,6 +30,10 @@ export default defineConfig({
       { text: '规范', link: '/CONVENTIONS' },
     ],
     sidebar: [
+      {
+        text: '开始',
+        items: [{ text: '从零接入 Harness', link: '/getting-started' }],
+      },
       {
         text: '项目',
         items: [
