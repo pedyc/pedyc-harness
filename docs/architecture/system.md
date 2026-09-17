@@ -32,10 +32,12 @@ Project                          Harness                        Agent
 | -------- | ---------------------------- | -------------------------------------------------------------- |
 | CLI | 用户每次调用命令时 | 参数解析、`init` 落盘 `.harness/`、`run` 编排一次任务、`doctor` 报告环境 |
 | Runtime | 一次 `run` 期间 | 校验契约、执行 Policy、编排 Agent、独立验证、检查改动范围、产出记录 |
-| Preset | `init` / `diff` / `update` 时 | 提供技术栈相关默认能力(Policy、闸门、AGENTS.md 文本) |
+| Preset | `init` / `diff` / `update` 时;代码入口在 Preset 激活前加载 | 提供技术栈相关治理规范(Policy、规则与默认级别、闸门、AGENTS.md 文本),并可通过 Extension Contract 注册实现(目标 M21) |
 | Provider | Runtime 调用某个阶段时 | 把 Harness 的阶段请求翻译成具体 Agent 的调用 |
 
 CLI 不承担治理判定,Runtime 不感知具体技术栈,Preset 不实现 Runtime,Provider 不负责验证。
+
+Preset 提供能力,但何时使用由 Runtime 决定;判定的完整链路见[治理流水线](./governance.md)。
 
 ## 2. 分层与依赖方向
 
@@ -63,6 +65,8 @@ Core 中不得出现任何技术栈分支。技术栈差异通过 Preset 表达,
 
 `run` 由 `packages/cli/src/run.ts` 驱动,核心循环在 `packages/core/src/runtime/executor.ts`。
 
+编排阶段的完整词汇、观察边界与产物分离见 [Runtime 架构](./runtime.md);本节只描述当前实现。
+
 | # | 阶段 | 关键行为 | 产物 |
 | - | ---------------- | ------------------------------------------------------------------------ | ---------------------------------- |
 | 1 | Intake | `normalizeTask` 归一化输入;支持 `--input` / `--prompt` / `--task` | `.harness/runs/<id>/input.json` |
@@ -86,6 +90,10 @@ Core 中不得出现任何技术栈分支。技术栈差异通过 Preset 表达,
 
 阶段状态取值为 `running` / `passed` / `failed`;一次运行的整体状态取值为 `passed` / `failed`。
 不存在 `rejected`、`cancelled` 等未实现的状态。
+
+> **目标(ADR-006)** 状态词汇扩展为三个正交概念:`termination`(循环为什么停下)、`status`(运行
+> 是否走完)、`verdict`(治理结论)。规则是**文档里出现的每个状态要么有实现,要么带里程碑标记**,
+> 因此解除上面这条约束必须与实现同批进行。见 [Runtime 架构](./runtime.md)。
 
 ## 4. 模块职责
 
@@ -191,6 +199,7 @@ LoadedHarnessConfig       含 sources:每个值是从哪读到的
 
 ## 9. 相关文档
 
+- [Runtime 架构](./runtime.md) · [治理流水线](./governance.md)
 - [CLI 设计](./cli.md) · [Policy 设计](./policy.md) · [Preset 设计](./preset.md)
 - [Provider 设计](./provider.md) · [Verification 设计](./verification.md)
 - [核心接口设计](../interfaces/README.md) · [Core 契约](../interfaces/core.md)

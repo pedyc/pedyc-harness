@@ -24,6 +24,7 @@ M0 → M1 → M2 → M3 → M4 → M5 → M6
 
 M18 → M19（在 M17 之后）
 M20（生态命令，可随时插入）
+M21（代码 Preset，在 M8 与 M17 之后）
 ```
 
 阶段名称保留不变，因为阶段记录的是演进历史，不是优先级。
@@ -65,6 +66,7 @@ M9       才能把生效配置与 provenance 写进 Run Record
 | M18    | M16、M17        | 团队 Preset 需要继承与合成               |
 | M19    | M17             | 安全模型建立在合并语义之上               |
 | M20    | M18、M19        | 生态命令在治理模型稳定后再做             |
+| M21    | M7、M8、M17     | 扩展面注册的是规则与证据实现，并参与合成 |
 
 ---
 
@@ -121,6 +123,7 @@ M9       才能把生效配置与 provenance 写进 Run Record
 | M18    | 支持团队与组织 Preset                                             | 计划中 |
 | M19    | 定义策略安全模型（合并语义与不可覆盖约束）                        | 计划中 |
 | M20    | 提供 Preset 搜索 / 安装 / 发布的最小生态能力                      | 计划中 |
+| M21    | 定义 Preset 代码扩展契约（入口、注册面、信任与 provenance）        | 计划中 |
 
 设计依据见 [系统架构](../architecture/system.md)、[Preset 设计](../architecture/preset.md)、[Policy 设计](../architecture/policy.md)、
 [核心接口设计](../interfaces/README.md)。
@@ -427,6 +430,29 @@ Allowed / Rejected → Execute`。
 
 其中 `report` 用于兼容已有声明性策略。
 
+##### 6. 规则处置层（severity）
+
+在文件与命令之外增加第三类判定:规则实现产生 Finding,Policy 声明 `rule id → severity → action`。
+
+默认映射为 `error → reject`、`warning → review`、`info → report`;Finding 自己声明是否可修复,只有
+可修复的 Findings 才回 Coder 重试。
+
+匹配逻辑不进入 Policy:条件与优先级仍属于实现(内置 checker 或 Preset 注册的规则)。severity 属于
+安全语义,更高层只能收紧,不能放宽。
+
+见 [ADR-004](../decisions/ADR-004-policy-severity-rules.md) 与 [治理流水线](../architecture/governance.md)。
+
+##### 7. 实时拒绝的边界与超时
+
+Provider 协议是「一次阶段 = 一次进程调用」,因此 Runtime 能实时拒绝的只有**它自己启动的进程**:
+Provider 命令与验证命令的策略检查(`forbiddenCommands`)、以及受保护路径的前置拒绝。Agent 进程内部
+的写入只能事后从快照差异中发现——这条边界必须写进文档,而不是留给读者猜。
+
+同时把 `agentTimeoutMs` 接入命令执行,并提供取消管线,使 `timeout` 与 `cancelled` 成为真实可产生的
+终止原因。
+
+见 [Runtime 架构](../architecture/runtime.md) 与 [ADR-006](../decisions/ADR-006-run-lifecycle.md)。
+
 #### 验收标准
 
 * 修改受保护目录会导致运行失败。
@@ -435,6 +461,12 @@ Allowed / Rejected → Execute`。
 * `onViolation: report` 保持只报告行为。
 * 根仓库和 examples 在默认 `fail` 下全部通过。
 * Policy 规则均有失败路径测试。
+* 未知 rule id 报错,而不是静默忽略。
+* 试图把 `warning` 降为 `info`、或把 `reject` 改为 `report` 的更高层配置被拒绝。
+* 文件、命令、规则三类判定共用同一个 Policy Evaluator。
+* `forbiddenCommands` 在 Provider 与验证命令执行前生效,被拒绝的命令不产生执行副作用。
+* `agentTimeoutMs` 到期会终止该阶段,并记录终止原因为 `timeout`。
+* 取消可以中断正在运行的 Provider 进程,并记录为 `cancelled`。
 
 #### 版本影响
 
@@ -486,24 +518,84 @@ Policy 从声明变为强制执行属于行为增强。
 * stdout 摘要。
 * stderr 摘要。
 * 是否跳过。
+* **来源与信任等级**。
+
+#### 证据信任等级
+
+每条 Evidence 必须带来源,按可信度分三级:`harness-executed`(Harness 亲自执行)、
+`analyzer-derived`(确定性分析器)、`agent-claimed`(Agent 自称)。只有前两级参与判定,
+`agent-claimed` 只能作为线索进入上下文。
+
+#### Evidence Provider 注册
+
+Preset 可以通过 Extension Contract 注册确定性分析器,产出与内置 checker 相同的 Evidence 结构。
+注册时机、可撤销与 provenance 属于 M21,见 [ADR-003](../decisions/ADR-003-preset-as-code.md)。
+
+#### 语义检查由 Harness 调度
+
+Preset 只能**声明**语义治理需求(`SemanticVerification`:提示词、触发条件、默认级别、所需 Evidence),
+模型、凭证与网络由 Harness 调度,并复用既有 Provider role 与 stdin/stdout 协议——不新增独立的
+`LLMProvider` 注册表。
+
+触发为 `规则命中 OR 分数阈值`;被触发的多条检查按轮批量合成一次调用,调用次数由触发决定,不由检查
+条数决定。`confidence` 与启发式分数不参与判定,只用于排序与路由人工。
+
+预算耗尽:`warning` 记 `skipped`,`error` fail-closed;`--semantic=disabled` 必须写入 Run Record。
+
+见 [ADR-005](../decisions/ADR-005-semantic-governance.md)。
+
+#### 结构验证与检查种类
+
+验证分四类:命令(退出码)、结构(解析产物上的约束)、启发式(可解释的分数)、语义(需要模型)。其中
+**结构验证是新增能力**:分析器从改动后的源码中提取事实(例如 CSS 的 `animation-duration: 1s`),
+规则只负责与声明的约束比较。分析器与规则解耦,可以由不同的包分别提供。
+
+检查声明带 `kind`(`constraint` / `preference` / `instruction` / `verification`),kind 决定默认合并
+语义与默认级别。术语纪律:用 AST 提取属性值属于结构验证,**不叫 semantic**——「语义」只指需要模型的
+那一类。
+
+见 [ADR-007](../decisions/ADR-007-rule-kinds-and-constraints.md)。
 
 #### Reviewer 输入
 
 Reviewer 不再只读取 Agent 的 `passed: true`,而必须消费 Acceptance Criteria + Verification
 Evidence + Actual Changes。
 
+Reviewer 的输出是**结构化 Findings**(rule、target、severity、reason、retryable),而不是一句批准;
+`approved: boolean` 只作为兼容字段保留,最终判定仍由 Harness 给出。可修复的 Findings 回 Coder,
+不可修复的终止;越界改动与受保护路径命中不参与 severity 映射,直接终止。
+
 #### 一致性检查
 
 如果 Agent 声称修改某文件、但实际 diff 中不存在(Agent claim ≠ Actual Change),必须明确列出,而不能静默忽略。
+
+#### 范围判定独立成一步
+
+把越界判定从 Reviewer 步骤里提出来,成为独立执行、独立报告的判定,而不是只体现在 `details` 文本里。
+即使 Reviewer 批准,越界仍然一票否决。
+
+见 [Runtime 架构](../architecture/runtime.md)。
 
 #### 验收标准
 
 * 每个 required check 都存在对应 Evidence。
 * Evidence 包含命令、Exit Code、耗时。
+* 每条 Evidence 都带信任等级,`agent-claimed` 不参与判定。
 * 成功但可疑的验证结果仍可通过 Evidence 被审查。
 * 没有任何 Evidence 时 Reviewer 不得批准。
 * dry-run 不产生 Evidence。
 * Agent 自述不能作为独立 Verification Evidence。
+* Reviewer 返回 Findings 而不是布尔值。
+* Reviewer 与 Coder 的同源关系可声明、可审计。
+* 语义检查的声明里不出现模型、端点或凭证;provider 由 `agents.json` 决定。
+* 未触发的检查不产生调用;一轮内多条被触发的检查只产生一次调用。
+* `Finding.evidence` 中不在本轮快照/diff 里的路径被丢弃。
+* `confidence` 与启发式分数不改变判定结果,并有对应的失败路径测试。
+* 语义审查被跳过或被显式禁用时,Run Record 明确记录。
+* 越界判定与 Reviewer 的裁定在记录里是两项独立事实。
+* 结构验证能对改动后的文件求值声明的约束,并给出 `analyzer-derived` 的 Finding。
+* 分析器与规则分别来自不同包时仍能工作。
+* 声明式约束超出表达力上限时给出明确错误,而不是静默通过。
 
 #### 版本影响
 
@@ -577,6 +669,17 @@ Evidence + Actual Changes。
 
 `--json` 输出与 Run Record 保持一致，使 CI 可以直接消费而不再解析日志文本。
 
+##### 8. 与 RunResult 分离
+
+`RunResult` 是治理结论的快速读取面；`RunRecord` 是完整审计。两者不得混用一个 schema，也不得把
+Agent 的完整对话写进 RunRecord——那属于 Provider 与 Agent 自己的日志，写进来会重复、会带来脱敏
+负担，也会越过「不做会话式 Agent」的边界。
+
+RunRecord 还必须携带三样今天没有的东西：终止原因（`termination`）、每条 Evidence 的**信任等级**、
+以及 M17 之后每条生效值的 provenance。
+
+见 [ADR-006](../decisions/ADR-006-run-lifecycle.md) 与 [Runtime 架构](../architecture/runtime.md)。
+
 #### 验收标准
 
 * 每次 Run 都产生完整 Run Record，能回答开头的四个问题。
@@ -585,6 +688,9 @@ Evidence + Actual Changes。
 * Run Record 中不出现明文密钥。
 * 同一任务重复执行不覆盖历史记录。
 * `.harness/runs/` 被 gitignore，且清理策略已文档化。
+* RunRecord 能回答「循环为什么停下」（termination）与「这条结论凭什么可信」（信任等级）。
+* `RunResult` 与 RunRecord 是两个独立读取面，字段不重复。
+* RunRecord 不含 Agent 的完整对话。
 
 #### 版本影响
 
@@ -738,12 +844,24 @@ Provider 不只是「能换」，而是能被第三方实现并发布。
 
 `doctor` 输出 Provider 配置来源与兼容性检查结果。
 
+##### 6. 协议与观察边界
+
+批协议（一次阶段 = 一次进程调用）决定了观察能力：Harness 只能看到阶段级的快照、命令与退出码。
+适配器**可以**上报进度事件，但必须是能力协商的可选行为——Harness 不得依赖它，缺失时行为完全一致。
+
+若将来引入流式会话协议，那是破坏性变更（MAJOR），且需要独立论证：它会改变「换一个 Agent 不需要修改
+Harness」的成本结构。
+
+见 [Runtime 架构](../architecture/runtime.md) 与 [ADR-006](../decisions/ADR-006-run-lifecycle.md)。
+
 #### 验收标准
 
 * 更换 Provider 不需要修改 Core。
 * 新增 Adapter 不需要依赖仓库内路径。
 * Provider 失败、超时、非法输出都产生结构化错误。
 * Adapter 无法绕过 Policy、Diff 与 Independent Verification。
+* Harness 在适配器不上报任何进度事件时行为完全一致。
+* 协议文档明确写出「可观察粒度」与「不可拦截的部分」。
 * 不以 Provider 数量作为完成标准，只以可替换性为准。
 
 #### 版本影响
@@ -948,6 +1066,9 @@ EffectiveHarnessConfig
 
 按字段实现合并语义:`replace`、`merge`、`append`、`deny-wins`、`immutable`。
 
+规则类字段的合并语义由 `kind` 决定(`constraint` → deny-wins、`preference` / `instruction` → append、
+`verification` → union),不由字段名决定,见 [ADR-007](../decisions/ADR-007-rule-kinds-and-constraints.md)。
+
 字段表见 [Policy 设计](../architecture/policy.md) 与 [Preset 设计](../architecture/preset.md)。
 实现必须收敛在单一模块，避免规则语义漂移。
 
@@ -963,6 +1084,17 @@ Runtime 不再直接读取分散的配置文件，只消费 `EffectiveHarnessCon
 
 提供命令查看合并结果与来源，用于回答「这条规则是谁声明的」。
 
+##### 5. 治理编译产物
+
+Resolver 输出 `EffectiveGovernance`：policy、rules（带 kind 与 severity）、verification、instructions、
+provenance 与 **`conflicts`**。
+
+冲突按 `安全语义优先 → 同 kind 按配置层级 → 仍未定则记录并取更严格者` 判定；第三步**必须记录**，
+否则审计无法回答「为什么 300ms 赢了 400ms」。
+
+见 [ADR-007](../decisions/ADR-007-rule-kinds-and-constraints.md) 与
+[Preset 设计](../architecture/preset.md) §11。
+
 #### 验收标准
 
 * Runtime 不再从多个来源分别读取 Policy。
@@ -970,6 +1102,8 @@ Runtime 不再直接读取分散的配置文件，只消费 `EffectiveHarnessCon
 * `protectedPaths` 只能追加，项目配置无法移除上层声明的项。
 * M7 的 Policy Evaluator 消费 `EffectivePolicy`，文件与命令判定共用同一份规则。
 * 每条合并语义都有对应的失败路径测试。
+* 多个 Preset 的 rules 与 verification 同时生效：constraint 取交集，verification 取并集。
+* 两份 Preset 对同一属性给出不同约束时，`conflicts` 记录最终取值与理由。
 
 ---
 
@@ -1005,6 +1139,8 @@ Runtime 不再直接读取分散的配置文件，只消费 `EffectiveHarnessCon
 #### 工作项
 
 * 把合并语义表落成代码与测试。
+* 把规则种类（`kind`）与默认合并语义、默认级别的对应关系落成代码与测试，见
+  [ADR-007](../decisions/ADR-007-rule-kinds-and-constraints.md)。
 * 提供表达 `immutable` / `deny-wins` 的配置形式。
 * 冲突诊断：说明哪一层试图放宽哪条约束。
 * 迁移说明与 CHANGELOG 条目。
@@ -1037,3 +1173,41 @@ Runtime 不再直接读取分散的配置文件，只消费 `EffectiveHarnessCon
 #### 设计约束
 
 > 只有当 npm 生态无法满足需求时，才重新论证是否需要自有 Registry。
+
+---
+
+### M21：Preset 代码扩展契约
+
+#### 目标
+
+让复杂 Preset 可以携带实现，而不只是声明：确定性分析器、审查定义与生成逻辑都能随 npm 包复用，
+同时 Core 仍然不感知具体技术栈，治理链仍然可审计。
+
+决策与替代方案见 [ADR-003](../decisions/ADR-003-preset-as-code.md)。
+
+#### 工作项
+
+* **入口加载**：清单 `entry` 指向的模块在 `VALIDATED` 之后加载，加载失败不得进入 `ACTIVE`
+  （当前 `entry` 只被解析器校验路径，没有任何运行时加载它）。
+* **注册面**：治理默认值与规则声明、验证定义、Evidence Provider、审查定义、项目模板——封闭枚举，
+  注册面之外没有入口。
+* **注册身份**：每项注册带稳定 id 与 provenance（`package@version` + 扩展点 + id）；冲突在
+  `VALIDATE` 阶段报错，不允许后注册者静默覆盖前者。
+* **能力边界**：受限上下文，不提供文件系统与网络；不能调用 Provider、不能决定 Gate 结果、不能写
+  Run Record。
+* **顺序无关**：注册结果不得依赖注册顺序。
+* **能力清单**：Preset 可声明 `capabilities`（`filesystem` / `shell` / `network` / `semanticReview`）；
+  语义是**请求**，deny-by-default，由 Harness 在注册期授予并校验，声明本身不产生任何权限。
+* **发布规则**：`release:check` 从"预设包不含代码"改为"预设包可以携带入口代码，但不得携带第二份
+  治理定义"。
+* **兼容声明**：Preset 用 `peerDependencies` 声明兼容的 `pedyc-harness` 范围（两个官方 Preset
+  目前尚未声明）。
+
+#### 验收标准
+
+* 一个只含数据的 Preset 与今天的行为完全一致。
+* 入口加载失败、注册 id 冲突、路径越界，都在任何 Preset 代码执行之前被拒绝。
+* Preset 注册的 Evidence Provider 与内置 checker 产出同一种 Evidence。
+* 任何注册项都能从 Run Record 追溯到来源包与版本。
+* 未声明的能力一律不可用：一个未声明 `network` 的 Preset 无法发起网络调用。
+* 至少有一个官方 Preset 用代码扩展实现一条规则，作为端到端样例。

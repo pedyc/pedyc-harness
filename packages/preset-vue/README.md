@@ -8,11 +8,16 @@ conventions on top of the shared contracts.
 npx pedyc-harness init --preset vue
 ```
 
-This package is data, not code: `preset.json`, `policy.json`, `agents.json` and
+This package ships data only: `preset.json`, `policy.json`, `agents.json` and
 `AGENTS.md`. There is no entry point, no build step and no dependency on the Harness
 core. `init` records `@pedyc/harness-preset-vue` in `.harness/harness.json`; the
 policy and agent documents are read from this package at run time rather than copied
 into the project.
+
+A preset is a governance specification, not a Runtime plugin: one may declare a code
+entry that registers analyzers and reviewer definitions through the Harness extension
+contract. This package does not — see
+[ADR-003](https://github.com/pedyc/pedyc-harness/blob/main/docs/decisions/ADR-003-preset-as-code.md).
 
 Compared with the `generic` preset:
 

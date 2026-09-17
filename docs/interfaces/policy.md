@@ -75,9 +75,48 @@ files.filter((file) => !policy.allowedProductPaths.some((p) => file.startsWith(p
 > 不可被普通 Override 解除的安全约束——以上均**未实现**。当前 Policy 是一个扁平的设置对象,
 > 不存在规则列表,也不存在决策对象。
 
-见[架构:Preset 与 Policy](../architecture/preset.md)与[里程碑路线](../milestones/milestones.md)。
+> **目标(M7)** 严重级别规则层的声明形状如下,**未实现**,字段名以落地时的 Schema 为准。语义见
+> [Policy 设计 §5.1](../architecture/policy.md)与 [ADR-004](../decisions/ADR-004-policy-severity-rules.md)。
+
+```ts
+type Severity = 'error' | 'warning' | 'info'
+type RuleAction = 'reject' | 'review' | 'report'
+
+interface RuleSetting {
+  severity?: Severity   // 覆盖规则声明的默认级别
+  action?: RuleAction   // 覆盖默认映射
+  enabled?: boolean     // 更高层只能收紧,不能关闭安全类规则
+}
+
+interface Policy extends CommandPolicy {
+  // ...§1 的当前字段...
+  rules?: Record<string, RuleSetting>
+  severityActions?: Partial<Record<Severity, RuleAction>>
+  onViolation?: 'fail' | 'report'
+}
+```
+
+两条约束:
+
+- `rules` 的 key 是 **rule id**,由内置 checker 或 Preset 注册的规则提供;**匹配逻辑不在 Policy 里**。
+- `severity` 与 `enabled` 只能被更高层**收紧**,不能被放宽(deny-wins),见
+  [项目目标](../项目目标.md) 原则 13。
+
+规则的**种类**(`constraint` / `preference` / `instruction` / `verification`)由规则声明设定,决定默认
+合并语义与默认级别;Policy 只覆盖处置,不能改 kind。形状见
+[验证契约](./verification.md) 与 [ADR-007](../decisions/ADR-007-rule-kinds-and-constraints.md)。
+
+默认映射为 `error → reject`、`warning → review`、`info → report`;Finding 的形状与处置结果见
+[验证契约](./verification.md)。
+
+语义检查通过 `SemanticVerification` 声明自己的**默认级别**(见[验证契约](./verification.md)),
+`policy.rules` 覆盖它;匹配逻辑仍不在 Policy 里,模型与凭证也不在语义检查的声明里
+(见 [ADR-005](../decisions/ADR-005-semantic-governance.md))。
+
+见[Preset 契约](./preset.md)与[里程碑路线](../milestones/milestones.md)。
 
 ## 6. 相关文档
 
 - [Core 契约](./core.md) · [Provider 契约](./provider.md) · [验证契约](./verification.md)
 - [Preset 契约](./preset.md) · [Policy 设计](../architecture/policy.md)
+- [治理流水线](../architecture/governance.md) · [ADR-004](../decisions/ADR-004-policy-severity-rules.md)

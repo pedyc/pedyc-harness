@@ -25,11 +25,13 @@
 
 * [架构总览](./architecture/README.md) — `architecture/` 的语义
 * [系统架构](./architecture/system.md) — 系统结构、分层与可信执行模型
+* [Runtime 架构](./architecture/runtime.md) — 编排阶段、观察边界、终止与产物
 * [Preset 设计](./architecture/preset.md) — Preset 治理规范、继承与配置解析
 * [Policy 设计](./architecture/policy.md) — Policy 模型与执行边界
 * [CLI 设计](./architecture/cli.md) — 命令、参数与项目初始化
 * [Provider 设计](./architecture/provider.md) — Agent Adapter 与扩展机制
 * [Verification 设计](./architecture/verification.md) — 独立验证与证据
+* [治理流水线](./architecture/governance.md) — Evidence → Review → Gate 三层治理链路
 
 ## 接口
 
@@ -49,6 +51,11 @@
 
 * [ADR-001 Preset Resolution](./decisions/ADR-001-preset-resolution.md)
 * [ADR-002 Preset Validation & Resolution](./decisions/ADR-002-preset-validation-resolution.md)
+* [ADR-003 Preset 是代码](./decisions/ADR-003-preset-as-code.md)
+* [ADR-004 Policy 严重级别规则层](./decisions/ADR-004-policy-severity-rules.md)
+* [ADR-005 语义治理由 Harness 调度](./decisions/ADR-005-semantic-governance.md)
+* [ADR-006 Run 生命周期与观察层边界](./decisions/ADR-006-run-lifecycle.md)
+* [ADR-007 规则种类与可执行约束](./decisions/ADR-007-rule-kinds-and-constraints.md)
 
 ## 权衡
 

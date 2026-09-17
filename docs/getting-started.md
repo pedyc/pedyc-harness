@@ -2,8 +2,8 @@
 
 > 一次端到端走查:在一个已有项目里接入 pedyc-harness、声明治理配置、配一个 Provider,并跑完一次任务。
 >
-> **本文同时标注现状与目标。** 走查本身今天就能逐步执行;唯一的例外是「配置合成」——见第 6 节与
-> 第 9 节的对照表,那里会说明它停在哪一步、以及为什么。
+> **本文同时标注现状与目标。** 走查本身今天就能逐步执行;唯一的例外是「配置合成」——见第 5.1 节、
+> 第 6 节与第 9 节的对照表,那里会说明它停在哪一步、以及为什么。
 
 ## 1. 前提
 
@@ -155,6 +155,76 @@ npx pedyc-harness list-presets
 **「组合」目前只做到「都解析出来」。** 多份 policy 之间不会合并:只有最后一个声明了 `policy` 的预设
 会被采用。要让多个预设的治理同时生效,今天只能把内容写进项目自己的 policy。
 
+### 5.1 两个 Preset 一起用时会发生什么
+
+这是最容易误解的一步,值得走一遍。项目里同时声明两个领域预设:
+
+```json
+{
+  "version": 1,
+  "presets": ["@acme/harness-preset-motion", "@acme/harness-preset-minimal-design"]
+}
+```
+
+它们各自声明的东西(概念形态):
+
+```text
+motion-preset                 minimal-design-preset
+├── rules                     ├── rules
+│   ├── animation-duration    │   ├── no-unnecessary-abstraction
+│   │   kind=constraint       │   │   kind=constraint
+│   │   150ms–400ms           │   └── prefer-design-tokens
+│   └── prefer-transform      │       kind=preference
+│       kind=preference       └── verification
+└── verification                  └── unnecessary-abstraction(语义)
+    └── animation-duration(结构)
+```
+
+**今天**:两个包都能被解析出来,但只有最后一个声明 `policy` 的预设生效,另一份被整份忽略;两者的
+rules 与 verification 谁都不执行,`1s` 的动画时长也不会有人检查。
+
+> **目标(M17、M8)** 目标形态把它们**编译**成一份生效治理,而不是挑一份文档:
+
+```text
+motion-preset + minimal-design-preset
+        ↓ Preset Resolver(编译)
+EffectiveGovernance
+├── rules         两者并存;constraint 取交集,preference 追加
+│                 ├── motion.animation-duration  <= 400ms(error)
+│                 └── design.no-unnecessary-abstraction(error)
+├── verification  两者都执行(union)
+├── instructions  只取最后一个声明者(见 §5.2)
+├── provenance    每条值来自哪个包与版本
+└── conflicts     两个 Preset 对同一属性给出不同约束时,记录最终取值与理由
+```
+
+冲突不会静默解决:`constraint` 之间取交集,同 kind 按配置层级(`Task > Project > Team >
+Organization > Global`),仍未定则**记入 `conflicts` 并取更严格者**。规则种类与合并语义见
+[ADR-007](./decisions/ADR-007-rule-kinds-and-constraints.md)。
+
+### 5.2 一次带多 Preset 的 Run(目标形态)
+
+以 `npx pedyc-harness run --prompt "给按钮加一个淡入动效"` 为例:
+
+```text
+① intake      验收标准缺失 → 今天会直接失败并要求你补充(见第 10 节),不会猜
+② resolve     两个 Preset → EffectiveGovernance(含 conflicts 与 provenance)
+③ execute     Agent 修改 CSS:animation: fade-in 1s ease
+④ verify      命令验证(type-check / test / build)
+              + 结构验证(CSS 分析器给出 duration = 1s,规则比较 1s <= 400ms → 不满足)
+⑤ scope       改动是否落在 allowedProductPaths 之内
+⑥ review      Findings 按 severity → action 处置;越界一票否决
+⑦ record      RunResult(结论)+ RunRecord(证据、范围、终止原因、provenance)
+```
+
+三条容易误解的边界:
+
+- **实时拦截只对 Harness 自己启动的进程有效。** Agent 进程内部的写入只能事后从快照差异中发现,
+  不存在"边写边 DENY"(见 [Runtime 架构](./architecture/runtime.md))。
+- **「语义」只指需要模型的那一类验证。** 用 AST 读出 `1s` 属于**结构验证**,不需要 LLM。
+- **多个 Preset 的 instruction 不合并。** instruction 只在 `init` 时播种项目的 `AGENTS.md` 一次,
+  此后归项目所有;多个预设都提供时取最后一个。
+
 ## 6. 看生效了什么
 
 `doctor` 会列出**配置来源**,这是判断「我的配置到底生效了没有」最直接的办法:
@@ -276,9 +346,11 @@ planner → coder → tester → reviewer
 | 选择基础 Preset(约定式包名 + 安装) | ✅ 已实现 | Package Registry |
 | 在项目内声明自己的治理配置 | ✅ 已实现,但**整份覆盖**预设 | 字段级合并 |
 | 组合 / 继承第三方 Preset | ✅ 解析已实现(`extends` + 去重 + 环检测) | 解析结果参与合成 |
+| 多 Preset 同时生效 | ⚠️ **只有最后一个声明 policy 的预设生效** | M17:按规则种类合并 + `conflicts` |
 | 解析出 Effective Policy | ⚠️ **只做到「选出哪份文档生效」+ 来源报告** | **M17:字段级合并、deny-wins、provenance** |
 | Agent 执行(四阶段 + Provider 协议) | ✅ 已实现 | — |
 | Verification(Harness 自执行闸门 + tester 认可) | ✅ 已实现(结果层) | M8:退出码/stdout/耗时/时间戳 |
+| 结构验证(AST 上的约束,如动画时长) | ❌ 无(验证只有包脚本一种形态) | M8:分析器产出事实 + 规则比较(ADR-007) |
 | Gate(范围检查) | ✅ 已实现 | M9/M10:Trace/Audit 与人工审批 |
 
 阶段划分与依赖顺序见[里程碑路线](./milestones/milestones.md)。

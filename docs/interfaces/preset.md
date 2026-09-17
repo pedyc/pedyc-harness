@@ -1,7 +1,10 @@
 # Preset 契约
 
-> Preset 是**数据,不是代码**:它是一个 npm 包,用 `preset.json` 声明自己继承什么、提供了哪些文档。
-> 包内没有任何东西会被执行。
+> 当前实现中 Preset 是**数据包**:它用 `preset.json` 声明自己继承什么、提供了哪些文档,包内没有
+> 任何东西会被执行。
+>
+> **目标(M21)** Preset 可以携带代码入口,通过封闭的 Extension Contract 注册能力(§7),理由见
+> [ADR-003](../decisions/ADR-003-preset-as-code.md)。
 >
 > 来源:`packages/core/src/contracts/preset.ts`、`packages/core/src/config/presets.ts`、
 > `packages/cli/src/presets.ts`。
@@ -15,6 +18,7 @@ interface PresetManifest {
   policy?: string               // 包内相对路径
   agents?: string               // 包内相对路径
   instruction?: string          // 包内相对路径,init 用它播种 AGENTS.md
+  entry?: string                // 声明保留:代码入口,解析器只校验包内存在
   verification?: string         // 声明保留;暂无运行时消费
   rules?: string[]              // 声明保留;暂无运行时消费
 }
@@ -31,8 +35,16 @@ interface ResolvedPreset {
 `name` 必须等于解析它的那个包,否则 `extends` 会有歧义,循环报告也会指向一个读者找不到的包。
 所有相对路径只能指向**本包之内**,不得越出包目录。
 
-`verification` 与 `rules` 是当前仅有的两个「声明了但无人消费」的字段。相比之下旧模型有四个死字段
-(`detection`、`defaultProductPaths`、`verificationScripts`、`skills`)——那一组类型已不存在。
+`entry`、`verification` 与 `rules` 是当前「声明了但无人消费」的字段,但三者的校验强度不同:
+
+| 字段 | 解析器做什么 | 谁在等它 |
+| ---------- | ------------------------------------------ | ------------------------------ |
+| `entry` | 校验路径留在包内且文件存在(`pathFields`) | M21 加载并执行入口 |
+| `verification` | 校验路径留在包内且文件存在(`pathFields`) | M8 的验证定义 |
+| `rules` | **不校验**,只读出来 | M7 的规则声明与默认严重级别 |
+
+相比之下旧模型有四个死字段(`detection`、`defaultProductPaths`、`verificationScripts`、`skills`)
+——那一组类型已不存在。
 
 ## 2. 解析
 
@@ -66,6 +78,10 @@ presetPackageName(requested: string): string
 没有 `build` 脚本,因此 `pnpm -r run build` 不构建它们;`release:check` 也断言预设包不携带
 `src/` 或 `dist/`——一个仍然发布代码的预设会成为「什么是该预设」的第二份、且静默权威的定义。
 
+> **目标(M21)** 携带代码入口的 Preset 必须发布可执行的入口产物,因此 `release:check` 的断言要改为:
+> 预设包可以携带**入口代码及其构建产物**,但仍不得携带第二份治理定义(例如把同一份 policy 同时写成
+> JSON 与代码)。原断言的理由是"不允许静默的第二份定义",而不是"不允许代码"。
+
 `policy.json` / `agents.json` 由**解析器**在运行时读取;`instruction` 指向的 markdown 由 `init`
 读取并写入目标项目的 `AGENTS.md`(取最后一个提供了 instruction 的预设)。**预设的内容不会被复制
 进目标项目**,这正是升级时不会覆盖项目自身修改的原因。
@@ -94,9 +110,47 @@ pedyc-harness init --preset vue --no-install  # 包已就位时跳过安装
 当前解析出的是一个**有序的预设列表**,不是合并后的配置。`ResolvedPreset[]` 依赖在前,「更具体者
 胜出」目前只体现在 `instruction` 的选取上(取最后一个),尚未推广到 policy 与 agents 的字段级合并。
 
-## 6. 相关文档
+## 7. 目标(M21):代码入口契约
+
+> **目标(M21)** 以下形状**尚未实现**,字段名以落地时的 Schema 为准。语义与边界见
+> [Preset 设计 §8](../architecture/preset.md) 与 [ADR-003](../decisions/ADR-003-preset-as-code.md)。
+
+```ts
+interface PresetModule {
+  setup(context: PresetContext): void | Promise<void>
+}
+
+interface PresetContext {
+  // 注册面是封闭枚举:每一项都要求稳定 id,并记录 provenance
+  policy(defaults: unknown): void
+  rules(declarations: readonly RuleDefinition[]): void
+  verification(checks: readonly CheckDefinition[]): void
+  evidence(providers: readonly EvidenceProvider[]): void
+  review(definition: ReviewDefinition): void
+  templates(templates: Templates): void
+}
+```
+
+契约要点:
+
+| 要点 | 语义 |
+| -------------- | -------------------------------------------------------------------- |
+| 加载时机 | 入口只在 `VALIDATED` 之后加载;加载或注册失败都不得进入 `ACTIVE` |
+| id 与冲突 | 每个注册项带稳定 id;冲突报错,不允许后注册者静默覆盖前者 |
+| 能力边界 | 不能调用 Provider、不能决定 Gate、不能写 Run Record、不能直接访问文件系统与网络 |
+| 顺序无关 | 注册结果不得依赖注册顺序 |
+| 向后兼容 | 没有 `entry` 时行为与当前完全一致,纯数据 Preset 继续合法 |
+
+`entry` 字段本身已经进入 `PresetManifest`(§1),但**没有任何运行时加载它**:今天解析器只校验它
+留在包内且文件存在。
+
+`RuleDefinition` 的 `severity` 与 `action` 形状见 [Policy 契约](./policy.md);
+`EvidenceProvider` 与 `ReviewDefinition` 的产出见 [验证契约](./verification.md)。
+
+## 8. 相关文档
 
 - [Core 契约](./core.md) — `HarnessManifest`、`ConfigSource`、配置错误码
 - [CLI 契约](./cli.md) — `init` / `list-presets` / `verify` 的行为
-- [Policy 契约](./policy.md) · [Provider 契约](./provider.md)
-- [Preset 设计](../architecture/preset.md) · [里程碑路线](../milestones/milestones.md)
+- [Policy 契约](./policy.md) · [Provider 契约](./provider.md) · [验证契约](./verification.md)
+- [Preset 设计](../architecture/preset.md) · [治理流水线](../architecture/governance.md)
+- [ADR-003](../decisions/ADR-003-preset-as-code.md) · [里程碑路线](../milestones/milestones.md)

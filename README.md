@@ -368,11 +368,14 @@ Core 不依赖 Vue，也不依赖具体 Agent Provider。
 | ------------------------------- | -------------------------------- |
 | `@pedyc/harness-core`           | Harness 核心 Runtime / Domain    |
 | `pedyc-harness`                 | CLI                              |
-| `@pedyc/harness-preset-generic` | 通用 Preset（纯数据包）          |
-| `@pedyc/harness-preset-vue`     | Vue 3 + TypeScript + Vite Preset（纯数据包） |
+| `@pedyc/harness-preset-generic` | 通用 Preset（数据包，可扩展为代码）          |
+| `@pedyc/harness-preset-vue`     | Vue 3 + TypeScript + Vite Preset（同上） |
 
-两个 Preset 包只有 `preset.json`、`policy.json`、`agents.json`、`AGENTS.md`，没有代码、没有构建
-步骤、也不依赖 Core：Preset 是数据，不是模块。
+两个 Preset 包目前只包含 `preset.json`、`policy.json`、`agents.json`、`AGENTS.md`：没有代码、没有
+构建步骤、也不依赖 Core。
+
+Preset 仍然不是 Runtime Plugin——即使将来携带代码，它注册的也只是 Harness 定义的扩展点
+（[ADR-003](./docs/decisions/ADR-003-preset-as-code.md)，M21）。
 
 设计目标：
 

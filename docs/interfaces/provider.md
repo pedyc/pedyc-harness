@@ -45,6 +45,10 @@ interface AgentsConfig {
 不存在 Provider Registry、Adapter Factory 或 Resolver。**路由就是一次两级查表**:
 `agents[role].provider` → `agents.providers[name]`。
 
+> **目标(M8)** 语义检查也走这条路由,**不引入第二个 Provider 机制**:检查声明一个 role(默认
+> `reviewer`),由 Harness 决定用哪个 provider 承接,并把本轮触发的多条检查批量合成一次调用。
+> 因此不存在 `LLMProvider` 注册表。决策见 [ADR-005](../decisions/ADR-005-semantic-governance.md)。
+
 ## 3. 调用协议
 
 一次阶段调用等于一次进程调用:
@@ -128,3 +132,4 @@ Provider 会一直挂起。
 
 - [Core 契约](./core.md) · [Policy 契约](./policy.md) · [验证契约](./verification.md)
 - [Provider 设计](../architecture/provider.md) · [系统架构](../architecture/system.md)
+- [治理流水线](../architecture/governance.md) · [ADR-005](../decisions/ADR-005-semantic-governance.md)

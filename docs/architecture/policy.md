@@ -20,6 +20,9 @@ Policy 是 `.harness/policy.json` 这一份**扁平设置对象**。它不是规
 Policy 描述的是「**这一次**允许做什么」,不是「Agent 理论上能做什么」。允许集合之外的一切都视为
 越界,不需要额外声明禁止项。
 
+> **目标(M7)** 目标形态在四类判定之外增加第五类:**规则处置**——规则实现产生 Finding,Policy 声明
+> 该规则有多严重、该怎么处置。它仍然是**处置声明**,不是条件匹配,见 §5.1。
+
 ## 2. 什么时候执行
 
 Policy 在五个不同时机被读取,后果各不相同:
@@ -69,17 +72,42 @@ Policy 在五个不同时机被读取,后果各不相同:
 
 ## 5. 目标形态
 
-> **目标(M19)** 规划中的方向是**配置组合语义**,而不是把 Policy 变成规则引擎:多个 Preset 合并
-> 时,默认值类配置可以被覆盖,安全类约束只能收紧(deny-wins),不可被普通 Override 解除。
->
-> 这解决的是「谁的配置说了算」,不是「匹配哪条规则」。当前既没有合并语义,也没有规则匹配。
+> **目标(M7、M19)** 目标形态有两条方向,职责不同。以下内容均**未实现**:当前既没有合并语义,
+> 也没有规则处置层。
+
+### 5.1 规则处置层(M7)
+
+规则实现产生 Finding,Policy 声明 `rule id → severity → action`:
+
+| Severity | 默认 Action | 含义 |
+| --------- | ----------- | -------------------- |
+| `error` | `reject` | 判定不通过 |
+| `warning` | `review` | 需 Reviewer 确认后才算通过 |
+| `info` | `report` | 只记录,不影响判定 |
+
+三点必须守住:
+
+- **Policy 声明处置,不声明匹配。** 条件表达式、优先级与冲突解决仍不进入 `policy.json`;匹配逻辑
+  属于内置 checker 或 Preset 注册的规则(见 [Preset 设计 §8](./preset.md))。
+- **统一 Evaluator。** 文件、命令、规则三类判定由同一个 Policy 模块给出结论,避免"文件一套逻辑、
+  命令一套逻辑、规则又一套逻辑"。
+- **severity 属于安全语义。** 更高层只能收紧(把 `warning` 提升为 `error`、把 `report` 改为
+  `reject`),不能放宽;降低级别、关闭规则、把 `reject` 改为 `report` 都视为放宽,必须被拒绝。
+
+详见 [ADR-004](../decisions/ADR-004-policy-severity-rules.md)与[治理流水线](./governance.md)。
+
+### 5.2 配置组合语义(M19)
+
+多个 Preset 合并时,默认值类配置可以被覆盖,安全类约束只能收紧(deny-wins),不可被普通 Override
+解除。这解决的是「谁的配置说了算」,与 5.1 的「哪条规则怎么处置」是两件事。
 
 见 [Preset 设计](./preset.md)与[里程碑路线](../milestones/milestones.md)。
 
 ## 6. 边界
 
-Policy **不负责**:调用 Provider、执行验证、构建 Preset 依赖图、解析 CLI 参数。它只根据上下文与
-规则产生判定结果,由编排层据此决定后续行为。
+Policy **不负责**:调用 Provider、执行验证、构建 Preset 依赖图、解析 CLI 参数。它也不负责"发现
+问题"——匹配由规则实现完成,Policy 只决定发现之后的处置。它只根据上下文与规则产生判定结果,由编排
+层据此决定后续行为。
 
 Policy 也**不感知技术栈**。Vue 或 React 的特殊规则属于 Preset,不属于 Policy 的字段。
 
@@ -87,5 +115,7 @@ Policy 也**不感知技术栈**。Vue 或 React 的特殊规则属于 Preset,�
 
 - [Policy 契约](../interfaces/policy.md) — 字段表、约束与三个函数
 - [系统架构](./system.md) — 一次 Run 的执行顺序
-- [Preset 架构](./preset.md) — 目标形态下的配置合成
+- [治理流水线](./governance.md) — Findings 如何被处置、如何回流
+- [Preset 架构](./preset.md) — 目标形态下的配置合成与规则来源
 - [验证架构](./verification.md) — `requiredChecks` 如何被判定
+- [ADR-004](../decisions/ADR-004-policy-severity-rules.md) — 严重级别规则层

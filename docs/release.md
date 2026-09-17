@@ -192,8 +192,8 @@ pnpm run test:unit
 - `LICENSE` 不在任何 `files` 数组中，但四个包目录下都有 `LICENSE` 文件。npm 始终自动包含
   `package.json`、`README`、`LICENSE`/`LICENCE`，因此这是有意的依赖，不需要写进 `files`。
 - 四个包都**没有** `main`、`module`、`types` 顶层字段；入口完全由 `exports` 描述（见下一节）。
-- 两个 Preset 包是**数据包**：`files` 只列 `preset.json`、`policy.json`、`agents.json`、`AGENTS.md`
-  与 `README.md`；它们没有 `dist/`，也没有构建脚本。
+- 两个 Preset 包目前是**数据包**：`files` 只列 `preset.json`、`policy.json`、`agents.json`、`AGENTS.md`
+  与 `README.md`；它们没有 `dist/`，也没有构建脚本。携带代码入口的 Preset 见第 10 节的目标形态。
 
 原则：npm package 应该是最小可运行发布物，而不是整个 Repository 的压缩包。
 
@@ -271,7 +271,7 @@ pedyc-harness run --input .harness/task.example.json --dry-run --json
 
 ## 10. Preset Package
 
-Preset 是**数据包**：一个 npm 包加一份 `preset.json` 清单，不含任何代码。
+当前实现的 Preset 是**数据包**：一个 npm 包加一份 `preset.json` 清单，不含任何代码。
 
 ```text
 @pedyc/harness-preset-vue/
@@ -292,6 +292,13 @@ Preset 是**数据包**：一个 npm 包加一份 `preset.json` 清单，不含�
 
 `preset.json` 声明继承关系（`extends`，只写包名）与本包提供的文档路径；所有相对路径只能指向包内。
 字段与解析语义见 [Preset 契约](./interfaces/preset.md)。
+
+> **目标(M21)** Preset 可以携带代码入口（`entry`），通过封闭的 Extension Contract 注册分析器与审查
+> 定义，见 [ADR-003](./decisions/ADR-003-preset-as-code.md)。届时本节与 `release:check` 的约束要改为：
+> 预设包**可以**携带入口代码及其构建产物，但仍然**不得**携带第二份治理定义（例如把同一份 policy
+> 同时写成 JSON 与代码）——原断言的理由是"不允许静默的第二份定义"，而不是"不允许代码"。
+>
+> 今天 `entry` 只被解析器校验路径（留在包内且文件存在），没有任何运行时加载它。
 
 两点需要说明：
 
