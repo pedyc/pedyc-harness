@@ -1,9 +1,11 @@
 /**
  * The `preset.json` document shipped inside a preset package.
  *
- * A preset is data, not code. It declares what it inherits and where the
- * documents it provides live inside its own package; nothing in it is executed,
- * and no field may point outside the package directory.
+ * A preset is a governance specification. Today it is a data package: it
+ * declares what it inherits and where the documents it provides live inside its
+ * own package, and no field may point outside the package directory. `entry` is
+ * the declared hook for a preset that also ships code; the resolver validates
+ * only the path, and no runtime loads it yet (M21).
  */
 export interface PresetManifest {
   /**
@@ -26,6 +28,13 @@ export interface PresetManifest {
   agents?: string
   /** Path to the markdown `init` uses to seed the target project's `AGENTS.md`. */
   instruction?: string
+  /**
+   * Path to the module that registers this preset's extensions.
+   *
+   * Declared for forward compatibility; no runtime loads it yet (M21). The
+   * resolver validates only that the path stays inside the package and exists.
+   */
+  entry?: string
   /** Declared for forward compatibility; no runtime consumes it yet. */
   verification?: string
   /** Declared for forward compatibility; no runtime consumes it yet. */

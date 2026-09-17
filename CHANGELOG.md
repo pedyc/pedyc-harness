@@ -30,6 +30,10 @@
   `presetDocument` 与 `PresetManifest` / `ResolvedPreset` 类型。
 - `init --preset` 在 Preset 尚未安装时按检测到的包管理器安装它；`--no-install` 关闭该行为。
   只写 Manifest 不装包会让下一次运行在配置阶段失败。
+- `schemas/preset.schema.json` 新增可选字段 `entry`：Preset 的代码入口。解析器会校验它留在包内且
+  文件存在，但**没有任何运行时加载它**——带 `entry` 的 Preset 属于
+  [ADR-003](./docs/decisions/ADR-003-preset-as-code.md) 定义的 M21 目标形态。变更前声明 `entry`
+  的清单会因未知字段被拒绝。
 
 ### Changed
 

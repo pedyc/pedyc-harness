@@ -208,6 +208,29 @@ describe('M16 preset resolution', () => {
     expect(errors[0].field).toBe('policy')
   })
 
+  it('validates the declared code entry even though no runtime loads it yet', async () => {
+    const root = await createProject({ version: 1, presets: ['@acme/harness-preset-web'] })
+    await writePresetPackage(root, { name: '@acme/harness-preset-web', preset: { entry: 'lib/index.js' } })
+
+    const errors = errorsOf(root, ['@acme/harness-preset-web'])
+
+    expect(errors[0].code).toBe('config_file_missing')
+    expect(errors[0].field).toBe('entry')
+  })
+
+  it('accepts a code entry that stays inside the package', async () => {
+    const root = await createProject({ version: 1, presets: ['@acme/harness-preset-web'] })
+    await writePresetPackage(root, {
+      name: '@acme/harness-preset-web',
+      preset: { entry: 'lib/index.js' },
+      files: { 'lib/index.js': 'export const setup = () => {}\n' },
+    })
+
+    // Declaring an entry is M21 work; loading it is not implemented, so the only
+    // thing to assert today is that resolution accepts a self-contained package.
+    expect(orderOf(root, ['@acme/harness-preset-web'])).toEqual(['@acme/harness-preset-web'])
+  })
+
   it('leaves a project with no presets exactly as it was', async () => {
     const root = await createProject({ version: 1 })
 

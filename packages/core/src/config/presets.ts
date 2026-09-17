@@ -11,8 +11,14 @@ export const presetDocument = 'preset.json'
 /** The bundled schema every preset manifest is validated against. */
 export const presetSchema = 'preset.schema.json'
 
-/** The fields of a preset manifest that name a file inside the package. */
-const pathFields = ['policy', 'agents', 'instruction', 'verification'] as const
+/**
+ * The fields of a preset manifest that name a file inside the package.
+ *
+ * `entry` and `verification` are validated even though no runtime consumes them
+ * yet: a declared document that the package does not contain is a broken preset
+ * either way, and resolving it early keeps the failure next to the manifest.
+ */
+const pathFields = ['policy', 'agents', 'instruction', 'entry', 'verification'] as const
 
 export type PresetsResult =
   | { ok: true; presets: ResolvedPreset[] }

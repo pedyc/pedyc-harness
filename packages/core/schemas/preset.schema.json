@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://pedyc.dev/schema/preset.json",
   "title": "Harness preset manifest",
-  "description": "Describes what a preset package inherits and what it provides. A preset is data, not code: it declares paths to documents inside its own package and nothing else.",
+  "description": "Describes what a preset package inherits and what it provides. A preset is a governance specification: it declares paths to documents inside its own package, and `entry` declares the module through which a preset that also ships code registers its extensions.",
   "type": "object",
   "additionalProperties": false,
   "required": ["name"],
@@ -37,6 +37,11 @@
     },
     "instruction": {
       "description": "Path to a markdown document used to seed the target project's AGENTS.md.",
+      "type": "string",
+      "minLength": 1
+    },
+    "entry": {
+      "description": "Path to the module that registers this preset's extensions (evidence providers, reviewer definitions). Declared for forward compatibility: the resolver checks only that the path stays inside the package and exists, and no runtime loads it yet (M21).",
       "type": "string",
       "minLength": 1
     },
