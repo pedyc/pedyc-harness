@@ -8,6 +8,9 @@
 
 ## [Unreleased]
 
+> 目标版本 **1.2.0**（声明式配置层）。发布时按[发布与版本规则](./docs/release.md) 改为
+> `## [1.2.0] - <日期>`；版本里包含的能力见[里程碑路线](./docs/milestones/milestones.md) 的版本阶梯。
+
 ### Added
 
 - `.harness/harness.json`（Harness Manifest）与 `schemas/harness.schema.json`。项目因此有了一个明确的
@@ -60,7 +63,9 @@
 - **`@pedyc/harness-preset-generic` 与 `@pedyc/harness-preset-vue` 移除了默认导出。**
   两个包现在是纯数据包：只有 `preset.json`、`policy.json`、`agents.json`、`AGENTS.md`，
   不再包含 `src/`、`dist/`、类型声明与构建步骤，也不再依赖 `@pedyc/harness-core`。
-  按 [发布与版本规则](./docs/release.md) §11「删除公开 API」，这属于 MAJOR。
+  按[发布与版本规则](./docs/release.md) §11，删除公开 API 默认属于 MAJOR；本次按同一节的
+  **「未消费 API」例外**判为 **MINOR**——这条默认导出没有文档化用法（Preset 的用法一直是
+  在 `harness.json` 里写包名），替代路径是「安装包 + 声明包名」。
 
   迁移方式：把 `import preset from '@pedyc/harness-preset-vue'` 换成安装包并在
   `.harness/harness.json` 中声明包名——
@@ -87,8 +92,9 @@
 - 已经 `init` 过并且 `.harness/policy.json`、`.harness/agents.json` 存在的项目按原样工作：
   项目自己的文档优先于 Preset，因此旧项目不会被 Preset 的策略改变行为。
 
-按 [发布与版本规则](./docs/release.md) §11，一次发布取最高语义级别。Preset 包的默认导出移除属于
-MAJOR，因此下一个发布是 **MAJOR**，四个包同步提升；具体版本号在发布时统一处理。
+按[发布与版本规则](./docs/release.md) §11，一次发布取四个包中变更的最高语义级别。本次 `Breaking`
+里的两项都命中该节的**「未消费 API」例外**（被删导出没有文档化用法，替代路径见上），因此判为
+**MINOR**：下一个发布是 **1.2.0**，四个包同步提升。
 
 
 ## [1.1.0] - 2026-09-15

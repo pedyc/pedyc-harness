@@ -324,6 +324,25 @@ Preset 生态与解析规则见 [Preset 设计](./architecture/preset.md)。Harn
 `0.x.y` 只适用于公开 API 尚未稳定的阶段。本仓库已越过该阶段（当前 1.1.0），因此新版本一律按
 上表判定，不再使用 `0.x` 语义。确需测试版本时使用 `1.2.0-beta.1` 这样的预发布标识。
 
+### 「未消费 API」例外
+
+删除一个导出**默认**属于 MAJOR，因为它是对已发布公开面的移除。唯一的例外必须同时满足三条：
+
+1. 该导出**没有文档化的使用路径**——`docs/` 与包 README 都没有把它写成推荐用法或迁移目标；
+2. CHANGELOG 逐条列出被删符号与**替代路径**；
+3. 被删的不是 `schemas/`、`.harness/` 契约，也不改变 CLI 行为。
+
+例外判为 **MINOR**，但必须在 CHANGELOG 中显式写出「为什么按 MINOR 处理」，而不是不提。
+
+`1.2.0` 是第一例：两个 Preset 包的默认导出与 `@pedyc/harness-core/contracts` 的 `Preset` /
+`PresetDetection` 都没有文档化用法（Preset 的用法一直是在 `harness.json` 里写包名），替代路径是
+`PresetManifest` 与 `ResolvedPreset`，且 `1.0.1`/`1.1.0` 与本次发布之间的窗口只有两天。
+
+### 本节不管什么
+
+本节只定义**编号怎么定**。某个版本里包含哪些能力，由[里程碑路线](./milestones/milestones.md) 的
+「版本阶梯」定义，不在这里重复——两处各写一遍必然漂移。
+
 ---
 
 ## 12. Package Version Relationship
@@ -548,19 +567,24 @@ Publish npm
 已经完成：
 
 ```text
-TypeScript migration
+TypeScript migration                  (1.1.0)
 Four-package split
 Core / CLI / Preset separation
+Config Foundation / Preset System     (M15、M16，已进入 [Unreleased]）
 ```
+
+M15 与 M16 已完成：配置入口、Preset 解析与其文档收尾都已做完，第 10 节也已按「预设是数据包」的
+现状重写。**下一个发布是 1.2.0（声明式配置层）**，编号依据见第 11 节的「未消费 API」例外，
+版本内容见[里程碑路线](./milestones/milestones.md) 的版本阶梯。
 
 当前阶段的 Release 重点不再是搭建 Release Infrastructure——第 6 节的闸门与 `release:check` 已经
 可用——而是：
 
 1. 保持四个 package 稳定独立构建；
 2. 保持 `exports` 公开面清晰、子路径名稳定；
-3. 让声明式治理配置落地：**M15（Config Foundation）与 M16（Preset System）是当前最高优先级**，
-   它们决定 Policy、Verification 与 Run Record 从哪里读配置；
-4. 在二者落地后修订第 10 节，把「目标（M16）」转为现状描述；
+3. 为 1.2.0 准备迁移说明与 CHANGELOG 的 SemVer 判定依据；
+4. 让**策略真正可执行**：M7（Policy Enforcement）与 M8（独立验证与证据链）是当前工作，
+   它们决定声明出来的策略是否真的拦得住；
 5. 补齐第 18 节的敏感文件自动扫描。
 
 阶段划分、依赖关系与验收标准见 [里程碑路线](./milestones/milestones.md)。
@@ -587,7 +611,7 @@ Published package must be tested
 ## 22. 相关文档
 
 - [CHANGELOG.md](https://github.com/pedyc/pedyc-harness/blob/main/CHANGELOG.md) — 对外变更记录
-- [里程碑路线](./milestones/milestones.md) — M15/M16 与阶段划分
+- [里程碑路线](./milestones/milestones.md) — 版本阶梯、阶段划分与验收标准
 - [项目目标](./项目目标.md) — 项目定位与设计原则
 - [Preset 设计](./architecture/preset.md) — Preset 生态与解析规则（含目标形态）
 - [文档导航](./README.md)

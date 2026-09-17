@@ -9,7 +9,8 @@
 > **里程碑编号代表项目演进历史，不严格代表实际执行顺序。**
 
 M11 是在 M7–M10 尚未实施前插入完成的 TypeScript 基础工程里程碑；配置层虽然编号为第五阶段，
-但已提前完成。**当前实际位置：M15、M16 已完成，下一步是 M7（策略可执行）。** 实际推进顺序是：
+但已提前完成。**当前实际位置：M15、M16 已完成并进入 `[Unreleased]`，下一个发布是 1.2.0（声明式
+配置层）；下一步的实现工作是 M7（策略可执行）。** 实际推进顺序是：
 
 ```text
 M0 → M1 → M2 → M3 → M4 → M5 → M6
@@ -18,10 +19,13 @@ M0 → M1 → M2 → M3 → M4 → M5 → M6
                               ↓
         M15 → M16 ← 已完成
               ↓
+        M12（发布 1.2.0：声明式配置层）
+              ↓
         M7 → M8 → M17 → M9 → M10
-                              ↓
-                      M12 → M13 → M14
+              ↓
+        M14（发布 1.3.0：治理执行）
 
+M13（可移植 Provider，在 1.2.0 基线之后，可随时插入）
 M18 → M19（在 M17 之后）
 M20（生态命令，可随时插入）
 M21（代码 Preset，在 M8 与 M17 之后）
@@ -60,13 +64,44 @@ M9       才能把生效配置与 provenance 写进 Run Record
 | M17    | M7、M16         | 合并语义基于 M7 实际实现的字段           |
 | M9     | M17             | Run Record 需要写入生效配置与 provenance |
 | M10    | M9              | 审批记录属于审计记录的一部分             |
-| M12    | M7–M10、M15–M17 | 汇总发布 v1.2.0                          |
-| M13    | M12             | Provider 协议在发布基线上演进            |
-| M14    | M13             | 发布 v1.3.0                              |
+| M12    | M15、M16        | 发布 v1.2.0：声明式配置层                |
+| M13    | M12             | Provider 协议在 1.2.0 基线上演进         |
+| M14    | M7、M8          | 发布 v1.3.0：治理执行                    |
 | M18    | M16、M17        | 团队 Preset 需要继承与合成               |
 | M19    | M17             | 安全模型建立在合并语义之上               |
 | M20    | M18、M19        | 生态命令在治理模型稳定后再做             |
 | M21    | M7、M8、M17     | 扩展面注册的是规则与证据实现，并参与合成 |
+
+---
+
+## 版本阶梯
+
+里程碑回答「什么时候做什么」，版本回答「用户可以期待什么」。两者不是一一对应：一个版本可能包含
+若干里程碑，一个里程碑也可能横跨两个版本。
+
+| 版本      | 能力契约（用户可用 `npx` 复现）                                       | 依赖        | 状态                   |
+| --------- | -------------------------------------------------------------------- | ----------- | ---------------------- |
+| 1.0.1     | `init --preset vue\|generic` 生成 `.harness/`、契约与 `AGENTS.md`；`run`（固定四阶段）/`verify`/`doctor`/`diff`/`update`/`list-presets`；Provider 需项目自配；Preset 是带默认导出的代码包 | M0–M6       | 已发布                 |
+| 1.1.0     | TypeScript 化；`@pedyc/harness-core/contracts` 公开；`schemas/` 单一来源 + `schemas:check`（非破坏） | M11         | 已发布                 |
+| **1.2.0** | **声明式配置层**：`.harness/harness.json` 成为入口；Preset 变 npm 数据包 + `extends` DAG；CLI 无静态表；`init` 不再复制 Preset 内容；`doctor`/`list-presets` 报告配置来源 | M15、M16    | 内容已就绪，待发布     |
+| 1.3.0     | **治理真正生效**：`protectedPaths` 与 `forbiddenCommands` 被强制；`onViolation`；severity 处置；超时与取消；结构化证据与信任等级；Findings 与结构验证 | M7、M8      | 计划中                 |
+| 1.4.0     | **生效配置与审计**：字段级合并 + deny-wins + provenance + `conflicts`；`RunResult` 与 `RunRecord` 分离；审批门 | M17、M9、M10 | 计划中                |
+| 1.5.0+    | 可移植 Provider；团队 / 组织 Preset 与策略安全模型；Preset 生态命令与代码扩展契约 | M13、M18–M21 | 计划中                |
+
+两条规则：
+
+* **版本号怎么定由 [发布与版本规则](../release.md) §11 决定**，本节只描述「这个版本承诺什么能力」。
+* 发布里程碑不预先「攒」里程碑：**已经完成的内容按阶梯发布**，未完成的顺延。这条原则来自 M14 自身，
+  2026-09 的 M15/M16 提前完成正是它的第一次应用。
+
+两个版本的语义级别尚未定稿，不要提前假定它们是 MINOR：
+
+* **1.3.0（M7、M8）**：`protectedPaths`/`forbiddenCommands` 从「声明但不管用」变成「真的拦」，
+  按 §11 属于「CLI 行为导致旧用法失效」。要判 MINOR，必须同时提供 `onViolation: report` 作为
+  兼容退路（M7 的既有工作项）。
+* **1.4.0（M17）**：项目自己的 `policy` 不再「整份覆盖」预设，而是字段级合并 + deny-wins——
+  **既有项目生效的治理会变**，这是整条路线上最像 MAJOR 的一项。若给不出兼容开关，它就应该被编成
+  2.0.0，而不是 1.4.0。
 
 ---
 
@@ -106,9 +141,9 @@ M9       才能把生效配置与 provenance 写进 Run Record
 
 | 里程碑 | 目标                                | 状态   |
 | ------ | ----------------------------------- | ------ |
-| M12    | 汇总 M7–M10、M15–M17 并发布 v1.2.0  | 计划中 |
+| M12    | 发布 v1.2.0：声明式配置层           | 计划中 |
 | M13    | 建立可移植的 Agent Provider Adapter | 计划中 |
-| M14    | 发布 v1.3.0                         | 计划中 |
+| M14    | 发布 v1.3.0：治理执行               | 计划中 |
 
 ### 第五阶段：声明式治理配置
 
@@ -758,37 +793,32 @@ Run Record 必须记录:谁批准、何时批准、批准了什么、依据哪�
 
 ---
 
-### M12：汇总 M7–M10、M15–M17 并发布 v1.2.0
+### M12：发布 v1.2.0（声明式配置层）
 
 #### 目标
 
-把 M7–M10 的治理能力与 M15–M17 的配置基础作为一个整体交付，而不是零散合并。
-
-按当前推进顺序，两者在本里程碑处已经全部完成：
+把**已经完成**的配置层发布出去，而不是等治理能力做完再一起发：
 
 ```text
-M15–M16  Config Manifest / Preset Resolution
-        +
-M7       Policy Enforcement
-        +
-M8       Independent Verification
-        +
-M17      Effective Policy
-        +
-M9       Trace / Audit
-        +
-M10      Approval Gate
-        ↓
+M15  Config Manifest
+     +
+M16  Preset Resolution
+     ↓
 v1.2.0
 ```
 
-* 四个官方包同步升级（发布顺序 `core → preset-generic → preset-vue → cli`）。
-* CHANGELOG 逐条列出行为变化，尤其是「声明变为强制」的 Policy 变化。
-* 迁移说明：受影响的既有项目需要如何调整。
-* 配置迁移说明：从只有 `policy.json` 的项目迁移到 `harness.json` 的步骤，以及不迁移时的行为。
-* 文档同步：[Policy 设计](../architecture/policy.md)、[Verification 设计](../architecture/verification.md)、
-  [核心接口设计](../interfaces/README.md)、[CLI 设计](../architecture/cli.md)。
-* `examples/` 与根仓库全量验证通过。
+配置层先于 M7 落地是刻意的（见文件开头的「为什么配置层要先做」），因此 M12 的职责只剩「发布」。
+版本里包含什么由[版本阶梯](#版本阶梯)定义，本节只列验收。
+
+#### 能力契约（用户可复现）
+
+| 能力             | 复现方式                                                                 |
+| ---------------- | ------------------------------------------------------------------------ |
+| 生成治理目录     | `npx pedyc-harness init --preset vue` 写出 `.harness/harness.json` 与契约文件，**不复制** Preset 内容 |
+| 无静态表的 Preset | `harness.json` 里写包名（短名按约定展开，含 `/` 原样）；`npx pedyc-harness list-presets` 列出 `declared` / `inherited` |
+| 继承与解析       | `extends` 形成 DAG：去重、依赖在前、环检测给出完整环路                    |
+| 配置来源可见     | `npx pedyc-harness doctor` 打印实际生效的配置来源（含回退到内置默认值）   |
+| 既有项目不被打断 | 已有 `.harness/policy.json` / `agents.json` 的项目行为不变：项目文档优先于 Preset |
 
 #### 验收标准
 
@@ -801,9 +831,11 @@ pnpm run test:unit
 pnpm run build
 ```
 
+* 上表每一条都能在一个**仓库之外**的临时项目里按顺序执行通过。
 * tarball 安装后 CLI 可以正常运行。
-* CHANGELOG 覆盖全部行为变化，并写明 SemVer 判定依据。
-* 行为增强项提供 `report` 之类的兼容开关，或明确说明不再兼容。
+* CHANGELOG 覆盖 `Breaking` 项，并写明**为什么按 MINOR 处理**（见
+  [发布与版本规则](../release.md) §11 的「未消费 API」例外）。
+* 迁移说明写明：从只有 `policy.json` 的项目迁移到 `harness.json` 的步骤，以及不迁移时的行为。
 
 #### 发布门槛
 
@@ -870,22 +902,32 @@ Harness」的成本结构。
 
 ---
 
-### M14：发布 v1.3.0
+### M14：发布 v1.3.0（治理执行）
 
 #### 目标
 
-交付可移植的 Provider 抽象，并按实际完成情况合并同一发布窗口内的其他里程碑。
+把 M7 与 M8 作为一次发布交付：**声明出来的策略真的拦得住，验证结果真的可复核**。
 
-`M13 Provider Adapter + 同期完成的治理 / 配置能力(M15–M17) → v1.3.0`
+```text
+M7   Policy Enforcement（文件 / 命令 / 规则处置，超时与取消）
+     +
+M8   独立验证与证据链（结构化证据、信任等级、Findings、结构验证）
+     ↓
+v1.3.0
+```
 
-未完成的里程碑进入后续版本，不为了凑版本号而推迟发布。
+未完成的里程碑进入后续版本，不为了凑版本号而推迟发布——这条原则同样适用于 M12 与后续每个发布。
+Provider 的可移植性（M13）不再绑在本版本上。
 
-#### 交付物
+#### 能力契约（用户可复现）
 
-* 四个官方包同步升级。
-* Provider 协议文档与至少一个外部 Adapter 样例。
-* CHANGELOG 与迁移说明（如果存在协议或行为变化）。
-* 全量验证与 tarball 消费者验证。
+| 能力               | 复现方式                                                                 |
+| ------------------ | ------------------------------------------------------------------------ |
+| 受保护路径真的被拦 | 改动命中 `protectedPaths` 的文件后运行：`run` 失败并指出该文件           |
+| 禁止命令真的被拒   | 让 Provider 或验证命令命中 `forbiddenCommands`：拒绝发生在执行之前，且无副作用 |
+| 声明变强制有退路   | `onViolation: report` 保持只报告行为                                     |
+| 证据可复核         | 每轮 `iteration-<n>-verification.json` 含命令、退出码、耗时与输出摘要     |
+| 判定结构化         | Reviewer 返回 Findings，按 `severity → action` 处置；越界一票否决         |
 
 #### 验收标准
 
@@ -898,8 +940,15 @@ pnpm run test:unit
 pnpm run build
 ```
 
+* 上表每一条都能在一个**仓库之外**的临时项目里复现。
+* M7 与 M8 各自的验收标准全部满足。
 * 版本号取值遵循「四个包中最高的语义级别」。
-* 发布内容与实际合并的里程碑一致，不夸大也不遗漏。
+
+#### 版本影响
+
+`protectedPaths` / `forbiddenCommands` 从「声明但不管用」变成「真的拦」，按
+[发布与版本规则](../release.md) §11 属于「CLI 行为导致旧用法失效」。**要判 MINOR，必须提供
+`onViolation: report` 作为兼容退路并在 CHANGELOG 中写明；否则本次发布应为 MAJOR。**
 
 ---
 
