@@ -31,11 +31,15 @@ Project                          Harness                        Agent
 | 层 | 何时执行 | 职责 |
 | -------- | ---------------------------- | -------------------------------------------------------------- |
 | CLI | 用户每次调用命令时 | 参数解析、`init` 落盘 `.harness/`、`run` 编排一次任务、`doctor` 报告环境 |
-| Runtime | 一次 `run` 期间 | 校验契约、执行 Policy、编排 Agent、独立验证、检查改动范围、产出记录 |
+| Governance Runtime | 一次 `run` 期间 | 校验契约、执行 Policy、编排 Agent、独立验证、检查改动范围、产出记录 |
 | Preset | `init` / `diff` / `update` 时;代码入口在 Preset 激活前加载 | 提供技术栈相关治理规范(Policy、规则与默认级别、闸门、AGENTS.md 文本),并可通过 Extension Contract 注册实现(目标 M21) |
 | Provider | Runtime 调用某个阶段时 | 把 Harness 的阶段请求翻译成具体 Agent 的调用 |
 
 CLI 不承担治理判定,Runtime 不感知具体技术栈,Preset 不实现 Runtime,Provider 不负责验证。
+
+**Agent Runtime**(Claude Code、Codex 等)不出现在这张表里:它属于外部世界,由 Provider 调用,不由本
+项目实现。这里的「Runtime」一律指 Governance Runtime——两者的分工见
+[项目目标](../项目目标.md) §一,边界判据见其原则 18、19。
 
 Preset 提供能力,但何时使用由 Runtime 决定;判定的完整链路见[治理流水线](./governance.md)。
 
@@ -65,7 +69,7 @@ Core 中不得出现任何技术栈分支。技术栈差异通过 Preset 表达,
 
 `run` 由 `packages/cli/src/run.ts` 驱动,核心循环在 `packages/core/src/runtime/executor.ts`。
 
-编排阶段的完整词汇、观察边界与产物分离见 [Runtime 架构](./runtime.md);本节只描述当前实现。
+编排阶段的完整词汇、观察边界与产物分离见 [Governance Runtime 架构](./runtime.md);本节只描述当前实现。
 
 | # | 阶段 | 关键行为 | 产物 |
 | - | ---------------- | ------------------------------------------------------------------------ | ---------------------------------- |
@@ -93,7 +97,7 @@ Core 中不得出现任何技术栈分支。技术栈差异通过 Preset 表达,
 
 > **目标(ADR-006)** 状态词汇扩展为三个正交概念:`termination`(循环为什么停下)、`status`(运行
 > 是否走完)、`verdict`(治理结论)。规则是**文档里出现的每个状态要么有实现,要么带里程碑标记**,
-> 因此解除上面这条约束必须与实现同批进行。见 [Runtime 架构](./runtime.md)。
+> 因此解除上面这条约束必须与实现同批进行。见 [Governance Runtime 架构](./runtime.md)。
 
 ## 4. 模块职责
 
@@ -199,7 +203,7 @@ LoadedHarnessConfig       含 sources:每个值是从哪读到的
 
 ## 9. 相关文档
 
-- [Runtime 架构](./runtime.md) · [治理流水线](./governance.md)
+- [Governance Runtime 架构](./runtime.md) · [治理流水线](./governance.md)
 - [CLI 设计](./cli.md) · [Policy 设计](./policy.md) · [Preset 设计](./preset.md)
 - [Provider 设计](./provider.md) · [Verification 设计](./verification.md)
 - [核心接口设计](../interfaces/README.md) · [Core 契约](../interfaces/core.md)

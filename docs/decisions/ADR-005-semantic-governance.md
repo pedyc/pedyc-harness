@@ -94,6 +94,9 @@ Preset 可以声明 `capabilities`（`filesystem` / `shell` / `network` / `seman
 验证脚本同样受这条规则约束：Preset **不携带**可执行脚本，`requiredChecks` 仍然只指向目标项目
 自己的 npm 脚本，由 Harness 在命令策略下执行。
 
+这条资源规则同时是**项目级的边界判据**——它不止决定 Preset 的扩展点，也决定 Provider 能扩到什么
+程度、以及「要不要顺手实现 Agent Runtime」的答案，见[项目目标](../项目目标.md) 原则 19。
+
 ### 2.7 预算耗尽与禁用
 
 | 情况 | 行为 |

@@ -116,7 +116,7 @@ Coder 会收到上一轮完整的闸门结果,这是失败原因回流给 Agent 
 `passed` 表示流程走通了,不表示某一套证据被独立复核过。
 
 > **目标(ADR-006)** 把「循环为什么停下」(`termination`)与「治理结论是什么」(`verdict`)从
-> `status` 里拆出来,见 [Runtime 架构](./runtime.md)。
+> `status` 里拆出来,见 [Governance Runtime 架构](./runtime.md)。
 
 ## 8. 失败模式
 
@@ -138,7 +138,7 @@ Coder 会收到上一轮完整的闸门结果,这是失败原因回流给 Agent 
 
 - [验证契约](../interfaces/verification.md) — 记录类型、通过条件与重试上限
 - [治理流水线](./governance.md) — Evidence / Review / Gate 三层的完整链路
-- [Runtime 架构](./runtime.md) — 验证在编排阶段中的位置
+- [Governance Runtime 架构](./runtime.md) — 验证在编排阶段中的位置
 - [系统架构](./system.md) — 四阶段循环中的位置
 - [Policy 架构](./policy.md) — `requiredChecks` 来自哪里、范围检查如何协作、Findings 如何被处置
 - [Preset 架构](./preset.md) — 分析器与检查声明如何被 Preset 注册

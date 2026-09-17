@@ -111,6 +111,14 @@ Preset 提供规范,Runtime 提供机制。这条分工贯穿所有组件:
 - **Preset 提供能力,Harness 决定何时使用。** 即使 Preset 提供的是代码(§8),运行时机、证据记录与
   最终判定仍属于 Runtime,见[治理流水线](./governance.md)。
 
+> **红线:Preset 只能定义「Agent 应该如何被治理」,不能定义「Agent 应该如何工作」。**
+
+可执行的形式就是 §8.1 的**封闭注册面**(治理默认值、验证定义、Evidence Provider、语义治理需求、项目
+模板)加上 §8.2 的约束。面外的一切——agent loop、工具编排、memory、scheduling、UI——都不是 Preset
+能声明的东西。判据是资源而不是名词:需要 Harness 独占执行资源(进程、模型、凭证、会话状态)的只能
+**声明**,纯计算才可以注册为代码,见 [ADR-005](../decisions/ADR-005-semantic-governance.md) §2.6 与
+[项目目标](../项目目标.md) 原则 19。
+
 ## 6. Runtime 的边界
 
 Runtime 不应该直接理解 Preset:

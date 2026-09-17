@@ -14,6 +14,9 @@ Report high-confidence defects first:
   package entry points;
 - unsafe input handling or command construction;
 - changes outside the product boundary;
+- execution capability leaking into Core (agent loop, tool orchestration, memory,
+  scheduling, session state) — apply the boundary test in `docs/项目目标.md`:
+  does the change make the agent more capable, or the execution more governable?
 - missing verification evidence.
 
 If no defect is found, state that clearly and list the checks that passed.

@@ -220,7 +220,7 @@ Organization > Global`),仍未定则**记入 `conflicts` 并取更严格者**。
 三条容易误解的边界:
 
 - **实时拦截只对 Harness 自己启动的进程有效。** Agent 进程内部的写入只能事后从快照差异中发现,
-  不存在"边写边 DENY"(见 [Runtime 架构](./architecture/runtime.md))。
+  不存在"边写边 DENY"(见 [Governance Runtime 架构](./architecture/runtime.md))。
 - **「语义」只指需要模型的那一类验证。** 用 AST 读出 `1s` 属于**结构验证**,不需要 LLM。
 - **多个 Preset 的 instruction 不合并。** instruction 只在 `init` 时播种项目的 `AGENTS.md` 一次,
   此后归项目所有;多个预设都提供时取最后一个。

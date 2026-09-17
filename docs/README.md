@@ -25,7 +25,7 @@
 
 * [架构总览](./architecture/README.md) — `architecture/` 的语义
 * [系统架构](./architecture/system.md) — 系统结构、分层与可信执行模型
-* [Runtime 架构](./architecture/runtime.md) — 编排阶段、观察边界、终止与产物
+* [Governance Runtime 架构](./architecture/runtime.md) — 编排阶段、观察边界、终止与产物
 * [Preset 设计](./architecture/preset.md) — Preset 治理规范、继承与配置解析
 * [Policy 设计](./architecture/policy.md) — Policy 模型与执行边界
 * [CLI 设计](./architecture/cli.md) — 命令、参数与项目初始化

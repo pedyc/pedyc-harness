@@ -195,7 +195,7 @@ interface RunResult {
 > **目标(ADR-006)** `RunResult` 补 `runId` 与 `termination`(循环为什么停下),`PhaseRecord` 补
 > `kind`(`'run' | 'stage'`,区分编排阶段与 Agent 阶段);嵌套子结果与 `verdict` 留到破坏性窗口。
 > `RunRecord` 与 `RunResult` 分离,且只记 Harness 自己观察到的事实。见
-> [Runtime 架构](../architecture/runtime.md) 与 [ADR-006](../decisions/ADR-006-run-lifecycle.md)。
+> [Governance Runtime 架构](../architecture/runtime.md) 与 [ADR-006](../decisions/ADR-006-run-lifecycle.md)。
 
 ## 5. 验证结果契约
 
@@ -307,6 +307,6 @@ interface PackageScriptCommand extends PackageManager { display: string }
 
 - [Policy 契约](./policy.md) · [Preset 契约](./preset.md) · [Provider 契约](./provider.md)
 - [验证契约](./verification.md) · [CLI 契约](./cli.md)
-- [系统架构](../architecture/system.md) · [Runtime 架构](../architecture/runtime.md)
+- [系统架构](../architecture/system.md) · [Governance Runtime 架构](../architecture/runtime.md)
 - [里程碑路线](../milestones/milestones.md) · [ADR-006](../decisions/ADR-006-run-lifecycle.md)
 - [文档规范](../CONVENTIONS.md)

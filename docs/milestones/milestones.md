@@ -451,7 +451,7 @@ Provider 命令与验证命令的策略检查(`forbiddenCommands`)、以及受�
 同时把 `agentTimeoutMs` 接入命令执行,并提供取消管线,使 `timeout` 与 `cancelled` 成为真实可产生的
 终止原因。
 
-见 [Runtime 架构](../architecture/runtime.md) 与 [ADR-006](../decisions/ADR-006-run-lifecycle.md)。
+见 [Governance Runtime 架构](../architecture/runtime.md) 与 [ADR-006](../decisions/ADR-006-run-lifecycle.md)。
 
 #### 验收标准
 
@@ -574,7 +574,7 @@ Reviewer 的输出是**结构化 Findings**(rule、target、severity、reason、
 把越界判定从 Reviewer 步骤里提出来,成为独立执行、独立报告的判定,而不是只体现在 `details` 文本里。
 即使 Reviewer 批准,越界仍然一票否决。
 
-见 [Runtime 架构](../architecture/runtime.md)。
+见 [Governance Runtime 架构](../architecture/runtime.md)。
 
 #### 验收标准
 
@@ -678,7 +678,7 @@ Agent 的完整对话写进 RunRecord——那属于 Provider 与 Agent 自己�
 RunRecord 还必须携带三样今天没有的东西：终止原因（`termination`）、每条 Evidence 的**信任等级**、
 以及 M17 之后每条生效值的 provenance。
 
-见 [ADR-006](../decisions/ADR-006-run-lifecycle.md) 与 [Runtime 架构](../architecture/runtime.md)。
+见 [ADR-006](../decisions/ADR-006-run-lifecycle.md) 与 [Governance Runtime 架构](../architecture/runtime.md)。
 
 #### 验收标准
 
@@ -852,7 +852,7 @@ Provider 不只是「能换」，而是能被第三方实现并发布。
 若将来引入流式会话协议，那是破坏性变更（MAJOR），且需要独立论证：它会改变「换一个 Agent 不需要修改
 Harness」的成本结构。
 
-见 [Runtime 架构](../architecture/runtime.md) 与 [ADR-006](../decisions/ADR-006-run-lifecycle.md)。
+见 [Governance Runtime 架构](../architecture/runtime.md) 与 [ADR-006](../decisions/ADR-006-run-lifecycle.md)。
 
 #### 验收标准
 
