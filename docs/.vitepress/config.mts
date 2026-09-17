@@ -32,7 +32,10 @@ export default defineConfig({
     sidebar: [
       {
         text: '开始',
-        items: [{ text: '从零接入 Harness', link: '/getting-started' }],
+        items: [
+          { text: '从零接入 Harness', link: '/getting-started' },
+          { text: '迁移到 1.2.0', link: '/migrating-to-1.2.0' },
+        ],
       },
       {
         text: '项目',

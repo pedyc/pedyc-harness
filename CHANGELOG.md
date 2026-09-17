@@ -6,17 +6,21 @@
 所有 workspace 包共享同一个版本号，同步发布。升级规则见 [发布与版本规则](./docs/release.md)。
 
 
-## [Unreleased]
+## [1.2.0] - 2026-09-17
 
-> 目标版本 **1.2.0**（声明式配置层）。发布时按[发布与版本规则](./docs/release.md) 改为
-> `## [1.2.0] - <日期>`；版本里包含的能力见[里程碑路线](./docs/milestones/milestones.md) 的版本阶梯。
+声明式配置层：`.harness/harness.json` 成为项目治理的声明入口，Preset 从代码包变成可继承的 npm
+数据包，CLI 不再内置任何静态 Preset 表。既有项目**无需改动**即可升级；迁移是可选的，步骤与
+不迁移时的行为见[迁移到 1.2.0](./docs/migrating-to-1.2.0.md)。
+
+本次发布包含两项删除公开导出的变更，按[发布与版本规则](./docs/release.md) §11 的**「未消费 API」
+例外**判为 **MINOR**，依据见下方 `Breaking` 一节。
 
 ### Added
 
 - `.harness/harness.json`（Harness Manifest）与 `schemas/harness.schema.json`。项目因此有了一个明确的
   配置入口，而不是把治理定义散落在多个隐式位置。`harness.json` 由 `@pedyc/harness-core` 自带的
   schema 副本校验，项目无法放宽自己的 Manifest 所受的约束。见
-  [M15](./docs/milestones.md#m15配置基础与-runtime-模块边界config-foundation)。
+  [M15](./docs/milestones/milestones.md#m15配置基础与-runtime-模块边界config-foundation)。
 - `@pedyc/harness-core/config` 子路径与 `loadHarnessConfig`：定位、读取并校验配置的唯一入口。
   配置错误在执行前返回结构化错误（`code` / `file` / `field` / `message`），而不是在运行中途失败。
 - `@pedyc/harness-core` 根导出新增配置层 API：`loadHarnessConfig`、`readManifest`、`defaultPolicy`、
@@ -24,7 +28,7 @@
 - `pedyc-harness doctor` 输出实际生效的配置来源，包括回退到 `built-in defaults` 的情况。
 - `Preset` 契约新增 `packageName`；`init` 写入 Manifest 的是包名而不是短名。
 - `schemas/preset.schema.json`（Preset Manifest 契约）与 `preset.json`，Preset 由此成为
-  可发布的 npm package。见 [M16](./docs/milestones.md#m16preset-system)。
+  可发布的 npm package。见 [M16](./docs/milestones/milestones.md#m16preset-system)。
 - Preset 继承：`extends` 声明父级包名，解析为 DAG。同一个 Preset 无论被多少条链引用都只加载
   一次，依赖排在使用它的 Preset 之前，循环依赖报出完整环路而不是让调用栈溢出。
 - `pedyc-harness list-presets`：列出项目实际解析到的 Preset 包，标注 `declared` / `inherited`
@@ -40,8 +44,8 @@
 
 ### Changed
 
-- **可能需要关注的退出码变更**：配置错误现在返回 `5`（`docs/CLI设计.md` §8），而不再是 `1`。
-  `pedyc-harness run` 与 `verify` 在配置缺失、非法或路径越界时都会返回 `5`。项目自有的
+- **可能需要关注的退出码变更**：配置错误现在返回 `5`（[CLI 契约](./docs/interfaces/cli.md) §8），
+  而不再是 `1`。`pedyc-harness run` 与 `verify` 在配置缺失、非法或路径越界时都会返回 `5`。项目自有的
   `.harness/verify.mjs` 退出码仍然原样透传。
 - `@pedyc/harness-core` 源码目录由 `contracts/` + `core/` + `adapters/` 收敛为
   `contracts/` + `config/` + `runtime/`。`exports` 子路径名全部保留，其中 `./schema` 现在指向
@@ -94,7 +98,10 @@
 
 按[发布与版本规则](./docs/release.md) §11，一次发布取四个包中变更的最高语义级别。本次 `Breaking`
 里的两项都命中该节的**「未消费 API」例外**（被删导出没有文档化用法，替代路径见上），因此判为
-**MINOR**：下一个发布是 **1.2.0**，四个包同步提升。
+**MINOR**：本版本为 **1.2.0**，四个包同步提升。
+
+从「只有 `policy.json`」的项目迁移到 `harness.json` 是可选的，完整步骤与不迁移时的行为见
+[迁移到 1.2.0](./docs/migrating-to-1.2.0.md)。
 
 
 ## [1.1.0] - 2026-09-15

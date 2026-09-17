@@ -41,10 +41,10 @@ Build、Test、Typecheck 与 Release 编排，不承载 Runtime。workspace 范�
 
 | Package | 版本 | `files` | `exports` 子路径数 |
 | ----------------------------- | ----- | -------------------------------------------------------------- | ----------------- |
-| `@pedyc/harness-core` | 1.1.0 | `dist`, `README.md` | 12 |
-| `pedyc-harness` | 1.1.0 | `dist`, `templates`, `README.md` | 2 |
-| `@pedyc/harness-preset-generic` | 1.1.0 | `preset.json`, `policy.json`, `agents.json`, `AGENTS.md`, `README.md` | 1(`./preset.json`) |
-| `@pedyc/harness-preset-vue` | 1.1.0 | 同上 | 1(`./preset.json`) |
+| `@pedyc/harness-core` | 1.2.0 | `dist`, `README.md` | 12 |
+| `pedyc-harness` | 1.2.0 | `dist`, `templates`, `README.md` | 2 |
+| `@pedyc/harness-preset-generic` | 1.2.0 | `preset.json`, `policy.json`, `agents.json`, `AGENTS.md`, `README.md` | 1(`./preset.json`) |
+| `@pedyc/harness-preset-vue` | 1.2.0 | 同上 | 1(`./preset.json`) |
 
 两个 Preset 包是**数据包**:它们不携带 `dist/`、`src/` 或任何 `scripts`,因此 `pnpm -r run build`
 不会构建它们。`release:check` 会断言这一点——一个仍然发布代码的预设会成为「什么是该预设」的第二份、
@@ -59,20 +59,21 @@ Build、Test、Typecheck 与 Release 编排，不承载 Runtime。workspace 范�
 
 `@pedyc/harness-core` 是最低层，不反向依赖 CLI、Preset、Vue 或具体 Provider。
 
-真实的依赖边来自各包 `package.json` 的 `dependencies`：
+真实的依赖边来自各包 `package.json` 的 `dependencies`，当前**只有一条**：
 
 ```text
-pedyc-harness                  → @pedyc/harness-core
-pedyc-harness                  → @pedyc/harness-preset-generic
-pedyc-harness                  → @pedyc/harness-preset-vue
-@pedyc/harness-preset-generic  → @pedyc/harness-core
-@pedyc/harness-preset-vue      → @pedyc/harness-core
+pedyc-harness  →  @pedyc/harness-core
 ```
 
-这是**扇形**结构，不是 `preset → CLI → Core` 的链式结构：Preset 只依赖 Core，**不依赖 CLI**。
-Core 的唯一运行时依赖是 `ajv`，没有任何 workspace 依赖。
+两个 Preset 包是数据包，**不依赖任何包，包括 `@pedyc/harness-core`**。它们也不被 CLI 依赖：
+`init --preset` 是按包名安装预设（见第 10 节），而不是通过依赖图解析它。Core 的唯一运行时依赖是
+`ajv`，没有任何 workspace 依赖。
 
-发布顺序必须遵循依赖方向，由 `scripts/harness/publish.ts` 固定为：
+因此这不是 `preset → CLI → Core` 的链式结构，也不是早先文档描述的扇形结构：**依赖图上只有一个
+入口、一条边**。这处变化是 M16 把 Preset 变成数据包时引入的，第 12 节的同步发布理由因此也要跟着
+改写——同步发布今天是一条策略，而不是依赖闭包的必然结果。
+
+发布顺序由 `scripts/harness/publish.ts` 固定为：
 
 ```text
 @pedyc/harness-core
@@ -84,7 +85,8 @@ Core 的唯一运行时依赖是 `ajv`，没有任何 workspace 依赖。
 pedyc-harness
 ```
 
-任何改动都不能形成循环依赖，也不能让 Core 反向依赖上层。
+今天真正被依赖方向要求的只有「Core 在 CLI 之前」这一条；预设排在 CLI 之前是刻意的约定，让发布
+顺序与本文档描述的顺序保持一致。任何改动都不能形成循环依赖，也不能让 Core 反向依赖上层。
 
 ---
 
@@ -258,7 +260,7 @@ Package 必须明确公开 API，且入口键统一使用 `types` + `default`：
 发布前必须验证：
 
 ```bash
-pedyc-harness --help
+pedyc-harness help
 pedyc-harness doctor
 pedyc-harness init --preset vue
 pedyc-harness verify
@@ -321,7 +323,7 @@ Preset 生态与解析规则见 [Preset 设计](./architecture/preset.md)。Harn
 | MINOR | 向后兼容的新能力 | 新增 API、新增 Preset 能力、新增 CLI 命令、新增可选配置 |
 | MAJOR | 不兼容变化 | 删除公开 API、修改已有 API 语义、修改配置协议或 CLI 行为导致旧用法失效 |
 
-`0.x.y` 只适用于公开 API 尚未稳定的阶段。本仓库已越过该阶段（当前 1.1.0），因此新版本一律按
+`0.x.y` 只适用于公开 API 尚未稳定的阶段。本仓库已越过该阶段（当前 1.2.0），因此新版本一律按
 上表判定，不再使用 `0.x` 语义。确需测试版本时使用 `1.2.0-beta.1` 这样的预发布标识。
 
 ### 「未消费 API」例外
@@ -336,7 +338,9 @@ Preset 生态与解析规则见 [Preset 设计](./architecture/preset.md)。Harn
 
 `1.2.0` 是第一例：两个 Preset 包的默认导出与 `@pedyc/harness-core/contracts` 的 `Preset` /
 `PresetDetection` 都没有文档化用法（Preset 的用法一直是在 `harness.json` 里写包名），替代路径是
-`PresetManifest` 与 `ResolvedPreset`，且 `1.0.1`/`1.1.0` 与本次发布之间的窗口只有两天。
+`PresetManifest` 与 `ResolvedPreset`，且 `1.0.1`/`1.1.0` 与该次发布之间的窗口只有两天。
+CHANGELOG 的 `Breaking` 一节写明了这条依据，面向用户的迁移步骤见
+[迁移到 1.2.0](./migrating-to-1.2.0.md) 第 5 节。
 
 ### 本节不管什么
 
@@ -347,9 +351,10 @@ Preset 生态与解析规则见 [Preset 设计](./architecture/preset.md)。Harn
 
 ## 12. Package Version Relationship
 
-四个 package **共享同一个版本号，同步发布**，当前均为 `1.1.0`。
+四个 package **共享同一个版本号，同步发布**，当前均为 `1.2.0`。
 
-这不是靠约定维持的，而是被工具链强制的。三条独立的原因：
+这个约束由工具链强制，但只在前两条上是强制的；第三条是一条刻意的产品选择，而不是依赖图的必然
+结果——原因见下。
 
 **1. 发布脚本拒绝版本不一致。** `scripts/harness/publish.ts` 在发布前收集四个 manifest 的版本，
 只要不全都相同就直接退出，一个包都不发。
@@ -359,16 +364,20 @@ Preset 生态与解析规则见 [Preset 设计](./architecture/preset.md)。Harn
 
 ```text
 package.json 中       发布后 package.json 中
-workspace:*      →    1.1.0        （不是 ^1.1.0）
+workspace:*      →    1.2.0        （不是 ^1.2.0）
 ```
 
-所以单独发布 `@pedyc/harness-core` 的新版本**不会传递给任何已有消费者**：依赖它的 CLI 和两个
-Preset 仍然精确锁定旧版本，除非它们也重新发布。`release:check` 会断言打包后没有任何
-`workspace:` 范围残留。
+所以单独发布 `@pedyc/harness-core` 的新版本**不会传递给任何已有消费者**：依赖它的 CLI 仍然精确
+锁定旧版本，除非 CLI 也重新发布。`release:check` 会断言打包后没有任何 `workspace:` 范围残留。
 
-**3. 依赖是菱形闭包。** 任何一条边上的改动都会波及全部四个包（边见第 3 节）。因此同步发布是
-唯一自洽的方式。发布入口只有根目录的 `pnpm run release:publish`，它按
-`core → preset-generic → preset-vue → cli` 的依赖顺序推送四个包。
+**3. 同步发布是策略，不再是依赖闭包。** M16 之前，Preset 依赖 Core、CLI 依赖两个 Preset，四条边
+构成菱形闭包：任何一条边上的改动都会波及全部四个包，因此同步发布是唯一自洽的方式。预设变成数据包
+之后（第 3 节），依赖图上只剩 `pedyc-harness → @pedyc/harness-core` 一条边，其余三个包已经**可以**
+单独发布而不破坏任何依赖关系。
+
+保留同步发布是刻意的：四个包对用户是同一套能力，共享一个版本号与一份 CHANGELOG，比各自演进更容易
+理解与支持。它由上面第 1 条强制，而不是由依赖图强制。发布入口只有根目录的
+`pnpm run release:publish`，它按 `core → preset-generic → preset-vue → cli` 的顺序推送四个包。
 
 ### 升级规则
 
@@ -397,7 +406,7 @@ package，按自己的节奏发布，只需通过 `peerDependencies` 声明兼�
 `Added` / `Changed` / `Fixed` / `Breaking Changes` 组织，标题形如：
 
 ```md
-## [1.1.0] - 2026-09-15
+## [1.2.0] - 2026-09-17
 ```
 
 Changelog 面向使用者，说明**对使用者意味着什么**，而不是罗列内部 commit。
@@ -452,7 +461,7 @@ Publish 后 Smoke Test（下一节）
 
 ```bash
 npm install pedyc-harness
-npx pedyc-harness --help
+npx pedyc-harness help
 npx pedyc-harness doctor
 ```
 
@@ -570,21 +579,25 @@ Publish npm
 TypeScript migration                  (1.1.0)
 Four-package split
 Core / CLI / Preset separation
-Config Foundation / Preset System     (M15、M16，已进入 [Unreleased]）
+Config Foundation / Preset System     (M15、M16)
+Declarative configuration layer       (1.2.0，M12)
 ```
 
-M15 与 M16 已完成：配置入口、Preset 解析与其文档收尾都已做完，第 10 节也已按「预设是数据包」的
-现状重写。**下一个发布是 1.2.0（声明式配置层）**，编号依据见第 11 节的「未消费 API」例外，
-版本内容见[里程碑路线](./milestones/milestones.md) 的版本阶梯。
+M15、M16 与发布里程碑 M12 都已完成：配置入口、Preset 解析、文档收尾与 1.2.0 发布都已做完，第 10 节
+也已按「预设是数据包」的现状重写。迁移说明见[迁移到 1.2.0](./migrating-to-1.2.0.md)，编号依据见
+第 11 节的「未消费 API」例外，版本内容见[里程碑路线](./milestones/milestones.md) 的版本阶梯。
+**下一个发布是 1.3.0（治理执行）。**
 
 当前阶段的 Release 重点不再是搭建 Release Infrastructure——第 6 节的闸门与 `release:check` 已经
 可用——而是：
 
 1. 保持四个 package 稳定独立构建；
 2. 保持 `exports` 公开面清晰、子路径名稳定；
-3. 为 1.2.0 准备迁移说明与 CHANGELOG 的 SemVer 判定依据；
-4. 让**策略真正可执行**：M7（Policy Enforcement）与 M8（独立验证与证据链）是当前工作，
+3. 让**策略真正可执行**：M7（Policy Enforcement）与 M8（独立验证与证据链）是当前工作，
    它们决定声明出来的策略是否真的拦得住；
+4. 为 1.3.0 判定语义级别：`protectedPaths` / `forbiddenCommands` 从「声明但不管用」变成
+   「真的拦」属于「CLI 行为导致旧用法失效」，要判 MINOR 必须同时提供 `onViolation: report`
+   作为兼容退路；
 5. 补齐第 18 节的敏感文件自动扫描。
 
 阶段划分、依赖关系与验收标准见 [里程碑路线](./milestones/milestones.md)。
