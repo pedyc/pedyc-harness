@@ -9,9 +9,8 @@ import type {
 } from '../contracts/index.js'
 
 // Deciding whether a document is acceptable configuration moved to the config
-// layer, but `./policy` is a published subpath, so the names stay exported here.
+// layer, but `./policy` is a published subpath, so the name stays exported here.
 export { validatePolicy } from '../config/policy.js'
-export { actionFor } from '../config/severity.js'
 
 // The judgment shapes are contract types now that `RunResult` carries them, but
 // this subpath is published, so they stay reachable from here too.

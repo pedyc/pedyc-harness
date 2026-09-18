@@ -53,10 +53,11 @@
 * [ADR-001 Preset Resolution](./decisions/ADR-001-preset-resolution.md)
 * [ADR-002 Preset Validation & Resolution](./decisions/ADR-002-preset-validation-resolution.md)
 * [ADR-003 Preset 是代码](./decisions/ADR-003-preset-as-code.md)
-* [ADR-004 Policy 严重级别规则层](./decisions/ADR-004-policy-severity-rules.md)
+* [ADR-004 Policy 严重级别规则层](./decisions/ADR-004-policy-severity-rules.md)（已被 ADR-008 取代）
 * [ADR-005 语义治理由 Harness 调度](./decisions/ADR-005-semantic-governance.md)
 * [ADR-006 Run 生命周期与观察层边界](./decisions/ADR-006-run-lifecycle.md)
 * [ADR-007 规则种类与可执行约束](./decisions/ADR-007-rule-kinds-and-constraints.md)
+* [ADR-008 Policy 的范围与推迟的规则处置层](./decisions/ADR-008-policy-scope-and-deferred-rule-disposition.md)
 
 ## 权衡
 

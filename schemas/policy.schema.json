@@ -2,76 +2,55 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://pedyc.dev/harness/policy.schema.json",
   "title": "Harness policy",
-  "description": "The shape of .harness/policy.json. Two deliberate limits. Unknown top-level keys are tolerated, because the runtime validator is permissive about fields it does not know and a schema that disagreed with it would be a second, silent definition. And two rules are semantic rather than structural, so they are enforced by the config layer instead: 'a severity may only be tightened', and 'a rule id no rule declares is an error' — the schema cannot know which ids exist.",
+  "description": "The shape of .harness/policy.json. Fields group into four jobs — scope, command constraints, execution constraints and enforcement — which is a documentation outline rather than structure: the document stays flat so no field name depends on its group. Unknown keys are tolerated on purpose, because the runtime validator is permissive about fields it does not know and a schema that disagreed with it would be a second, silent definition. There is no rule-disposition table: declaring one before a rule implementation exists would ship a field whose only legal value is empty. See docs/decisions/ADR-008-policy-scope-and-deferred-rule-disposition.md.",
   "type": "object",
   "required": ["allowedProductPaths", "maxIterations", "protectedPaths", "requiredChecks"],
   "properties": {
     "$schema": { "type": "string", "minLength": 1 },
     "allowedProductPaths": {
-      "description": "The only paths a coder may change. Prefix matching, so 'src/' means 'inside src/'.",
+      "description": "Scope. The only paths a coder may change. Prefix matching, so 'src/' means 'inside src/'.",
       "type": "array",
       "minItems": 1,
       "items": { "type": "string", "minLength": 1 }
     },
     "protectedPaths": {
-      "description": "Paths that may never change, even when they are inside allowedProductPaths.",
-      "type": "array",
-      "items": { "type": "string", "minLength": 1 }
-    },
-    "maxIterations": {
-      "description": "The upper bound on coder retries.",
-      "type": "integer",
-      "minimum": 1
-    },
-    "requiredChecks": {
-      "description": "Package scripts that must exist and must pass as verification gates.",
+      "description": "Scope. Paths that may never change, even when they are inside allowedProductPaths.",
       "type": "array",
       "items": { "type": "string", "minLength": 1 }
     },
     "forbiddenCommands": {
-      "description": "Command patterns refused before execution, matched as contiguous token sequences.",
+      "description": "Command constraints. Command patterns refused before execution, matched as contiguous token sequences.",
       "type": "array",
       "items": { "type": "string", "minLength": 1 }
     },
     "allowedAgentCommands": {
-      "description": "Executable names a provider may use. Empty or absent means no restriction.",
+      "description": "Command constraints. Executable names a provider may use. Empty or absent means no restriction.",
       "type": "array",
       "items": { "type": "string", "minLength": 1 }
     },
+    "requiredChecks": {
+      "description": "Execution constraints. Package scripts that must exist and must pass as verification gates.",
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "maxIterations": {
+      "description": "Execution constraints. The upper bound on coder retries.",
+      "type": "integer",
+      "minimum": 1
+    },
     "agentTimeoutMs": {
-      "description": "The bound on one provider invocation. Verification gates keep their own timeout.",
+      "description": "Execution constraints. The bound on one provider invocation. Verification gates keep their own timeout.",
       "type": "integer",
       "minimum": 1
     },
     "maxChangedFiles": {
-      "description": "The most files one coder iteration may change.",
+      "description": "Execution constraints. The most files one coder iteration may change.",
       "type": "integer",
       "minimum": 1
     },
     "onViolation": {
-      "description": "Whether a violation fails the run or is only recorded. Never weakens side-effect control.",
+      "description": "Enforcement. Whether a violation fails the run or is only recorded. Never weakens side-effect control.",
       "enum": ["fail", "report"]
-    },
-    "rules": {
-      "description": "Disposition per rule id. An id no rule declares is an error, not a silent no-op.",
-      "type": "object",
-      "additionalProperties": {
-        "type": "object",
-        "properties": {
-          "severity": { "enum": ["error", "warning", "info"] },
-          "action": { "enum": ["reject", "review", "report"] }
-        }
-      }
-    },
-    "severityActions": {
-      "description": "Overrides of the default severity to action table. Only tightening is accepted; that rule is enforced by the config layer, not expressible here.",
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "error": { "enum": ["reject", "review", "report"] },
-        "warning": { "enum": ["reject", "review", "report"] },
-        "info": { "enum": ["reject", "review", "report"] }
-      }
     }
   }
 }

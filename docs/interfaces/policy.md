@@ -39,16 +39,23 @@ interface Policy extends CommandPolicy {
 | `allowedAgentCommands` | ❌          | 必须是数组                 | ✅ `evaluateCommand`,精确成员名;denial 优先         |
 | `maxChangedFiles`      | ❌          | 正整数                     | ✅ `evaluateChangeBudget`,按单次 Coder 迭代计数     |
 | `onViolation`          | ❌          | `'fail'` \| `'report'`     | ✅ 决定违规是否升级为运行失败                       |
-| `severityActions`      | ❌          | 只能收紧的对象             | ✅ 作为 Finding 处置的映射覆盖                      |
-| `rules`                | ❌          | 键必须是已声明的 rule id   | ⚠️ 基础设施已就绪,但尚无 rule 实现,因此只接受空对象 |
+
+字段分成四组,这是**文档大纲,不是结构**:文档保持扁平,字段名不因分组而改变。
+
+| 分组                 | 字段                                                          |
+| -------------------- | ------------------------------------------------------------- |
+| Scope                | `allowedProductPaths`、`protectedPaths`                        |
+| Command Constraints  | `forbiddenCommands`、`allowedAgentCommands`                    |
+| Execution Constraints| `requiredChecks`、`maxIterations`、`agentTimeoutMs`、`maxChangedFiles` |
+| Enforcement          | `onViolation`                                                  |
 
 **要点:`maxIterations`、`protectedPaths`、`requiredChecks` 在类型上可选,但不写就会被
 `validatePolicy` 拒绝。** 只有 `allowedProductPaths`、`maxIterations`、`protectedPaths`、
 `requiredChecks` 四项齐全的文档才能通过校验。
 
-`rules` 目前只接受空对象:处置逻辑(`severity → action`、只能收紧、未知 id 报错)已经落地,
-但**没有 rule 实现声明过任何 id**,因此任何 id 都是未知 id 并报错,而不是被静默忽略。M8 的
-结构分析器与 M21 的 Preset 规则落地后,被声明的 id 才成为合法输入。
+**没有 `rules` 字段。** 规则处置表推迟到 M8:在第一个 rule 实现存在之前声明它,等于发布一个唯一
+合法值为空的字段——正是 M7 花力气清掉的那类「声明了但没人读」的字段。见
+[ADR-008](../decisions/ADR-008-policy-scope-and-deferred-rule-disposition.md)。
 
 `onViolation` 控制的是**违规的处置级别**,不是危险副作用的开关:被拒绝的命令在任何模式下都
 不会被启动。见 [ADR-006](../decisions/ADR-006-run-lifecycle.md) §2.3。
@@ -125,10 +132,11 @@ files.filter((file) => !policy.allowedProductPaths.some((p) => file.startsWith(p
 
 命令匹配的语义见下方 `### forbiddenCommands`。
 
-## 5. 已实现的规则处置
+## 5. 规则处置层(推迟到 M8)
 
-严重级别规则层已在 M7 落地(见 [Policy 设计 §5.1](../architecture/policy.md)与
-[ADR-004](../decisions/ADR-004-policy-severity-rules.md)):
+> **目标(M8)** 以下形状随**第一个 rule 实现**一起落地,**当前不存在**:`rules` 与
+> `severityActions` 已从 Schema、契约与校验中移除。理由见
+> [ADR-008](../decisions/ADR-008-policy-scope-and-deferred-rule-disposition.md)。
 
 ```ts
 type Severity = 'error' | 'warning' | 'info'
@@ -147,7 +155,7 @@ interface Policy extends CommandPolicy {
 }
 ```
 
-三条已实现的约束:
+落地时必须守住的约束:
 
 - `rules` 的 key 是 **rule id**,由内置 checker 或 Preset 注册的规则提供;**匹配逻辑不在 Policy 里**。
   目前 `knownRules` 为空,所以任何 id 都报错。

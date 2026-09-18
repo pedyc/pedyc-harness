@@ -7,22 +7,16 @@ import { createRequire } from 'node:module'
 export type * from './contracts/index.js'
 export type { ConfigProblem, ManifestResult } from './config/index.js'
 export {
-  actionFor,
-  actionOrder,
   agentProblems,
   asRecord,
   compileSchema,
   configError,
   createAjv,
   createValidators,
-  defaultActionFor,
   defaultAgents,
   defaultPolicy,
   formatConfigError,
   harnessDirectory,
-  isTightening,
-  knownRule,
-  knownRules,
   loadHarnessConfig,
   loadSchemas,
   manifestFile,
@@ -35,7 +29,6 @@ export {
   readManifest,
   readSchema,
   resolvePresets,
-  severityOrder,
   validateAgents,
   validatePolicy,
   validationDetails,
@@ -43,7 +36,6 @@ export {
 export type {
   HarnessSchemas,
   HarnessValidators,
-  KnownRule,
   PresetsResult,
   ResponseValidator,
   SchemaErrorFormatter,

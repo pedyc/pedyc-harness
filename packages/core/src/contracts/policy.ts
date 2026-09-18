@@ -82,25 +82,24 @@ export interface CommandPolicyContext extends CommandPolicy {
 }
 
 /**
- * A project's disposition for one rule, addressed by rule id.
- *
- * `enabled` is deliberately absent. Deciding which rules are security rules that
- * may not be switched off needs the safety model of M19, so this version can only
- * tighten a rule that already exists — it has no way to switch one off. See
- * `docs/decisions/ADR-004-policy-severity-rules.md` §2.5.
- */
-export interface RuleSetting {
-  severity?: Severity
-  action?: RuleAction
-}
-
-/**
  * A project's `.harness/policy.json`.
+ *
+ * The fields group into four jobs, which the documentation uses as its outline:
+ * **scope** (`allowedProductPaths`, `protectedPaths`), **command constraints**
+ * (`allowedAgentCommands`, `forbiddenCommands`), **execution constraints**
+ * (`requiredChecks`, `maxIterations`, `agentTimeoutMs`, `maxChangedFiles`) and
+ * **enforcement** (`onViolation`). The grouping is documentation, not structure:
+ * the document stays flat so a field name never depends on which group it is in.
  *
  * Only `allowedProductPaths` is required: `validatePolicy` rejects a policy
  * without it, and out-of-scope detection dereferences it directly. Every other
  * field stays optional because the document is untrusted JSON and callers fall
  * back to defaults.
+ *
+ * There is deliberately no rule-disposition table. Declaring one before a single
+ * rule implementation exists would ship a field whose only legal value is empty
+ * — the same "declared but nothing reads it" failure this milestone set out to
+ * remove. See `docs/decisions/ADR-008-policy-scope-and-deferred-rule-disposition.md`.
  */
 export interface Policy extends CommandPolicy {
   allowedProductPaths: string[]
@@ -117,8 +116,4 @@ export interface Policy extends CommandPolicy {
    */
   maxChangedFiles?: number
   onViolation?: ViolationMode
-  /** Disposition per rule id. Matching stays in the rule, never here. */
-  rules?: Record<string, RuleSetting>
-  /** Overrides of the default `severity → action` table, which may only tighten. */
-  severityActions?: Partial<Record<Severity, RuleAction>>
 }

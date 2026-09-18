@@ -23,7 +23,6 @@
 - **验证命令也过策略。** `requiredChecks` 的每条命令在执行前经过同一个 Policy Evaluator，
   被拒绝的闸门不会被启动。
 - `onViolation: fail | report`（默认 `fail`）。
-- 规则处置基础设施：`Policy.rules`（`rule id → severity/action`）与 `Policy.severityActions`。
 - `agentTimeoutMs` 到期会终止该次 Provider 调用并记录 `timeout`；Ctrl+C 会被记录为
   `cancelled`（CLI 把 SIGINT 接到取消管线上）。
 - `maxChangedFiles`：限制单次 Coder 迭代的改动文件数。
@@ -35,13 +34,13 @@
 
 ### Changed
 
-- **`policy.rules` 里出现任何 rule id 都会报「未知 rule id」。** 目前没有任何规则实现，
-  因此该表只接受空对象。这是刻意的：静默忽略会让项目误以为某条规则在生效。M8 的结构分析器与
-  M21 的 Preset 规则落地后，被声明的 id 才成为合法输入。
-- `severityActions` 只能收紧：`error` 只能是 `reject`，`warning` 只能是 `reject|review`，
-  `info` 任意。放宽声明（如把 `error` 降到 `report`）在配置阶段被拒绝并说明原因。
-- `.harness/harness.json` **不再接受 `rules` 字段**：规则配置的唯一归属是 `Policy.rules`。
-  该字段此前标注为「无运行时消费」，因此没有项目依赖它。
+- **`policy.json` 的字段收敛为四类职责**（scope / command constraints / execution constraints /
+  enforcement），分组只是文档大纲，文档保持扁平。规则处置表（`rules`、`severityActions`）**没有**
+  随之发布：在第一个 rule 实现存在之前，它唯一合法的值是空对象，等于发布一个「声明了但没人读」的
+  字段。它推迟到 M8，与第一个 checker 同批落地。见
+  [ADR-008](./docs/decisions/ADR-008-policy-scope-and-deferred-rule-disposition.md)。
+- `.harness/harness.json` **不接受 `rules` 字段**：规则配置没有 manifest 级归属。该字段此前标注为
+  「无运行时消费」，因此没有项目依赖它。
 - `forbiddenCommands`、`allowedAgentCommands`、`onViolation`、`agentTimeoutMs`、
   `maxChangedFiles` 现在做形状校验：非法值在配置阶段失败，而不是静默不生效。
 - `RunResult.termination` 在循环未运行时（dry-run、配置 / intake / schema 失败）不写。

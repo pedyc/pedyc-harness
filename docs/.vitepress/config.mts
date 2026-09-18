@@ -75,6 +75,8 @@ export default defineConfig({
           { text: '决策总览', link: '/decisions/README' },
           { text: 'ADR-001 Preset Resolution', link: '/decisions/ADR-001-preset-resolution' },
           { text: 'ADR-002 Preset Validation', link: '/decisions/ADR-002-preset-validation-resolution' },
+          { text: 'ADR-004 Policy 严重级别', link: '/decisions/ADR-004-policy-severity-rules' },
+          { text: 'ADR-008 Policy 范围', link: '/decisions/ADR-008-policy-scope-and-deferred-rule-disposition' },
         ],
       },
       {
