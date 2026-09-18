@@ -39,6 +39,11 @@ const contracts: Array<[string, string[]]> = [
   // holds one, so the only copy that has to exist is the one the runtime
   // validates against. Projects get no copy to drift from.
   ['preset.schema.json', ['packages/core/schemas']],
+  // A policy is read from the project, but its schema is a contract about that
+  // document rather than a file a project must carry, so it follows the preset
+  // schema: the bundled copy is the one that has to be byte-identical, and a
+  // project's `$schema` URL is documentation rather than a local prerequisite.
+  ['policy.schema.json', ['packages/core/schemas']],
   // The human intake contract is only used by this repository's own harness run.
   ['task.schema.json', ['.harness']],
   ['task.example.json', ['.harness', 'packages/cli/templates', 'examples/*/.harness']],
