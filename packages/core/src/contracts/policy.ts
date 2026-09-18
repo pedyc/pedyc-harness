@@ -5,6 +5,61 @@ export type AgentMode = 'internal' | 'external'
 export type AgentRole = 'planner' | 'coder' | 'tester' | 'reviewer'
 
 /**
+ * How serious a judgment is.
+ *
+ * A rule declares its own default severity; a policy may only ever *tighten* it.
+ * See `docs/decisions/ADR-004-policy-severity-rules.md` §2.5.
+ */
+export type Severity = 'error' | 'warning' | 'info'
+
+/** What the harness does once a judgment's severity is known. */
+export type RuleAction = 'reject' | 'review' | 'report'
+
+/** Which of the three judgment families produced a violation. */
+export type ViolationKind = 'file' | 'command' | 'rule'
+
+/**
+ * How a project wants a policy violation dispositioned.
+ *
+ * `fail` escalates a rejection into a failed run; `report` records it and leaves
+ * the run's ending to whatever else stops it. Neither value weakens prevention:
+ * a refused command is never started under either setting, because this controls
+ * the disposition of a violation, not whether the harness controls the side
+ * effect. See `docs/decisions/ADR-006-run-lifecycle.md` §2.3.
+ */
+export type ViolationMode = 'fail' | 'report'
+
+/**
+ * One refusal.
+ *
+ * Files, commands and registered rules all report in this shape so that a single
+ * evaluator can decide them and a single consumer can act on the result — the
+ * "unified Policy Evaluator" of
+ * `docs/decisions/ADR-004-policy-severity-rules.md` §2.4. The point is not more
+ * rules, it is that the three families cannot drift apart.
+ *
+ * `rule` is a stable id. The built-in rules use the name of the policy field they
+ * enforce, which is also what lets a registered checker's id be addressed the
+ * same way. `action` is the *effective* disposition, already reconciled with the
+ * project's `onViolation`, so consumers never re-derive it.
+ */
+export interface PolicyViolation {
+  kind: ViolationKind
+  rule: string
+  target: string
+  severity: Severity
+  action: RuleAction
+  reason: string
+  retryable: boolean
+}
+
+/** The verdict for one judgment family, or for a whole evaluation. */
+export interface PolicyDecision {
+  allowed: boolean
+  violations: PolicyViolation[]
+}
+
+/**
  * The part of the policy that bounds which commands an agent may run.
  *
  * The provider runner consults nothing else, so it accepts this narrower type
@@ -12,21 +67,53 @@ export type AgentRole = 'planner' | 'coder' | 'tester' | 'reviewer'
  */
 export interface CommandPolicy {
   allowedAgentCommands?: string[]
+  forbiddenCommands?: string[]
+}
+
+/**
+ * A command policy together with the disposition a violation receives.
+ *
+ * The provider runner needs both: it must refuse the command, and it must label
+ * the refusal so the orchestrator can tell an escalated rejection from a
+ * reported one.
+ */
+export interface CommandPolicyContext extends CommandPolicy {
+  onViolation?: ViolationMode
 }
 
 /**
  * A project's `.harness/policy.json`.
  *
+ * The fields group into four jobs, which the documentation uses as its outline:
+ * **scope** (`allowedProductPaths`, `protectedPaths`), **command constraints**
+ * (`allowedAgentCommands`, `forbiddenCommands`), **execution constraints**
+ * (`requiredChecks`, `maxIterations`, `agentTimeoutMs`, `maxChangedFiles`) and
+ * **enforcement** (`onViolation`). The grouping is documentation, not structure:
+ * the document stays flat so a field name never depends on which group it is in.
+ *
  * Only `allowedProductPaths` is required: `validatePolicy` rejects a policy
  * without it, and out-of-scope detection dereferences it directly. Every other
  * field stays optional because the document is untrusted JSON and callers fall
  * back to defaults.
+ *
+ * There is deliberately no rule-disposition table. Declaring one before a single
+ * rule implementation exists would ship a field whose only legal value is empty
+ * — the same "declared but nothing reads it" failure this milestone set out to
+ * remove. See `docs/decisions/ADR-008-policy-scope-and-deferred-rule-disposition.md`.
  */
 export interface Policy extends CommandPolicy {
   allowedProductPaths: string[]
   maxIterations?: number
   protectedPaths?: string[]
   requiredChecks?: string[]
-  forbiddenCommands?: string[]
   agentTimeoutMs?: number
+  /**
+   * The most files one coder iteration may change.
+   *
+   * Measured per iteration, not cumulatively: the point is the blast radius of a
+   * single change, and a cumulative count would flag a run for merely taking
+   * several iterations.
+   */
+  maxChangedFiles?: number
+  onViolation?: ViolationMode
 }

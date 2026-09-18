@@ -189,15 +189,6 @@ const recordDeclaredSources = (
     }
   }
 
-  for (const rule of manifest.rules ?? []) {
-    const file = insideHarness(root, rule)
-    if (!file) {
-      errors.push(configError('config_path_outside_harness', manifestFile, `rules must point at a file inside ${harnessDirectory}/; '${rule}' does not.`, 'rules'))
-      continue
-    }
-    sources.push({ kind: 'rules', location: file, active: false })
-  }
-
   return errors.length > 0 ? { errors } : { sources }
 }
 

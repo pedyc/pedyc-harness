@@ -8,7 +8,14 @@ import { formatConfigError, loadHarnessConfig } from '@pedyc/harness-core/config
 import { loadSchemas, createValidators, validationDetails } from '@pedyc/harness-core/schema'
 import { createProviderRunner } from '@pedyc/harness-core/provider'
 import { runOrchestrator } from '@pedyc/harness-core/orchestrator'
-import type { IntakeResult, NormalizedTask, RunResult } from '@pedyc/harness-core/contracts'
+import { evaluateCommand } from '@pedyc/harness-core/policy'
+import type {
+  IntakeResult,
+  NormalizedTask,
+  PolicyViolation,
+  RunResult,
+  VerificationCheck,
+} from '@pedyc/harness-core/contracts'
 
 // Exit codes from `docs/interfaces/cli.md` §8.
 const EXIT_FAILED = 1
@@ -17,6 +24,8 @@ const EXIT_CONFIG = 5
 interface RunOptions {
   argv?: string[]
   cwd?: string
+  /** Cancelling it kills a running provider process and ends the run as cancelled. */
+  signal?: AbortSignal
 }
 
 // Runs one harness execution against a target project. Returns a process exit
@@ -25,6 +34,7 @@ interface RunOptions {
 export const runHarness = async ({
   argv = process.argv.slice(2),
   cwd = process.cwd(),
+  signal,
 }: RunOptions = {}): Promise<number> => {
   const readArg = (name: string, fallback: string | null = null): string | null => {
     const index = argv.indexOf(name)
@@ -56,6 +66,7 @@ export const runHarness = async ({
     implementationPlan: [`Stop before implementation because the ${phase} phase failed.`],
     fileChanges: [],
     verification: [{ command: `harness:${phase}`, result: 'fail', details: message }],
+    violations: [],
     issues: [message],
     phases: [{ name: phase, status: 'failed', details: message }],
     iterations: 0,
@@ -119,12 +130,22 @@ export const runHarness = async ({
     return runCommand(root, packageManager.command, [...packageManager.args, script])
   }
 
+  // Violations the orchestrator cannot see — a verification command the policy
+  // refused — are collected here and merged into the result beside the ones the
+  // orchestrator already gathered.
+  const verificationViolations: PolicyViolation[] = []
+
   const runAgent = createProviderRunner({
     root,
     agents,
     policy: checkedPolicy,
     validator: validators.agentResponse,
     ajv: validators.ajv,
+    // `agentTimeoutMs` bounds provider invocations only: the field names the
+    // agent stage, and a verification gate is the project's own script, which
+    // keeps whatever timeout its author gave it.
+    agentTimeoutMs: checkedPolicy.agentTimeoutMs,
+    signal,
   })
 
   writeJson(join(runDirectory, 'input.json'), input)
@@ -138,12 +159,26 @@ export const runHarness = async ({
     snapshot: () => snapshotFiles(root),
     changedFiles,
     runVerification: async () => {
-      const verification = []
+      const verification: VerificationCheck[] = []
       for (const script of checkedPolicy.requiredChecks ?? []) {
         const packageManager = detectPackageManager(root)
+        const command = `${packageManager.command} ${packageManager.args.join(' ')} ${script}`.trim()
+        // A gate whose command the policy refuses is never started, so it cannot
+        // have passed. `onViolation` decides whether the refusal also fails the
+        // run; it never decides whether the command may run.
+        const decision = evaluateCommand(packageManager.command, [...packageManager.args, script], checkedPolicy)
+        if (!decision.allowed) {
+          verificationViolations.push(...decision.violations)
+          verification.push({
+            command,
+            result: 'fail' as const,
+            details: decision.violations.map(({ reason }) => reason).join(' '),
+          })
+          continue
+        }
         const commandResult = await runPackageScript(script)
         verification.push({
-          command: `${packageManager.command} ${packageManager.args.join(' ')} ${script}`.trim(),
+          command,
           result: commandResult.code === 0 ? 'pass' as const : 'fail' as const,
           details: commandResult.code === 0 ? 'Command completed successfully.' : commandResult.stderr.trim() || 'Command failed.',
         })
@@ -155,6 +190,7 @@ export const runHarness = async ({
 
   const result: RunResult = {
     status: orchestration.completed ? 'passed' : 'failed',
+    termination: orchestration.termination,
     summary: orchestration.completed
       ? `Harness completed ${input.feature.trim()} through Planner, Coder, Tester, and Reviewer.`
       : `Harness could not complete ${input.feature.trim()}.`,
@@ -168,6 +204,7 @@ export const runHarness = async ({
           details: orchestration.issues[0] ?? 'No verification was recorded.',
         }],
     issues: orchestration.issues,
+    violations: [...orchestration.violations, ...verificationViolations],
     phases: orchestration.phases,
     iterations: orchestration.iterations,
     dryRun,

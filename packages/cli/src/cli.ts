@@ -282,8 +282,21 @@ export const runCli = async ({
       return syncTemplates(argv.includes('--force'))
     case 'doctor':
       return doctor()
-    case 'run':
-      return runHarness({ argv: argv.slice(1), cwd: projectRoot })
+    case 'run': {
+      // Ctrl+C must reach the running provider instead of killing this process
+      // outright, so the harness can record *why* the run stopped. The listener
+      // is scoped to this command — `verify` and `init` have nothing to cancel —
+      // and a second Ctrl+C still terminates the process, because by then the
+      // one-shot abort has already been delivered.
+      const controller = new AbortController()
+      const onInterrupt = (): void => controller.abort()
+      process.on('SIGINT', onInterrupt)
+      try {
+        return await runHarness({ argv: argv.slice(1), cwd: projectRoot, signal: controller.signal })
+      } finally {
+        process.removeListener('SIGINT', onInterrupt)
+      }
+    }
     default:
       console.log('Usage: pedyc-harness <init|verify|run|doctor|diff|update|list-presets> [options]')
       console.log('  init [--preset generic|vue|<package>] [--force] [--no-install]')

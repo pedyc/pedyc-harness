@@ -7,33 +7,37 @@
 
 ## 1. 是什么
 
-Policy 是 `.harness/policy.json` 这一份**扁平设置对象**。它不是规则引擎:没有条件、没有效果、
-没有优先级、没有冲突解决,也没有决策对象。它只回答四个问题:
+Policy 是 `.harness/policy.json` 这一份**扁平设置对象**加上一张**处置表**。它不是规则引擎:没有
+条件、没有效果、没有优先级、没有冲突解决,也没有决策对象。它只回答五个问题:
 
-| 它约束什么 | 依据 | 在哪个决策点生效 |
-| ------------------ | ---------------------- | -------------------------------------- |
-| 允许改哪些文件 | `allowedProductPaths` | Coder 返回后,Harness 比对文件快照 |
-| 允许跑哪些命令 | `allowedAgentCommands` | 每次启动 Provider 之前 |
-| 必须通过哪些闸门 | `requiredChecks` | Tester 阶段逐个执行 |
-| 最多重试几次 | `maxIterations` | 编排循环的迭代上限 |
+| 它约束什么       | 依据                                    | 在哪个决策点生效                        |
+| ---------------- | --------------------------------------- | --------------------------------------- |
+| 允许改哪些文件   | `allowedProductPaths`                   | Coder 返回后,Harness 比对文件快照       |
+| 不许改哪些文件   | `protectedPaths`                        | 同上,命中即拒绝并单独报告                |
+| 允许跑哪些命令   | `allowedAgentCommands`、`forbiddenCommands` | 每次启动 Provider 与验证命令之前    |
+| 必须通过哪些闸门 | `requiredChecks`                        | Tester 阶段逐个执行                     |
+| 最多重试几次     | `maxIterations`、`maxChangedFiles`      | 编排循环的迭代上限与单次改动上限        |
+| 规则怎么处置     | `rules`、`severityActions`              | Finding 产生之后,由 `actionFor` 解析    |
+
+字段的类型、必需性与逐条约束见 [Policy 契约](../interfaces/policy.md) §2——本文不复制那张表。
 
 Policy 描述的是「**这一次**允许做什么」,不是「Agent 理论上能做什么」。允许集合之外的一切都视为
 越界,不需要额外声明禁止项。
 
-> **目标(M7)** 目标形态在四类判定之外增加第五类:**规则处置**——规则实现产生 Finding,Policy 声明
-> 该规则有多严重、该怎么处置。它仍然是**处置声明**,不是条件匹配,见 §5.1。
+规则处置层**尚未实现**(见 §5.1,随 M8 的第一个 rule 实现一起落地):规则实现产生 Finding,Policy
+声明该规则有多严重、该怎么处置。它仍然是**处置声明**,不是条件匹配。
 
 ## 2. 什么时候执行
-
 Policy 在五个不同时机被读取,后果各不相同:
 
-| 时机 | 动作 | 不满足时 |
-| -------------------- | -------------------------------------------- | ------------------------ |
-| `init` | Preset 的 `policy` 原样写成 `.harness/policy.json` | — |
-| `verify`(命令) | `validatePolicy` 校验形状,并断言 `requiredChecks` 的脚本确实存在于 `package.json` | 非零退出,不进入执行 |
-| `run` 加载阶段 | `validatePolicy`,不通过即终止 | 运行失败,不调用任何 Agent |
-| 每次 Provider 调用前 | `isCommandAllowed` | 该阶段失败 |
-| 每次 Coder 返回后 | `findOutOfScopeChanges`(快照 diff) | Reviewer 判定不通过 |
+| 时机                 | 动作                                                                              | 不满足时                  |
+| -------------------- | --------------------------------------------------------------------------------- | ------------------------- |
+| `init`               | Preset 的 `policy` 原样写成 `.harness/policy.json`                                | —                         |
+| `verify`(命令)       | `validatePolicy` 校验形状,并断言 `requiredChecks` 的脚本确实存在于 `package.json` | 非零退出,不进入执行       |
+| `run` 加载阶段       | `validatePolicy`,不通过即终止                                                     | 运行失败,不调用任何 Agent |
+| 每次 Provider 调用前 | `evaluateCommand` | 该阶段失败 |
+| 每条验证命令执行前 | `evaluateCommand` | 该闸门不执行,判定为不通过 |
+| 每次 Coder 返回后 | `evaluateFiles`、`evaluateChangeBudget`(快照 diff) | Reviewer 判定不通过 |
 
 范围判定的位置很关键:**它在 Coder 之后、Reviewer 之前**,依据是 Harness 自己的文件快照比较,
 而不是 Agent 的声明。这是「实际改了什么」与「允许改什么」的直接比对。
@@ -42,11 +46,11 @@ Policy 在五个不同时机被读取,后果各不相同:
 
 三个函数各自是一个决策点,且都只读 Policy、不产生副作用:
 
-| 函数 | 决策 | 语义要点 |
-| ------------------------ | -------------------------- | ---------------------------------------------------- |
-| `validatePolicy` | 这份配置能不能用 | 输入是不受信任的 JSON;返回问题描述或 `null` |
-| `isCommandAllowed` | 这次调用放不放行 | 允许列表为空 = 不限制 |
-| `findOutOfScopeChanges` | 这批改动算不算越界 | **前缀匹配**,不是 glob |
+| 函数                    | 决策               | 语义要点                                    |
+| ----------------------- | ------------------ | ------------------------------------------- |
+| `validatePolicy`        | 这份配置能不能用   | 输入是不受信任的 JSON;返回问题描述或 `null` |
+| `isCommandAllowed`      | 这次调用放不放行   | 允许列表为空 = 不限制                       |
+| `findOutOfScopeChanges` | 这批改动算不算越界 | **前缀匹配**,不是 glob                      |
 
 编排层消费它们的返回值:命令不被允许 → 该 Provider 阶段失败;存在越界文件 →
 `reviewerApproved` 直接不通过,**即使 Reviewer 自己批准了**。范围检查留在 Harness 侧,是刻意的
@@ -55,46 +59,59 @@ Policy 在五个不同时机被读取,后果各不相同:
 前缀匹配的实际含义:允许 `src/` 会同时允许 `src/anything` 与 `src-other/file.ts`。要表达「目录
 之内」,路径必须以 `/` 结尾。
 
-## 4. 已知的执行缺口
+## 4. 执行边界
 
-当前 Policy 的**表达能力强于它的执行力**。以下字段会被 schema 接受,但不产生任何效果:
+Policy 的每一个字段现在都真的参与判定(M7 落地前后,`protectedPaths`、`forbiddenCommands`、
+`agentTimeoutMs` 曾只被 schema 接受而不产生任何效果)。但**能拦什么、拦不到什么**由观察粒度决定,
+这条边界必须写下来,否则会被当成一个做不到的沙箱:
 
-| 字段 | 现状 |
-| ------------------ | ------------------------------------------------------------ |
-| `protectedPaths` | 只校验形状,从不与改动比对 |
-| `forbiddenCommands` | 没有任何代码读取 |
-| `agentTimeoutMs` | `runCommand` 不设置超时,挂起的 Provider 会一直挂起 |
+| 能实时拒绝                     | 因为                                |
+| ------------------------------ | ----------------------------------- |
+| Harness 自己启动的 Provider 命令 | 策略检查发生在进程创建之前          |
+| 验证命令                       | 同上                                |
+| 受保护路径的**前置**拒绝         | 路径在启动前就已确定                |
+
+| 拦不到                         | 因为                                        |
+| ------------------------------ | ------------------------------------------- |
+| Agent 进程内部的写入            | 批协议下一次阶段 = 一次进程调用,只能事后从快照差异中发现 |
+| 引号内的 shell 字符串           | 只做 token 序列匹配,不做 shell 解析          |
+
+因此命令策略是**护栏,不是沙箱**。详见 [ADR-006](../decisions/ADR-006-run-lifecycle.md) §2.3。
 
 还有一处容易误判:**`maxIterations`、`protectedPaths`、`requiredChecks` 在类型上可选,但不写就会被
 `validatePolicy` 拒绝**。契约中给出了完整的字段与约束对照表。
 
-这些缺口是当前实现的状态,不是设计意图。要依赖其中任何一项,必须先让它在代码中被强制执行。
-
 ## 5. 目标形态
 
-> **目标(M7、M19)** 目标形态有两条方向,职责不同。以下内容均**未实现**:当前既没有合并语义,
-> 也没有规则处置层。
+> **目标(M19)** 配置组合语义(**M17** 的字段级合并与 **M19** 的安全模型)仍未实现:当前既没有合并
+> 语义,也没有 deny-wins。
 
-### 5.1 规则处置层(M7)
+### 5.1 规则处置层(推迟到 M8)
+
+> **目标(M8)** 以下内容**未实现**,且**不随 M7 发布**:`policy.json` 里没有规则处置表。
+> 原因是产出 Finding 的实现属于 M8(结构分析器)与 M21(Preset 注册规则),在它们存在之前
+> `rules` 唯一合法的值是空对象——发布这样一个字段,等于把「被 schema 接受却没有任何效果」
+> 重新引入,而 M7 的其余部分正是在清除这类字段。见
+> [ADR-008](../decisions/ADR-008-policy-scope-and-deferred-rule-disposition.md),它取代 ADR-004。
 
 规则实现产生 Finding,Policy 声明 `rule id → severity → action`:
 
-| Severity | 默认 Action | 含义 |
-| --------- | ----------- | -------------------- |
-| `error` | `reject` | 判定不通过 |
-| `warning` | `review` | 需 Reviewer 确认后才算通过 |
-| `info` | `report` | 只记录,不影响判定 |
+| Severity  | 默认 Action | 含义                       |
+| --------- | ----------- | -------------------------- |
+| `error`   | `reject`    | 判定不通过                 |
+| `warning` | `review`    | 需 Reviewer 确认后才算通过 |
+| `info`    | `report`    | 只记录,不影响判定          |
 
-三点必须守住:
+落地时三点必须守住:
 
 - **Policy 声明处置,不声明匹配。** 条件表达式、优先级与冲突解决仍不进入 `policy.json`;匹配逻辑
   属于内置 checker 或 Preset 注册的规则(见 [Preset 设计 §8](./preset.md))。
 - **统一 Evaluator。** 文件、命令、规则三类判定由同一个 Policy 模块给出结论,避免"文件一套逻辑、
-  命令一套逻辑、规则又一套逻辑"。
+  命令一套逻辑、规则又一套逻辑"。前两类已随 M7 落地,第三类到位时沿用同一形状。
 - **severity 属于安全语义。** 更高层只能收紧(把 `warning` 提升为 `error`、把 `report` 改为
   `reject`),不能放宽;降低级别、关闭规则、把 `reject` 改为 `report` 都视为放宽,必须被拒绝。
 
-详见 [ADR-004](../decisions/ADR-004-policy-severity-rules.md)与[治理流水线](./governance.md)。
+详见 [治理流水线](./governance.md)。
 
 ### 5.2 配置组合语义(M19)
 

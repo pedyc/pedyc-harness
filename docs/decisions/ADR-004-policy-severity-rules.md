@@ -1,6 +1,6 @@
 # ADR-004 — Policy 严重级别规则层
 
-* **Status:** Accepted
+* **Status:** Superseded by [ADR-008](./ADR-008-policy-scope-and-deferred-rule-disposition.md)
 * **Date:** 2026-09-17
 * **Related:** [ADR-003](./ADR-003-preset-as-code.md)、[ADR-002](./ADR-002-preset-validation-resolution.md)
 

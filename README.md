@@ -1,25 +1,23 @@
 # pedyc-harness
 
-> A policy-driven runtime for reliable AI agents.
+> A governancy runtime for reliable AI agents.
 
-**pedyc-harness** 是一个面向 Coding Agent 的控制与治理层（Harness）。
+**pedyc-harness** 是一个面向 Coding Agent 的控制与治理层（Governancy Runtime）。
 
 它不负责替代 Claude Code、Codex 等 Coding Agent，而是负责在 Agent 执行任务之前、执行过程中以及执行之后，对 **任务契约、执行策略、代码变更、独立验证和最终结果** 进行约束与审计。
 
 ```text
 Task
   ↓
-Contract
+Governancy Contract
   ↓
-Policy
+Agent
   ↓
-Agent Runtime
-  ↓
-Changes
+Actual Changes
   ↓
 Independent Verification
   ↓
-Review / Gate
+Decision
   ↓
 Result / Audit
 ```
@@ -337,6 +335,22 @@ pedyc-harness 采用分层架构：
 ├──────────────────────────────┤
 │      Preset / Provider       │
 └──────────────────────────────┘
+
+             Agent Runtime
+                  │
+                  │ execute
+                  ▼
+        ┌──────────────────┐
+        │  pedyc Governance │
+        │      Runtime      │
+        ├──────────────────┤
+        │ Contract          │
+        │ Policy            │
+        │ Scope             │
+        │ Verification      │
+        │ Review            │
+        │ Audit             │
+        └──────────────────┘
 ```
 
 核心依赖方向：
@@ -351,7 +365,7 @@ Preset
 
 其中：
 
-* **Core**：Harness Runtime 和领域模型
+* **Core** Governancy Runtime 和领域模型
 * **CLI**：用户入口和命令行编排
 * **Preset**：技术栈相关规则和模板
 * **Provider / Adapter**：连接具体 Agent Runtime
@@ -364,11 +378,11 @@ Core 不依赖 Vue，也不依赖具体 Agent Provider。
 
 当前项目拆分为 4 个 npm package：
 
-| Package                         | Responsibility                   |
-| ------------------------------- | -------------------------------- |
-| `@pedyc/harness-core`           | Harness 核心 Runtime / Domain    |
-| `pedyc-harness`                 | CLI                              |
-| `@pedyc/harness-preset-generic` | 通用 Preset（数据包，可扩展为代码）          |
+| Package                         | Responsibility                           |
+| ------------------------------- | ---------------------------------------- |
+| `@pedyc/harness-core`           | Harness 核心 Runtime / Domain            |
+| `pedyc-harness`                 | CLI                                      |
+| `@pedyc/harness-preset-generic` | 通用 Preset（数据包，可扩展为代码）      |
 | `@pedyc/harness-preset-vue`     | Vue 3 + TypeScript + Vite Preset（同上） |
 
 两个 Preset 包目前只包含 `preset.json`、`policy.json`、`agents.json`、`AGENTS.md`：没有代码、没有

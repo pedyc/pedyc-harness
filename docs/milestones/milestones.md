@@ -465,17 +465,23 @@ Allowed / Rejected → Execute`。
 
 其中 `report` 用于兼容已有声明性策略。
 
-##### 6. 规则处置层（severity）
+##### 6. 规则处置层（severity）——推迟到 M8
 
-在文件与命令之外增加第三类判定:规则实现产生 Finding,Policy 声明 `rule id → severity → action`。
+**本节不在 M7 交付。** M7 实现到「文件、命令、共享 Evaluator、onViolation、超时与取消」为止；
+规则处置表（`Policy.rules`、`severityActions`）随**第一个 rule 实现**一起落地，即 M8。
 
-默认映射为 `error → reject`、`warning → review`、`info → report`;Finding 自己声明是否可修复,只有
-可修复的 Findings 才回 Coder 重试。
+原因：产出 Finding 的实现属于 M8（结构分析器）与 M21（Preset 注册规则），在它们存在之前
+`rules` 唯一合法的值是空对象——发布这样一个字段，等于把「被 schema 接受却没有任何效果」重新引入，
+而清除这类字段正是 M7 其余六项在做的事。决定与替代方案见
+[ADR-008](../decisions/ADR-008-policy-scope-and-deferred-rule-disposition.md)，它取代了
+[ADR-004](../decisions/ADR-004-policy-severity-rules.md)。
 
-匹配逻辑不进入 Policy:条件与优先级仍属于实现(内置 checker 或 Preset 注册的规则)。severity 属于
-安全语义,更高层只能收紧,不能放宽。
+落地时必须守住的约束（与 ADR-004 一致，只是时间推后）：默认映射为 `error → reject`、
+`warning → review`、`info → report`；Finding 自己声明是否可修复，只有可修复的 Findings 才回
+Coder 重试；匹配逻辑不进入 Policy（条件与优先级属于实现）；severity 属于安全语义，更高层只能
+收紧，不能放宽。
 
-见 [ADR-004](../decisions/ADR-004-policy-severity-rules.md) 与 [治理流水线](../architecture/governance.md)。
+见 [治理流水线](../architecture/governance.md)。
 
 ##### 7. 实时拒绝的边界与超时
 
@@ -496,12 +502,11 @@ Provider 命令与验证命令的策略检查(`forbiddenCommands`)、以及受�
 * `onViolation: report` 保持只报告行为。
 * 根仓库和 examples 在默认 `fail` 下全部通过。
 * Policy 规则均有失败路径测试。
-* 未知 rule id 报错,而不是静默忽略。
-* 试图把 `warning` 降为 `info`、或把 `reject` 改为 `report` 的更高层配置被拒绝。
-* 文件、命令、规则三类判定共用同一个 Policy Evaluator。
+* 文件与命令两类判定共用同一个 Policy Evaluator。
 * `forbiddenCommands` 在 Provider 与验证命令执行前生效,被拒绝的命令不产生执行副作用。
 * `agentTimeoutMs` 到期会终止该阶段,并记录终止原因为 `timeout`。
 * 取消可以中断正在运行的 Provider 进程,并记录为 `cancelled`。
+* `policy.json` 不声明任何没有读取者的字段：规则处置表在 M8 才出现（见工作项 6）。
 
 #### 版本影响
 
@@ -630,6 +635,16 @@ Reviewer 的输出是**结构化 Findings**(rule、target、severity、reason、
 * 越界判定与 Reviewer 的裁定在记录里是两项独立事实。
 * 结构验证能对改动后的文件求值声明的约束,并给出 `analyzer-derived` 的 Finding。
 * 分析器与规则分别来自不同包时仍能工作。
+
+规则处置层随本次的第一个 rule 实现一起落地（自 M7 工作项 6 移入，见
+[ADR-008](../decisions/ADR-008-policy-scope-and-deferred-rule-disposition.md)）：
+
+* `Policy.rules` 与 `severityActions` 进入 Schema、契约与校验，并且**每个字段都有读取者**。
+* 未知 rule id 报错，而不是静默忽略。
+* 试图把 `warning` 降为 `info`、或把 `reject` 改为 `report` 的更高层配置被拒绝。
+* `Finding` 由规则实现产生，Policy 只声明 `rule id → severity → action`；默认映射为
+  `error → reject`、`warning → review`、`info → report`。
+* 文件、命令、规则三类判定共用同一个 Policy Evaluator。
 * 声明式约束超出表达力上限时给出明确错误,而不是静默通过。
 
 #### 版本影响
@@ -866,6 +881,10 @@ Provider 不只是「能换」，而是能被第三方实现并发布。
 
 * 移除对仓库内路径的硬编码。
 * 移除固定 Gate 名称约定，或将其写入协议。
+* **修正参数转义。** `runCommand` 在 Windows 上用 `shell: true` 且把 argv 直接拼接，Node 因此报
+  `DEP0190`；后果是**参数里含空格会被 shell 拆开**，也就是 provider 的 `args` 只要带空格就是坏的。
+  它既是协议表述问题（argv 究竟怎么交给适配器），也是 M13 把 Provider 做成可移植时绕不开的平台
+  差异。M7 刻意未修，留给本节。
 
 ##### 3. 协议文档化
 

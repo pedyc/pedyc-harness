@@ -2,20 +2,24 @@ import type {
   AgentCallResult,
   AgentRole,
   AgentsConfig,
-  CommandPolicy,
+  CommandPolicyContext,
   StageRequest,
 } from '../contracts/index.js'
 import { parseAgentResponse, validateStageResponse } from './agent.js'
 import { runCommand } from './command.js'
-import { isCommandAllowed } from './policy-engine.js'
+import { evaluateCommand } from './policy-engine.js'
 import type { ResponseValidator, SchemaErrorFormatter } from '../contracts/validator.js'
 
 export interface ProviderRunnerOptions {
   root: string
   agents: AgentsConfig
-  policy: CommandPolicy
+  policy: CommandPolicyContext
   validator: ResponseValidator
   ajv: SchemaErrorFormatter
+  /** Bounds one provider invocation; `agentTimeoutMs` from the policy. */
+  agentTimeoutMs?: number
+  /** Cancelling it kills the provider process and ends the stage as cancelled. */
+  signal?: AbortSignal
 }
 
 /**
@@ -25,7 +29,15 @@ export interface ProviderRunnerOptions {
  * pipeline has nothing to delegate. An `external` stage is spawned as a child
  * process and must speak the stdin/stdout JSON protocol.
  */
-export const createProviderRunner = ({ root, agents, policy, validator, ajv }: ProviderRunnerOptions) =>
+export const createProviderRunner = ({
+  root,
+  agents,
+  policy,
+  validator,
+  ajv,
+  agentTimeoutMs,
+  signal,
+}: ProviderRunnerOptions) =>
   async (name: AgentRole, payload: StageRequest): Promise<AgentCallResult> => {
     const config = agents[name]
     if (!config || config.mode === 'internal') {
@@ -38,14 +50,38 @@ export const createProviderRunner = ({ root, agents, policy, validator, ajv }: P
     if (!provider || typeof provider.command !== 'string' || !Array.isArray(provider.args)) {
       return { ok: false, details: `${name} provider '${config.provider}' is not configured.`, payload: {} }
     }
-    if (!isCommandAllowed(provider.command, policy)) {
-      return { ok: false, details: `${name} provider command is not in policy.allowedAgentCommands.`, payload: {} }
+    // Policy is evaluated before the process exists, so a refused command has no
+    // side effect to undo. The violation is returned rather than thrown: a
+    // refusal is a normal outcome the orchestrator records. Note that this
+    // happens whatever `onViolation` says — that setting decides whether the
+    // violation fails the run, never whether the command may start.
+    const decision = evaluateCommand(provider.command, provider.args, policy)
+    if (!decision.allowed) {
+      return {
+        ok: false,
+        details: decision.violations.map(({ reason }) => reason).join(' '),
+        payload: {},
+        violations: decision.violations,
+      }
     }
 
-    const result = await runCommand(root, provider.command, provider.args, {
-      ...payload,
-      provider: config.provider,
-    })
+    const result = await runCommand(
+      root,
+      provider.command,
+      provider.args,
+      { ...payload, provider: config.provider },
+      { timeoutMs: agentTimeoutMs, signal },
+    )
+    if (result.termination !== 'exited') {
+      // The harness stopped this process. Saying so is the difference between
+      // "the agent failed" and "we ran out of time or the user cancelled".
+      return {
+        ok: false,
+        details: result.stderr.trim() || `${name} was stopped (${result.termination}).`,
+        payload: {},
+        termination: result.termination,
+      }
+    }
     if (result.code !== 0) {
       return {
         ok: false,

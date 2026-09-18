@@ -31,11 +31,6 @@
       "description": "Declared for forward compatibility; no runtime consumes it yet.",
       "type": "string",
       "minLength": 1
-    },
-    "rules": {
-      "description": "Declared for forward compatibility; no runtime consumes it yet.",
-      "type": "array",
-      "items": { "type": "string", "minLength": 1 }
     }
   }
 }

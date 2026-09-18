@@ -6,6 +6,61 @@
 所有 workspace 包共享同一个版本号，同步发布。升级规则见 [发布与版本规则](./docs/release.md)。
 
 
+## [Unreleased]
+
+> 目标版本 **1.3.0**（治理执行：M7 + M8）。本节目前只包含 M7（策略可执行）。发布时按
+> [发布与版本规则](./docs/release.md) 改为 `## [1.3.0] - <日期>`。
+
+### Added
+
+- **`forbiddenCommands` 真正生效。** 匹配对象是 `command + args` 经规范化后的 token 序列，
+  采用**有序 token 序列包含**语义：`npm publish` 会拦下 `npm publish --tag beta` 与
+  `sudo npm publish`，但不会拦下 `npm publish-notes`。可执行名取 basename 并去掉
+  `.cmd`/`.exe`/`.bat`。第一版不支持正则与任意子串匹配，也不解析引号内的 shell 字符串
+  （`sh -c "npm publish"` 不命中）——这是记录的边界，不是遗漏。
+- **`protectedPaths` 真正生效。** 命中受保护路径的改动会被拒绝，并单独报告为
+  `Protected files changed: …`，与 `allowedProductPaths` 的越界区分开。
+- **验证命令也过策略。** `requiredChecks` 的每条命令在执行前经过同一个 Policy Evaluator，
+  被拒绝的闸门不会被启动。
+- `onViolation: fail | report`（默认 `fail`）。
+- `agentTimeoutMs` 到期会终止该次 Provider 调用并记录 `timeout`；Ctrl+C 会被记录为
+  `cancelled`（CLI 把 SIGINT 接到取消管线上）。
+- `maxChangedFiles`：限制单次 Coder 迭代的改动文件数。
+- `RunResult` 新增 `violations`（本次运行产生的策略判定）与可选的 `termination`
+  （`completed` / `timeout` / `max_iterations` / `policy_violation` / `agent_error` /
+  `cancelled`）。
+- 新增 `schemas/policy.schema.json`：`.harness/policy.json` 的正式 Schema，随
+  `@pedyc/harness-core` 一起发布。
+
+### Changed
+
+- **`policy.json` 的字段收敛为四类职责**（scope / command constraints / execution constraints /
+  enforcement），分组只是文档大纲，文档保持扁平。规则处置表（`rules`、`severityActions`）**没有**
+  随之发布：在第一个 rule 实现存在之前，它唯一合法的值是空对象，等于发布一个「声明了但没人读」的
+  字段。它推迟到 M8，与第一个 checker 同批落地。见
+  [ADR-008](./docs/decisions/ADR-008-policy-scope-and-deferred-rule-disposition.md)。
+- `.harness/harness.json` **不接受 `rules` 字段**：规则配置没有 manifest 级归属。该字段此前标注为
+  「无运行时消费」，因此没有项目依赖它。
+- `forbiddenCommands`、`allowedAgentCommands`、`onViolation`、`agentTimeoutMs`、
+  `maxChangedFiles` 现在做形状校验：非法值在配置阶段失败，而不是静默不生效。
+- `RunResult.termination` 在循环未运行时（dry-run、配置 / intake / schema 失败）不写。
+- 命令执行在 Windows 上停止进程时改为终止整棵进程树：只终止 shell 会让工作继续运行，并持有
+  输出管道使其永不关闭。
+
+### Breaking Changes
+
+- **声明了 `protectedPaths`、`forbiddenCommands` 或 `agentTimeoutMs` 的项目，行为会变。**
+  这些字段此前只被 schema 接受、没有任何执行力；现在它们真的拦。按
+  [发布与版本规则](./docs/release.md) §11，这属于「CLI 行为导致旧用法失效」。
+
+  唯一需要的动作：**如果你依赖的是「声明了但不管用」的旧行为，在 `policy.json` 里加上
+  `"onViolation": "report"`。** 它把违规降级为记录，不再让运行失败。请注意它**不**解除对
+  危险副作用的控制——被禁止的命令在任何模式下都不会被启动，只是不再据此把运行判失败。
+
+  `onViolation: report` 的存在是本次按 MINOR 判定的前提（release.md §11）；实际语义级别由
+  发布里程碑 M14 决定。
+
+
 ## [1.2.0] - 2026-09-17
 
 声明式配置层：`.harness/harness.json` 成为项目治理的声明入口，Preset 从代码包变成可继承的 npm

@@ -54,7 +54,16 @@ export type { FileSnapshot } from './runtime/diff-inspector.js'
 export { parseAgentResponse, validateStageResponse } from './runtime/agent.js'
 export type { ParsedAgentResponse } from './runtime/agent.js'
 
-export { findOutOfScopeChanges, isCommandAllowed } from './runtime/policy-engine.js'
+export {
+  describeFileViolations,
+  evaluateChangeBudget,
+  evaluateCommand,
+  evaluateFiles,
+  findOutOfScopeChanges,
+  isCommandAllowed,
+  refusedFiles,
+} from './runtime/policy-engine.js'
+export type { PolicyDecision, PolicyViolation, ViolationKind } from './runtime/policy-engine.js'
 export { testerApproved, reviewerApproved } from './runtime/approval-gate.js'
 
 export { createProviderRunner } from './runtime/provider-runner.js'

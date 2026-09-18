@@ -1,8 +1,20 @@
-export type { AgentMode, AgentRole, CommandPolicy, Policy } from './policy.js'
+export type {
+  AgentMode,
+  AgentRole,
+  CommandPolicy,
+  CommandPolicyContext,
+  Policy,
+  PolicyDecision,
+  PolicyViolation,
+  RuleAction,
+  Severity,
+  ViolationKind,
+  ViolationMode,
+} from './policy.js'
 export type { VerificationCheck } from './validation.js'
 export type { IntakeResult, NormalizedTask, RawTaskInput } from './task.js'
 export type { PresetManifest, ResolvedPreset } from './preset.js'
-export type { FileChange, OrchestrationResult, PhaseRecord, PhaseStatus, RunResult, RunStatus } from './run.js'
+export type { FileChange, OrchestrationResult, PhaseRecord, PhaseStatus, RunResult, RunStatus, TerminationReason } from './run.js'
 export type {
   ConfigErrorCode,
   ConfigSource,

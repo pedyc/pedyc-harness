@@ -7,6 +7,10 @@
   "required": ["status", "summary", "implementationPlan", "verification", "issues"],
   "properties": {
     "status": { "enum": ["passed", "failed"] },
+    "termination": {
+      "description": "Why the orchestration loop stopped. Absent when it never ran.",
+      "enum": ["completed", "timeout", "max_iterations", "policy_violation", "agent_error", "cancelled"]
+    },
     "summary": { "type": "string", "minLength": 1 },
     "implementationPlan": {
       "type": "array",
@@ -36,6 +40,24 @@
           "command": { "type": "string", "minLength": 1 },
           "result": { "enum": ["pass", "fail"] },
           "details": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "violations": {
+      "description": "Policy judgments the harness itself produced, whatever their disposition.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "rule", "target", "severity", "action", "reason", "retryable"],
+        "properties": {
+          "kind": { "enum": ["file", "command", "rule"] },
+          "rule": { "type": "string", "minLength": 1 },
+          "target": { "type": "string", "minLength": 1 },
+          "severity": { "enum": ["error", "warning", "info"] },
+          "action": { "enum": ["reject", "review", "report"] },
+          "reason": { "type": "string", "minLength": 1 },
+          "retryable": { "type": "boolean" }
         }
       }
     },

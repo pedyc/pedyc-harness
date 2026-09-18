@@ -44,6 +44,9 @@ describe('release configuration', () => {
       // Only the bundled copy exists: a preset manifest lives in a package, so
       // no project holds one to drift from.
       { file: 'preset.schema.json', destinations: ['packages/core/schemas'] },
+      // Likewise for the policy schema: it is a contract about a project's
+      // document, not a file the project has to carry.
+      { file: 'policy.schema.json', destinations: ['packages/core/schemas'] },
       { file: 'task.example.json', destinations: ['.harness', 'packages/cli/templates', 'examples/*/.harness'] },
       { file: 'task.schema.json', destinations: ['.harness'] },
     ]
