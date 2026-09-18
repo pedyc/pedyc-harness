@@ -10,12 +10,23 @@
 Policy 是 `.harness/policy.json` 这一份**扁平设置对象**。它不是规则引擎:没有条件、没有效果、
 没有优先级、没有冲突解决,也没有决策对象。它只回答四个问题:
 
-| 它约束什么 | 依据 | 在哪个决策点生效 |
-| ------------------ | ---------------------- | -------------------------------------- |
-| 允许改哪些文件 | `allowedProductPaths` | Coder 返回后,Harness 比对文件快照 |
-| 允许跑哪些命令 | `allowedAgentCommands` | 每次启动 Provider 之前 |
-| 必须通过哪些闸门 | `requiredChecks` | Tester 阶段逐个执行 |
-| 最多重试几次 | `maxIterations` | 编排循环的迭代上限 |
+| 它约束什么       | 依据                   | 在哪个决策点生效                  |
+| ---------------- | ---------------------- | --------------------------------- |
+| 允许改哪些文件   | `allowedProductPaths`  | Coder 返回后,Harness 比对文件快照 |
+| 允许跑哪些命令   | `allowedAgentCommands` | 每次启动 Provider 之前            |
+| 必须通过哪些闸门 | `requiredChecks`       | Tester 阶段逐个执行               |
+| 最多重试几次     | `maxIterations`        | 编排循环的迭代上限                |
+| 自定义规则       | `rules`                | 每次启动Provider之前              |
+```
+Policy
+ ├── allowedPaths
+ ├── protectedPaths
+ ├── forbiddenCommands
+ └── rules
+       ├── vue/no-options-api
+       ├── typescript/no-any
+       └── ...
+```
 
 Policy 描述的是「**这一次**允许做什么」,不是「Agent 理论上能做什么」。允许集合之外的一切都视为
 越界,不需要额外声明禁止项。
@@ -24,16 +35,15 @@ Policy 描述的是「**这一次**允许做什么」,不是「Agent 理论上�
 > 该规则有多严重、该怎么处置。它仍然是**处置声明**,不是条件匹配,见 §5.1。
 
 ## 2. 什么时候执行
-
 Policy 在五个不同时机被读取,后果各不相同:
 
-| 时机 | 动作 | 不满足时 |
-| -------------------- | -------------------------------------------- | ------------------------ |
-| `init` | Preset 的 `policy` 原样写成 `.harness/policy.json` | — |
-| `verify`(命令) | `validatePolicy` 校验形状,并断言 `requiredChecks` 的脚本确实存在于 `package.json` | 非零退出,不进入执行 |
-| `run` 加载阶段 | `validatePolicy`,不通过即终止 | 运行失败,不调用任何 Agent |
-| 每次 Provider 调用前 | `isCommandAllowed` | 该阶段失败 |
-| 每次 Coder 返回后 | `findOutOfScopeChanges`(快照 diff) | Reviewer 判定不通过 |
+| 时机                 | 动作                                                                              | 不满足时                  |
+| -------------------- | --------------------------------------------------------------------------------- | ------------------------- |
+| `init`               | Preset 的 `policy` 原样写成 `.harness/policy.json`                                | —                         |
+| `verify`(命令)       | `validatePolicy` 校验形状,并断言 `requiredChecks` 的脚本确实存在于 `package.json` | 非零退出,不进入执行       |
+| `run` 加载阶段       | `validatePolicy`,不通过即终止                                                     | 运行失败,不调用任何 Agent |
+| 每次 Provider 调用前 | `isCommandAllowed`                                                                | 该阶段失败                |
+| 每次 Coder 返回后    | `findOutOfScopeChanges`(快照 diff)                                                | Reviewer 判定不通过       |
 
 范围判定的位置很关键:**它在 Coder 之后、Reviewer 之前**,依据是 Harness 自己的文件快照比较,
 而不是 Agent 的声明。这是「实际改了什么」与「允许改什么」的直接比对。
@@ -42,11 +52,11 @@ Policy 在五个不同时机被读取,后果各不相同:
 
 三个函数各自是一个决策点,且都只读 Policy、不产生副作用:
 
-| 函数 | 决策 | 语义要点 |
-| ------------------------ | -------------------------- | ---------------------------------------------------- |
-| `validatePolicy` | 这份配置能不能用 | 输入是不受信任的 JSON;返回问题描述或 `null` |
-| `isCommandAllowed` | 这次调用放不放行 | 允许列表为空 = 不限制 |
-| `findOutOfScopeChanges` | 这批改动算不算越界 | **前缀匹配**,不是 glob |
+| 函数                    | 决策               | 语义要点                                    |
+| ----------------------- | ------------------ | ------------------------------------------- |
+| `validatePolicy`        | 这份配置能不能用   | 输入是不受信任的 JSON;返回问题描述或 `null` |
+| `isCommandAllowed`      | 这次调用放不放行   | 允许列表为空 = 不限制                       |
+| `findOutOfScopeChanges` | 这批改动算不算越界 | **前缀匹配**,不是 glob                      |
 
 编排层消费它们的返回值:命令不被允许 → 该 Provider 阶段失败;存在越界文件 →
 `reviewerApproved` 直接不通过,**即使 Reviewer 自己批准了**。范围检查留在 Harness 侧,是刻意的
@@ -59,11 +69,11 @@ Policy 在五个不同时机被读取,后果各不相同:
 
 当前 Policy 的**表达能力强于它的执行力**。以下字段会被 schema 接受,但不产生任何效果:
 
-| 字段 | 现状 |
-| ------------------ | ------------------------------------------------------------ |
-| `protectedPaths` | 只校验形状,从不与改动比对 |
-| `forbiddenCommands` | 没有任何代码读取 |
-| `agentTimeoutMs` | `runCommand` 不设置超时,挂起的 Provider 会一直挂起 |
+| 字段                | 现状                                               |
+| ------------------- | -------------------------------------------------- |
+| `protectedPaths`    | 只校验形状,从不与改动比对                          |
+| `forbiddenCommands` | 没有任何代码读取                                   |
+| `agentTimeoutMs`    | `runCommand` 不设置超时,挂起的 Provider 会一直挂起 |
 
 还有一处容易误判:**`maxIterations`、`protectedPaths`、`requiredChecks` 在类型上可选,但不写就会被
 `validatePolicy` 拒绝**。契约中给出了完整的字段与约束对照表。
@@ -79,11 +89,11 @@ Policy 在五个不同时机被读取,后果各不相同:
 
 规则实现产生 Finding,Policy 声明 `rule id → severity → action`:
 
-| Severity | 默认 Action | 含义 |
-| --------- | ----------- | -------------------- |
-| `error` | `reject` | 判定不通过 |
-| `warning` | `review` | 需 Reviewer 确认后才算通过 |
-| `info` | `report` | 只记录,不影响判定 |
+| Severity  | 默认 Action | 含义                       |
+| --------- | ----------- | -------------------------- |
+| `error`   | `reject`    | 判定不通过                 |
+| `warning` | `review`    | 需 Reviewer 确认后才算通过 |
+| `info`    | `report`    | 只记录,不影响判定          |
 
 三点必须守住:
 

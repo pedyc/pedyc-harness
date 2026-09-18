@@ -28,15 +28,15 @@ interface Policy extends CommandPolicy {
 
 类型上的可选性与运行时的实际要求**不一致**,下表是实际行为:
 
-| 字段 | 类型上必需 | `validatePolicy` 的要求 | 是否被强制执行 |
-| ------------------------ | ---------- | ------------------------ | ---------------------------------------------------------- |
-| `allowedProductPaths` | ✅ | 非空数组 | ✅ `findOutOfScopeChanges`,前缀匹配 |
-| `maxIterations` | ❌ | **正整数**(缺失即拒绝) | ✅ `executor` 用它钳制 Coder 重试上限 |
-| `protectedPaths` | ❌ | **必须是数组**(缺失即拒绝) | ❌ 只校验形状,从不与改动比对 |
-| `requiredChecks` | ❌ | **必须是数组**(缺失即拒绝) | ✅ 逐个作为验证闸门执行 |
-| `forbiddenCommands` | ❌ | 不校验 | ❌ 未被任何代码读取 |
-| `agentTimeoutMs` | ❌ | 不校验 | ❌ 未被读取(`runCommand` 没有超时) |
-| `allowedAgentCommands` | ❌ | 不校验 | ✅ `isCommandAllowed` |
+| 字段                   | 类型上必需 | `validatePolicy` 的要求    | 是否被强制执行                       |
+| ---------------------- | ---------- | -------------------------- | ------------------------------------ |
+| `allowedProductPaths`  | ✅          | 非空数组                   | ✅ `findOutOfScopeChanges`,前缀匹配   |
+| `maxIterations`        | ❌          | **正整数**(缺失即拒绝)     | ✅ `executor` 用它钳制 Coder 重试上限 |
+| `protectedPaths`       | ❌          | **必须是数组**(缺失即拒绝) | ❌ 只校验形状,从不与改动比对          |
+| `requiredChecks`       | ❌          | **必须是数组**(缺失即拒绝) | ✅ 逐个作为验证闸门执行               |
+| `forbiddenCommands`    | ❌          | 不校验                     | ❌ 未被任何代码读取                   |
+| `agentTimeoutMs`       | ❌          | 不校验                     | ❌ 未被读取(`runCommand` 没有超时)    |
+| `allowedAgentCommands` | ❌          | 不校验                     | ✅ `isCommandAllowed`                 |
 
 **要点:`maxIterations`、`protectedPaths`、`requiredChecks` 在类型上可选,但不写就会被
 `validatePolicy` 拒绝。** 只有 `allowedProductPaths`、`maxIterations`、`protectedPaths`、
@@ -44,6 +44,28 @@ interface Policy extends CommandPolicy {
 
 `protectedPaths`、`forbiddenCommands`、`agentTimeoutMs` 目前是**已声明但未强制执行**的字段:
 写在配置里不会产生效果。
+
+### forbiddenCommands
+
+`forbiddenCommands` 用于禁止执行特定命令模式。
+
+匹配对象为 Agent 请求执行的 `command + args`，而不是单纯的可执行文件名。
+
+Harness 在 Policy Evaluation 前对命令进行解析和规范化，并以 token 序列进行匹配。
+
+例如：
+
+- `npm publish` → 命中 `npm publish`
+- `npm publish --tag beta` → 命中 `npm publish`
+- `npm publish-notes` → 不命中 `npm publish`
+- `sudo npm publish` → 规范化后命中 `npm publish`
+
+第一版不支持正则表达式或任意字符串子串匹配。
+
+命令匹配采用“有序 token 序列包含”语义：
+规则中的 token 必须连续出现在规范化后的命令 token 中。
+
+Shell wrapper、命令链和 shell 字符串的深入解析属于后续安全模型，不由基础字符串匹配解决。
 
 ## 3. 三个函数
 

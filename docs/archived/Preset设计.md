@@ -652,6 +652,25 @@ A
 → A
 ```
 
+执行路线图：
+```
+harness.json
+      │
+      │ resolve
+      ▼
+   Presets
+      │
+      ▼
+Effective Policy
+      │
+      ├── paths
+      ├── commands
+      ├── rules
+      └── verification
+      │
+      ▼
+    Runtime
+```
 ---
 
 ### 16. 版本：交给 npm
@@ -743,12 +762,12 @@ export type MergeStrategy =
 
 各类字段的默认语义：
 
-| 语义        | 含义                             | 典型字段                                        |
-| ----------- | -------------------------------- | ----------------------------------------------- |
-| `replace`   | 高优先级整体替换                 | `allowedPaths` 的默认值、`verification` 默认命令 |
-| `append`    | 追加、去重、不能删除已有项       | `protectedPaths`、`forbiddenCommands`、`rules`  |
-| `merge`     | 按 key 递归合并                  | `agents`、结构化配置对象                        |
-| `deny-wins` | 只要出现过禁止，任何层级不能解除 | 命令与路径的禁止项                              |
+| 语义        | 含义                             | 典型字段                                                |
+| ----------- | -------------------------------- | ------------------------------------------------------- |
+| `replace`   | 高优先级整体替换                 | `allowedPaths` 的默认值、`verification` 默认命令        |
+| `append`    | 追加、去重、不能删除已有项       | `protectedPaths`、`forbiddenCommands`、`rules`          |
+| `merge`     | 按 key 递归合并                  | `agents`、结构化配置对象                                |
+| `deny-wins` | 只要出现过禁止，任何层级不能解除 | 命令与路径的禁止项                                      |
 | `immutable` | 完全不可覆盖                     | 安全不变量（见 [§18](#18-preset-与-policy-constraint)） |
 
 一条总原则：
@@ -984,14 +1003,14 @@ Config Resolver = 按字段合并语义合成 EffectiveHarnessConfig
 
 差距清单：
 
-| 能力                       | 当前         | 目标               |
-| -------------------------- | ------------ | ------------------ |
-| Preset 发现                | CLI 内置表   | npm 解析           |
-| Preset 继承                | 不支持       | `extends` + DAG    |
-| 版本归属                   | package.json | package.json（不变） |
-| 项目配置入口               | 无           | `.harness/harness.json` |
-| 配置合并语义               | 未定义       | MergeStrategy 表   |
-| EffectiveHarnessConfig     | 无           | Runtime 唯一输入   |
+| 能力                   | 当前         | 目标                    |
+| ---------------------- | ------------ | ----------------------- |
+| Preset 发现            | CLI 内置表   | npm 解析                |
+| Preset 继承            | 不支持       | `extends` + DAG         |
+| 版本归属               | package.json | package.json（不变）    |
+| 项目配置入口           | 无           | `.harness/harness.json` |
+| 配置合并语义           | 未定义       | MergeStrategy 表        |
+| EffectiveHarnessConfig | 无           | Runtime 唯一输入        |
 
 阶段目标与验收标准见 [里程碑路线](../milestones/milestones.md)。
 
