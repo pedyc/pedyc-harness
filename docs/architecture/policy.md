@@ -24,8 +24,8 @@ Policy 是 `.harness/policy.json` 这一份**扁平设置对象**加上一张**�
 Policy 描述的是「**这一次**允许做什么」,不是「Agent 理论上能做什么」。允许集合之外的一切都视为
 越界,不需要额外声明禁止项。
 
-规则处置层已实现(见 §5.1):规则实现产生 Finding,Policy 声明该规则有多严重、该怎么处置。它仍然
-是**处置声明**,不是条件匹配。
+规则处置层**尚未实现**(见 §5.1,随 M8 的第一个 rule 实现一起落地):规则实现产生 Finding,Policy
+声明该规则有多严重、该怎么处置。它仍然是**处置声明**,不是条件匹配。
 
 ## 2. 什么时候执行
 Policy 在五个不同时机被读取,后果各不相同:
@@ -88,6 +88,12 @@ Policy 的每一个字段现在都真的参与判定(M7 落地前后,`protectedP
 
 ### 5.1 规则处置层(推迟到 M8)
 
+> **目标(M8)** 以下内容**未实现**,且**不随 M7 发布**:`policy.json` 里没有规则处置表。
+> 原因是产出 Finding 的实现属于 M8(结构分析器)与 M21(Preset 注册规则),在它们存在之前
+> `rules` 唯一合法的值是空对象——发布这样一个字段,等于把「被 schema 接受却没有任何效果」
+> 重新引入,而 M7 的其余部分正是在清除这类字段。见
+> [ADR-008](../decisions/ADR-008-policy-scope-and-deferred-rule-disposition.md),它取代 ADR-004。
+
 规则实现产生 Finding,Policy 声明 `rule id → severity → action`:
 
 | Severity  | 默认 Action | 含义                       |
@@ -96,16 +102,16 @@ Policy 的每一个字段现在都真的参与判定(M7 落地前后,`protectedP
 | `warning` | `review`    | 需 Reviewer 确认后才算通过 |
 | `info`    | `report`    | 只记录,不影响判定          |
 
-三点必须守住:
+落地时三点必须守住:
 
 - **Policy 声明处置,不声明匹配。** 条件表达式、优先级与冲突解决仍不进入 `policy.json`;匹配逻辑
   属于内置 checker 或 Preset 注册的规则(见 [Preset 设计 §8](./preset.md))。
 - **统一 Evaluator。** 文件、命令、规则三类判定由同一个 Policy 模块给出结论,避免"文件一套逻辑、
-  命令一套逻辑、规则又一套逻辑"。
+  命令一套逻辑、规则又一套逻辑"。前两类已随 M7 落地,第三类到位时沿用同一形状。
 - **severity 属于安全语义。** 更高层只能收紧(把 `warning` 提升为 `error`、把 `report` 改为
   `reject`),不能放宽;降低级别、关闭规则、把 `reject` 改为 `report` 都视为放宽,必须被拒绝。
 
-详见 [ADR-004](../decisions/ADR-004-policy-severity-rules.md)与[治理流水线](./governance.md)。
+详见 [治理流水线](./governance.md)。
 
 ### 5.2 配置组合语义(M19)
 
