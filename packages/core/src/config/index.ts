@@ -16,6 +16,16 @@ export { harnessDirectory, loadHarnessConfig } from './loader.js'
 export { manifestFile, manifestPath, readManifest } from './manifest.js'
 export type { ManifestResult } from './manifest.js'
 export { policyProblems, validatePolicy } from './policy.js'
+export {
+  actionFor,
+  actionOrder,
+  defaultActionFor,
+  isTightening,
+  knownRule,
+  knownRules,
+  severityOrder,
+} from './severity.js'
+export type { KnownRule } from './severity.js'
 export { presetDocument, presetFile, presetPackageName, presetSchema, resolvePresets } from './presets.js'
 export type { PresetsResult } from './presets.js'
 export {

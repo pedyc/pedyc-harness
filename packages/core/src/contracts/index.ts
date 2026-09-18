@@ -7,6 +7,7 @@ export type {
   PolicyDecision,
   PolicyViolation,
   RuleAction,
+  RuleSetting,
   Severity,
   ViolationKind,
   ViolationMode,
