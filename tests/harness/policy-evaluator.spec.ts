@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import {
   createProviderRunner,
   describeFileViolations,
+  evaluateChangeBudget,
   evaluateCommand,
   evaluateFiles,
   findOutOfScopeChanges,
@@ -277,5 +278,113 @@ describe('policy evaluator: provider commands', () => {
     // `report` changes the disposition, never the side-effect control.
     expect(result.violations?.[0]?.action).toBe('report')
     expect(existsSync(sideEffect)).toBe(false)
+  })
+})
+
+describe('policy evaluator: change budget', () => {
+  it('applies no budget when the policy does not set one', () => {
+    expect(evaluateChangeBudget(99, policy()).allowed).toBe(true)
+  })
+
+  it('allows a change exactly at the limit, and refuses one above it', () => {
+    expect(evaluateChangeBudget(2, policy({ maxChangedFiles: 2 })).allowed).toBe(true)
+    const decision = evaluateChangeBudget(3, policy({ maxChangedFiles: 2 }))
+    expect(decision.allowed).toBe(false)
+    expect(decision.violations[0]?.rule).toBe('maxChangedFiles')
+    expect(decision.violations[0]?.reason).toContain('maxChangedFiles (2)')
+  })
+
+  it('stops a run whose coder iteration changes too many files', async () => {
+    const result = await runWith(['src/a.ts', 'src/b.ts', 'src/c.ts'], { maxChangedFiles: 2 })
+    expect(result.completed).toBe(false)
+    expect(result.termination).toBe('policy_violation')
+    expect(result.issues.some((issue) => issue.includes('maxChangedFiles'))).toBe(true)
+  })
+
+  it('passes the same change when the budget is not exceeded', async () => {
+    const result = await runWith(['src/a.ts', 'src/b.ts', 'src/c.ts'], { maxChangedFiles: 3 })
+    expect(result.completed).toBe(true)
+    expect(result.termination).toBe('completed')
+  })
+
+  it('records the budget violation without stopping a reporting run', async () => {
+    const result = await runWith(
+      ['src/a.ts', 'src/b.ts', 'src/c.ts'],
+      { maxChangedFiles: 2, onViolation: 'report' },
+    )
+    expect(result.completed).toBe(true)
+    expect(result.violations.map(({ rule, action }) => `${rule}:${action}`)).toEqual(['maxChangedFiles:report'])
+  })
+})
+
+describe('policy evaluator: termination reasons', () => {
+  const runWithAgent = (runAgent: RunAgent, overrides: Partial<Policy> = {}) =>
+    runOrchestrator({
+      input: task,
+      policy: policy(overrides),
+      dryRun: false,
+      snapshot: () => new Map(),
+      changedFiles: () => [],
+      runAgent,
+      runVerification: async () => [{ command: 'build', result: 'pass', details: 'ok' }],
+    })
+
+  it('leaves termination absent for a dry run, because no loop ran', async () => {
+    const result = await runOrchestrator({
+      input: task,
+      policy: policy(),
+      dryRun: true,
+      snapshot: () => new Map(),
+      changedFiles: () => [],
+      runAgent: approvingAgent,
+      runVerification: async () => [],
+    })
+    expect(result.termination).toBeUndefined()
+  })
+
+  it('records completed for a run that passes', async () => {
+    expect((await runWith(['src/app.ts'])).termination).toBe('completed')
+  })
+
+  it('records policy_violation when scope refuses the change', async () => {
+    expect((await runWith(['lib/util.ts'])).termination).toBe('policy_violation')
+  })
+
+  it('records agent_error when a stage fails on its own', async () => {
+    const result = await runWithAgent(async (name) =>
+      name === 'planner'
+        ? { ok: false, details: 'planner refused', payload: {} }
+        : { ok: true, details: 'ok', payload: {} })
+    expect(result.termination).toBe('agent_error')
+  })
+
+  it('records timeout when the harness stopped a stage', async () => {
+    const result = await runWithAgent(async () => ({
+      ok: false,
+      details: 'stopped after agentTimeoutMs',
+      payload: {},
+      termination: 'timeout',
+    }))
+    expect(result.termination).toBe('timeout')
+    expect(result.issues).toContain('stopped after agentTimeoutMs')
+  })
+
+  it('records cancelled when the run was cancelled', async () => {
+    const result = await runWithAgent(async () => ({
+      ok: false,
+      details: 'cancelled',
+      payload: {},
+      termination: 'cancelled',
+    }))
+    expect(result.termination).toBe('cancelled')
+  })
+
+  it('records max_iterations when the tester never approves', async () => {
+    const result = await runWithAgent(async (name) =>
+      name === 'tester'
+        ? { ok: true, details: 'not yet', payload: { approved: false } }
+        : { ok: true, details: 'ok', payload: {} })
+    expect(result.completed).toBe(false)
+    expect(result.termination).toBe('max_iterations')
   })
 })

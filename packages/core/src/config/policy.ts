@@ -154,6 +154,18 @@ export const policyProblems = (policy: unknown): ConfigProblem[] => {
   if (candidate.onViolation !== undefined && candidate.onViolation !== 'fail' && candidate.onViolation !== 'report') {
     problems.push({ field: 'onViolation', message: "Harness policy onViolation must be 'fail' or 'report'." })
   }
+  if (
+    candidate.agentTimeoutMs !== undefined
+    && (!Number.isInteger(candidate.agentTimeoutMs) || (candidate.agentTimeoutMs as number) < 1)
+  ) {
+    problems.push({ field: 'agentTimeoutMs', message: 'Harness policy agentTimeoutMs must be a positive integer.' })
+  }
+  if (
+    candidate.maxChangedFiles !== undefined
+    && (!Number.isInteger(candidate.maxChangedFiles) || (candidate.maxChangedFiles as number) < 1)
+  ) {
+    problems.push({ field: 'maxChangedFiles', message: 'Harness policy maxChangedFiles must be a positive integer.' })
+  }
   if (candidate.rules !== undefined) problems.push(...ruleProblems(candidate.rules))
   if (candidate.severityActions !== undefined) problems.push(...severityActionProblems(candidate.severityActions))
   return problems

@@ -24,6 +24,8 @@ const EXIT_CONFIG = 5
 interface RunOptions {
   argv?: string[]
   cwd?: string
+  /** Cancelling it kills a running provider process and ends the run as cancelled. */
+  signal?: AbortSignal
 }
 
 // Runs one harness execution against a target project. Returns a process exit
@@ -32,6 +34,7 @@ interface RunOptions {
 export const runHarness = async ({
   argv = process.argv.slice(2),
   cwd = process.cwd(),
+  signal,
 }: RunOptions = {}): Promise<number> => {
   const readArg = (name: string, fallback: string | null = null): string | null => {
     const index = argv.indexOf(name)
@@ -138,6 +141,11 @@ export const runHarness = async ({
     policy: checkedPolicy,
     validator: validators.agentResponse,
     ajv: validators.ajv,
+    // `agentTimeoutMs` bounds provider invocations only: the field names the
+    // agent stage, and a verification gate is the project's own script, which
+    // keeps whatever timeout its author gave it.
+    agentTimeoutMs: checkedPolicy.agentTimeoutMs,
+    signal,
   })
 
   writeJson(join(runDirectory, 'input.json'), input)
@@ -182,6 +190,7 @@ export const runHarness = async ({
 
   const result: RunResult = {
     status: orchestration.completed ? 'passed' : 'failed',
+    termination: orchestration.termination,
     summary: orchestration.completed
       ? `Harness completed ${input.feature.trim()} through Planner, Coder, Tester, and Reviewer.`
       : `Harness could not complete ${input.feature.trim()}.`,

@@ -1,4 +1,5 @@
 import type {
+  AgentCallResult,
   FileChange,
   NormalizedTask,
   OrchestrationResult,
@@ -7,11 +8,12 @@ import type {
   Policy,
   PolicyViolation,
   RunAgent,
+  TerminationReason,
   VerificationCheck,
 } from '../contracts/index.js'
 import { reviewerApproved, testerApproved } from './approval-gate.js'
 import type { FileSnapshot } from './diff-inspector.js'
-import { describeFileViolations, evaluateFiles, refusedFiles } from './policy-engine.js'
+import { describeFileViolations, evaluateChangeBudget, evaluateFiles, refusedFiles } from './policy-engine.js'
 
 export interface OrchestratorOptions {
   input: NormalizedTask
@@ -101,6 +103,19 @@ export const runOrchestrator = async ({
 
   let lastVerification: VerificationCheck[] = []
   let completed = false
+  let termination: TerminationReason | undefined = plan.ok ? undefined : plan.termination ?? 'agent_error'
+
+  // A stage the harness itself stopped — the provider ran past `agentTimeoutMs`,
+  // or the run was cancelled — ends the loop instead of being retried. Retrying a
+  // stage that ran out of time usually runs out of time again, and a cancellation
+  // is a user asking for the run to stop.
+  const stoppedByHarness = (result: AgentCallResult): boolean => {
+    if (result.termination === undefined) return false
+    issues.push(result.details)
+    termination = result.termination
+    return true
+  }
+
   for (let iteration = 1; iteration <= maxIterations && issues.length === 0; iteration += 1) {
     const before = snapshot()
     recordPhase('coder', 'running', 'Applying the approved implementation plan.', iteration)
@@ -119,11 +134,24 @@ export const runOrchestrator = async ({
     }
     recordViolations(coder.violations)
 
-    for (const file of changedFiles(before, snapshot())) {
+    const iterationChanges = changedFiles(before, snapshot())
+    for (const file of iterationChanges) {
       fileChanges.push({ file, change: `Changed during coder iteration ${iteration}.` })
     }
+    if (stoppedByHarness(coder)) break
     if (!coder.ok) {
       issues.push(coder.details)
+      termination = 'agent_error'
+      break
+    }
+
+    const budget = evaluateChangeBudget(iterationChanges.length, policy)
+    recordViolations(budget.violations)
+    // A reported budget overrun is recorded and the run continues; only a
+    // rejection stops it. That is the whole meaning of `onViolation`.
+    if (!budget.allowed && budget.violations.some(({ action }) => action === 'reject')) {
+      issues.push(budget.violations.map(({ reason: text }) => text).join(' '))
+      termination = 'policy_violation'
       break
     }
 
@@ -155,8 +183,10 @@ export const runOrchestrator = async ({
     }
     writeVerification(iteration, verification)
 
+    if (stoppedByHarness(externalTest)) break
     if (!testerOk && iteration === maxIterations) {
       issues.push('Verification did not pass before maxIterations was reached.')
+      termination = 'max_iterations'
       break
     }
     if (!testerOk) continue
@@ -191,15 +221,20 @@ export const runOrchestrator = async ({
     }
     if (!reviewerOk) {
       issues.push(reviewerDetails)
+      termination = refused.length > 0 ? 'policy_violation' : reviewer.termination ?? 'agent_error'
       break
     }
 
     completed = true
+    termination = 'completed'
     break
   }
 
   return {
     completed,
+    // A run that fell out of the loop without recording a reason is, by
+    // definition, one that used up its iteration budget.
+    termination: termination ?? 'max_iterations',
     implementationPlan,
     fileChanges,
     verification: lastVerification,

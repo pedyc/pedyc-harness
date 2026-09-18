@@ -85,6 +85,32 @@ export const evaluateFiles = (files: string[], policy: Policy): PolicyDecision =
 }
 
 /**
+ * The change-budget rule.
+ *
+ * Measured per coder iteration rather than cumulatively: what it bounds is the
+ * blast radius of a single change, and a cumulative count would flag a run for
+ * merely taking several iterations to converge.
+ */
+export const evaluateChangeBudget = (changedCount: number, policy: Policy): PolicyDecision => {
+  const limit = policy.maxChangedFiles
+  if (limit === undefined || changedCount <= limit) return { allowed: true, violations: [] }
+  return {
+    allowed: false,
+    violations: [
+      {
+        kind: 'rule',
+        rule: 'maxChangedFiles',
+        target: `${changedCount} changed files`,
+        severity: 'error',
+        action: applyViolationMode('reject', policy),
+        reason: `One iteration changed ${changedCount} files, above maxChangedFiles (${limit}).`,
+        retryable: false,
+      },
+    ],
+  }
+}
+
+/**
  * Names the files the coder touched that fall outside `allowedProductPaths`.
  *
  * A projection of `evaluateFiles` rather than a second implementation, so the

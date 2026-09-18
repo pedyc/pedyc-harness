@@ -7,6 +7,10 @@
   "required": ["status", "summary", "implementationPlan", "verification", "issues"],
   "properties": {
     "status": { "enum": ["passed", "failed"] },
+    "termination": {
+      "description": "Why the orchestration loop stopped. Absent when it never ran.",
+      "enum": ["completed", "timeout", "max_iterations", "policy_violation", "agent_error", "cancelled"]
+    },
     "summary": { "type": "string", "minLength": 1 },
     "implementationPlan": {
       "type": "array",

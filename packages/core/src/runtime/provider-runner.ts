@@ -16,6 +16,10 @@ export interface ProviderRunnerOptions {
   policy: CommandPolicyContext
   validator: ResponseValidator
   ajv: SchemaErrorFormatter
+  /** Bounds one provider invocation; `agentTimeoutMs` from the policy. */
+  agentTimeoutMs?: number
+  /** Cancelling it kills the provider process and ends the stage as cancelled. */
+  signal?: AbortSignal
 }
 
 /**
@@ -25,7 +29,15 @@ export interface ProviderRunnerOptions {
  * pipeline has nothing to delegate. An `external` stage is spawned as a child
  * process and must speak the stdin/stdout JSON protocol.
  */
-export const createProviderRunner = ({ root, agents, policy, validator, ajv }: ProviderRunnerOptions) =>
+export const createProviderRunner = ({
+  root,
+  agents,
+  policy,
+  validator,
+  ajv,
+  agentTimeoutMs,
+  signal,
+}: ProviderRunnerOptions) =>
   async (name: AgentRole, payload: StageRequest): Promise<AgentCallResult> => {
     const config = agents[name]
     if (!config || config.mode === 'internal') {
@@ -53,10 +65,23 @@ export const createProviderRunner = ({ root, agents, policy, validator, ajv }: P
       }
     }
 
-    const result = await runCommand(root, provider.command, provider.args, {
-      ...payload,
-      provider: config.provider,
-    })
+    const result = await runCommand(
+      root,
+      provider.command,
+      provider.args,
+      { ...payload, provider: config.provider },
+      { timeoutMs: agentTimeoutMs, signal },
+    )
+    if (result.termination !== 'exited') {
+      // The harness stopped this process. Saying so is the difference between
+      // "the agent failed" and "we ran out of time or the user cancelled".
+      return {
+        ok: false,
+        details: result.stderr.trim() || `${name} was stopped (${result.termination}).`,
+        payload: {},
+        termination: result.termination,
+      }
+    }
     if (result.code !== 0) {
       return {
         ok: false,

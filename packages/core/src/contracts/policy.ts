@@ -108,6 +108,14 @@ export interface Policy extends CommandPolicy {
   protectedPaths?: string[]
   requiredChecks?: string[]
   agentTimeoutMs?: number
+  /**
+   * The most files one coder iteration may change.
+   *
+   * Measured per iteration, not cumulatively: the point is the blast radius of a
+   * single change, and a cumulative count would flag a run for merely taking
+   * several iterations.
+   */
+  maxChangedFiles?: number
   onViolation?: ViolationMode
   /** Disposition per rule id. Matching stays in the rule, never here. */
   rules?: Record<string, RuleSetting>

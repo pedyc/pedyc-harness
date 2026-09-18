@@ -46,12 +46,17 @@ export interface AgentPayload {
  * to run the stage — notably a command that `forbiddenCommands` refused. The
  * provider never supplies this: it is the harness's own finding, which is why it
  * sits beside `payload` rather than inside it.
+ *
+ * `termination` is set when the harness stopped the provider process itself
+ * (`agentTimeoutMs` elapsing, or a cancellation), which the orchestrator turns
+ * into the run's own termination reason.
  */
 export interface AgentCallResult {
   ok: boolean
   details: string
   payload: AgentPayload
   violations?: PolicyViolation[]
+  termination?: 'timeout' | 'cancelled'
 }
 
 interface StageRequestBase {
