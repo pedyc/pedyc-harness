@@ -18,11 +18,13 @@ export const testerApproved = (
 /**
  * Whether the reviewer stage may pass.
  *
- * Scope is checked here rather than trusted to the agent: any out-of-scope file
- * rejects the change even when the reviewer approves it.
+ * Scope is checked here rather than trusted to the agent: any file the policy
+ * refuses rejects the change even when the reviewer approves it. The refusal is
+ * produced by the policy evaluator, so "refused" covers both the
+ * `allowedProductPaths` and the `protectedPaths` rules.
  */
 export const reviewerApproved = (
   reviewer: AgentCallResult,
-  outOfScopeChanges: string[],
+  refusedFiles: string[],
 ): boolean =>
-  reviewer.ok && reviewer.payload?.approved === true && outOfScopeChanges.length === 0
+  reviewer.ok && reviewer.payload?.approved === true && refusedFiles.length === 0

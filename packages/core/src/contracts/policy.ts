@@ -5,6 +5,17 @@ export type AgentMode = 'internal' | 'external'
 export type AgentRole = 'planner' | 'coder' | 'tester' | 'reviewer'
 
 /**
+ * How serious a judgment is.
+ *
+ * A rule declares its own default severity; a policy may only ever *tighten* it.
+ * See `docs/decisions/ADR-004-policy-severity-rules.md` §2.5.
+ */
+export type Severity = 'error' | 'warning' | 'info'
+
+/** What the harness does once a judgment's severity is known. */
+export type RuleAction = 'reject' | 'review' | 'report'
+
+/**
  * The part of the policy that bounds which commands an agent may run.
  *
  * The provider runner consults nothing else, so it accepts this narrower type

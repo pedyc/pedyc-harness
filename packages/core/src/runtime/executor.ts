@@ -10,7 +10,7 @@ import type {
 } from '../contracts/index.js'
 import { reviewerApproved, testerApproved } from './approval-gate.js'
 import type { FileSnapshot } from './diff-inspector.js'
-import { findOutOfScopeChanges } from './policy-engine.js'
+import { describeFileViolations, evaluateFiles, refusedFiles } from './policy-engine.js'
 
 export interface OrchestratorOptions {
   input: NormalizedTask
@@ -144,7 +144,13 @@ export const runOrchestrator = async ({
     if (!testerOk) continue
 
     recordPhase('reviewer', 'running', 'Checking scope, output contract, and acceptance criteria.', iteration)
-    const outOfScopeChanges = findOutOfScopeChanges(fileChanges.map(({ file }) => file), policy)
+    // Scope is the harness's own comparison of what changed against what the
+    // policy allows, and it goes through the policy evaluator rather than a
+    // second implementation here. A protected-path hit is reported as itself:
+    // such a path is normally *inside* the allowed set, so calling it
+    // "out of scope" would misdescribe why the change was refused.
+    const fileDecision = evaluateFiles(fileChanges.map(({ file }) => file), policy)
+    const refused = refusedFiles(fileDecision.violations)
     const reviewer = await runAgent('reviewer', {
       phase: 'reviewer',
       input,
@@ -153,9 +159,9 @@ export const runOrchestrator = async ({
       fileChanges,
       iteration,
     })
-    const reviewerOk = reviewerApproved(reviewer, outOfScopeChanges)
-    const reviewerDetails = outOfScopeChanges.length
-      ? `Out-of-scope files changed: ${outOfScopeChanges.join(', ')}`
+    const reviewerOk = reviewerApproved(reviewer, refused)
+    const reviewerDetails = refused.length
+      ? describeFileViolations(fileDecision.violations)
       : reviewer.details
     phases[phases.length - 1] = {
       name: 'reviewer',
