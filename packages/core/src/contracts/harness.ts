@@ -8,8 +8,12 @@ import type { ResolvedPreset } from './preset.js'
  * It is the entry point that answers "which configuration does this project
  * load", not the whole configuration. A field that points at another document
  * is a path relative to `.harness/`; the same field may also carry the document
- * inline. `verification` and `rules` are accepted and reported, but no runtime
- * consumes them yet.
+ * inline. `verification` is accepted and reported, but no runtime consumes it
+ * yet.
+ *
+ * There is deliberately no `rules` field here. Rule dispositions have exactly one
+ * home, `Policy.rules`, and a manifest-level duplicate would be a second, silent
+ * definition of where a project configures rules.
  */
 export interface HarnessManifest {
   version: number
@@ -18,7 +22,6 @@ export interface HarnessManifest {
   policy?: Policy | string
   agents?: AgentsConfig | string
   verification?: string
-  rules?: string[]
 }
 
 /**
@@ -68,7 +71,7 @@ export interface HarnessConfigError {
 
 /** One document, or set of built-in defaults, that a value was read from. */
 export interface ConfigSource {
-  kind: 'manifest' | 'policy' | 'agents' | 'preset' | 'verification' | 'rules'
+  kind: 'manifest' | 'policy' | 'agents' | 'preset' | 'verification'
   /** Repository-relative path, or a description when no file backs the value. */
   location: string
   /** False when the manifest declares the source but no runtime consumes it yet. */

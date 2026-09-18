@@ -28,22 +28,30 @@ interface Policy extends CommandPolicy {
 
 类型上的可选性与运行时的实际要求**不一致**,下表是实际行为:
 
-| 字段                   | 类型上必需 | `validatePolicy` 的要求    | 是否被强制执行                       |
-| ---------------------- | ---------- | -------------------------- | ------------------------------------ |
-| `allowedProductPaths`  | ✅          | 非空数组                   | ✅ `findOutOfScopeChanges`,前缀匹配   |
-| `maxIterations`        | ❌          | **正整数**(缺失即拒绝)     | ✅ `executor` 用它钳制 Coder 重试上限 |
-| `protectedPaths`       | ❌          | **必须是数组**(缺失即拒绝) | ❌ 只校验形状,从不与改动比对          |
-| `requiredChecks`       | ❌          | **必须是数组**(缺失即拒绝) | ✅ 逐个作为验证闸门执行               |
-| `forbiddenCommands`    | ❌          | 不校验                     | ❌ 未被任何代码读取                   |
-| `agentTimeoutMs`       | ❌          | 不校验                     | ❌ 未被读取(`runCommand` 没有超时)    |
-| `allowedAgentCommands` | ❌          | 不校验                     | ✅ `isCommandAllowed`                 |
+| 字段                   | 类型上必需 | `validatePolicy` 的要求    | 是否被强制执行                                     |
+| ---------------------- | ---------- | -------------------------- | -------------------------------------------------- |
+| `allowedProductPaths`  | ✅          | 非空数组                   | ✅ `evaluateFiles`,前缀匹配                         |
+| `maxIterations`        | ❌          | **正整数**(缺失即拒绝)     | ✅ `executor` 用它钳制 Coder 重试上限               |
+| `protectedPaths`       | ❌          | **必须是数组**(缺失即拒绝) | ✅ `evaluateFiles`,命中即拒绝并单独报告             |
+| `requiredChecks`       | ❌          | **必须是数组**(缺失即拒绝) | ✅ 逐个作为验证闸门执行,执行前先过命令策略          |
+| `forbiddenCommands`    | ❌          | 必须是数组                 | ✅ `evaluateCommand`,在进程创建之前拒绝             |
+| `agentTimeoutMs`       | ❌          | 正整数                     | ✅ 传给 `runCommand`,到期终止该次 Provider 调用     |
+| `allowedAgentCommands` | ❌          | 必须是数组                 | ✅ `evaluateCommand`,精确成员名;denial 优先         |
+| `maxChangedFiles`      | ❌          | 正整数                     | ✅ `evaluateChangeBudget`,按单次 Coder 迭代计数     |
+| `onViolation`          | ❌          | `'fail'` \| `'report'`     | ✅ 决定违规是否升级为运行失败                       |
+| `severityActions`      | ❌          | 只能收紧的对象             | ✅ 作为 Finding 处置的映射覆盖                      |
+| `rules`                | ❌          | 键必须是已声明的 rule id   | ⚠️ 基础设施已就绪,但尚无 rule 实现,因此只接受空对象 |
 
 **要点:`maxIterations`、`protectedPaths`、`requiredChecks` 在类型上可选,但不写就会被
 `validatePolicy` 拒绝。** 只有 `allowedProductPaths`、`maxIterations`、`protectedPaths`、
 `requiredChecks` 四项齐全的文档才能通过校验。
 
-`protectedPaths`、`forbiddenCommands`、`agentTimeoutMs` 目前是**已声明但未强制执行**的字段:
-写在配置里不会产生效果。
+`rules` 目前只接受空对象:处置逻辑(`severity → action`、只能收紧、未知 id 报错)已经落地,
+但**没有 rule 实现声明过任何 id**,因此任何 id 都是未知 id 并报错,而不是被静默忽略。M8 的
+结构分析器与 M21 的 Preset 规则落地后,被声明的 id 才成为合法输入。
+
+`onViolation` 控制的是**违规的处置级别**,不是危险副作用的开关:被拒绝的命令在任何模式下都
+不会被启动。见 [ADR-006](../decisions/ADR-006-run-lifecycle.md) §2.3。
 
 ### forbiddenCommands
 
@@ -67,38 +75,60 @@ Harness 在 Policy Evaluation 前对命令进行解析和规范化，并以 toke
 
 Shell wrapper、命令链和 shell 字符串的深入解析属于后续安全模型，不由基础字符串匹配解决。
 
-## 3. 三个函数
+## 3. 导出面
 
 ```ts
+// 校验(配置层)
 validatePolicy(policy: unknown): string | null
+policyProblems(policy: unknown): ConfigProblem[]
+
+// 三类判定共用的 Policy Evaluator(运行时)
+evaluateFiles(files: string[], policy: Policy): PolicyDecision
+evaluateCommand(command: string, args: string[], policy: CommandPolicyContext): PolicyDecision
+evaluateChangeBudget(changedCount: number, policy: Policy): PolicyDecision
+
+// 兼容与展示
 findOutOfScopeChanges(files: string[], policy: Policy): string[]
 isCommandAllowed(command: string, policy: CommandPolicy): boolean
+refusedFiles(violations: PolicyViolation[]): string[]
+describeFileViolations(violations: PolicyViolation[]): string
+actionFor(severity: Severity, policy: { severityActions?: … }): RuleAction
 ```
 
-- **`validatePolicy`** —— 校验从磁盘读到的文档。输入是 `unknown`(不受信任的 JSON),返回第一个
-  问题的描述,或 `null`。返回 `null` 的调用方可以把它当作 `Policy` 使用。
-- **`findOutOfScopeChanges`** —— 返回 Coder 改过、但 Policy 不允许的文件名。
-- **`isCommandAllowed`** —— 允许列表为空或未定义表示"不限制"。
+`PolicyDecision` 是三类判定共同的结论形状:`{ allowed, violations }`,其中每条
+`PolicyViolation` 带 `kind`(file / command / rule)、`rule`、`target`、`severity`、
+`action`、`reason`、`retryable`。三类的 `action` 都已在 evaluator 内与项目的 `onViolation`
+调和过,调用方不再自行推导。
+
+- **`validatePolicy` / `policyProblems`** —— 校验从磁盘读到的文档。输入是 `unknown`(不受信任的
+  JSON),返回问题描述或全部问题。返回 `null` / 空数组的调用方可以把它当作 `Policy` 使用。
+- **`evaluateFiles`** —— 文件判定。`protectedPaths` 与 `allowedProductPaths` 两条规则独立触发;
+  同一文件可以同时命中两者(受保护路径通常就在允许集合内)。
+- **`evaluateCommand`** —— 命令判定。`forbiddenCommands` 与 `allowedAgentCommands` 两条规则,
+  denial 优先于 allowance。
+- **`evaluateChangeBudget`** —— 单次 Coder 迭代的改动文件数上限。
+- **`findOutOfScopeChanges`** —— `evaluateFiles` 的投影,只返回 `allowedProductPaths` 规则命中的
+  文件;`isCommandAllowed` 是允许列表的精确成员判断(空表表示不限制)。两者保留是为了兼容已发布
+  的 `./policy` 子路径。
 
 ## 4. 语义细节
 
-`findOutOfScopeChanges` 使用**前缀匹配**,不是 glob:
+文件路径使用**前缀匹配**,不是 glob:
 
 ```ts
 files.filter((file) => !policy.allowedProductPaths.some((p) => file.startsWith(p)))
 ```
 
 因此 `allowedProductPaths: ["src/"]` 会允许 `src/anything`,也会允许前缀相同的
-`src-other/file.ts`。路径必须以 `/` 结尾才能表达"目录之内"。
+`src-other/file.ts`。路径必须以 `/` 结尾才能表达"目录之内"。`protectedPaths` 用同一个匹配器,
+方向是过度保护而非漏保护,因此这条已知缺陷记录在这里而不是就地修正。
 
-## 5. 目标形态
+命令匹配的语义见下方 `### forbiddenCommands`。
 
-> **目标(M19)** 规则化的 Policy(条件与效果)、多 Policy 优先级与冲突解决、deny-wins 合并、
-> 不可被普通 Override 解除的安全约束——以上均**未实现**。当前 Policy 是一个扁平的设置对象,
-> 不存在规则列表,也不存在决策对象。
+## 5. 已实现的规则处置
 
-> **目标(M7)** 严重级别规则层的声明形状如下,**未实现**,字段名以落地时的 Schema 为准。语义见
-> [Policy 设计 §5.1](../architecture/policy.md)与 [ADR-004](../decisions/ADR-004-policy-severity-rules.md)。
+严重级别规则层已在 M7 落地(见 [Policy 设计 §5.1](../architecture/policy.md)与
+[ADR-004](../decisions/ADR-004-policy-severity-rules.md)):
 
 ```ts
 type Severity = 'error' | 'warning' | 'info'
@@ -107,29 +137,34 @@ type RuleAction = 'reject' | 'review' | 'report'
 interface RuleSetting {
   severity?: Severity   // 覆盖规则声明的默认级别
   action?: RuleAction   // 覆盖默认映射
-  enabled?: boolean     // 更高层只能收紧,不能关闭安全类规则
 }
 
 interface Policy extends CommandPolicy {
-  // ...§1 的当前字段...
+  // ...§1 的字段...
   rules?: Record<string, RuleSetting>
   severityActions?: Partial<Record<Severity, RuleAction>>
   onViolation?: 'fail' | 'report'
 }
 ```
 
-两条约束:
+三条已实现的约束:
 
 - `rules` 的 key 是 **rule id**,由内置 checker 或 Preset 注册的规则提供;**匹配逻辑不在 Policy 里**。
-- `severity` 与 `enabled` 只能被更高层**收紧**,不能被放宽(deny-wins),见
-  [项目目标](../项目目标.md) 原则 13。
+  目前 `knownRules` 为空,所以任何 id 都报错。
+- `severity` 只能被更高层**收紧**,不能被放宽。`enabled` **尚未提供**:判定哪些规则属于不可关闭的
+  安全规则需要 M19 的安全模型。
+- 默认映射为 `error → reject`、`warning → review`、`info → report`;由 `actionFor` 解析,可被
+  `severityActions` 覆盖。Finding 的形状见[验证契约](./verification.md)。
+
+> **目标(M19)** 规则化的 Policy(条件与效果)、多 Policy 优先级与冲突解决、deny-wins 合并、
+> 不可被普通 Override 解除的安全约束——以上**未实现**。当前 Policy 仍是扁平设置对象 + 处置表,
+> 不存在条件表达式,也没有决策对象。
+
+### 目标形态的其余部分
 
 规则的**种类**(`constraint` / `preference` / `instruction` / `verification`)由规则声明设定,决定默认
 合并语义与默认级别;Policy 只覆盖处置,不能改 kind。形状见
 [验证契约](./verification.md) 与 [ADR-007](../decisions/ADR-007-rule-kinds-and-constraints.md)。
-
-默认映射为 `error → reject`、`warning → review`、`info → report`;Finding 的形状与处置结果见
-[验证契约](./verification.md)。
 
 语义检查通过 `SemanticVerification` 声明自己的**默认级别**(见[验证契约](./verification.md)),
 `policy.rules` 覆盖它;匹配逻辑仍不在 Policy 里,模型与凭证也不在语义检查的声明里

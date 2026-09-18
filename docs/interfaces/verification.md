@@ -49,10 +49,10 @@ testerApproved(verification, externalTest) =
   && externalTest.ok
   && externalTest.payload.approved === true
 
-reviewerApproved(reviewer, outOfScopeChanges) =
+reviewerApproved(reviewer, refusedFiles) =
   reviewer.ok
   && reviewer.payload?.approved === true
-  && outOfScopeChanges.length === 0
+  && refusedFiles.length === 0
 ```
 
 两个要点:

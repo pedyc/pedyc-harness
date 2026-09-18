@@ -45,11 +45,10 @@ interface HarnessManifest {
   policy?: Policy | string        // 文档路径(相对 .harness/)或内联文档
   agents?: AgentsConfig | string
   verification?: string           // 声明保留,暂无运行时消费
-  rules?: string[]                // 声明保留,暂无运行时消费
 }
 
 interface ConfigSource {
-  kind: 'manifest' | 'policy' | 'agents' | 'preset' | 'verification' | 'rules'
+  kind: 'manifest' | 'policy' | 'agents' | 'preset' | 'verification'
   location: string                // 仓库相对路径,或对无文件来源的描述
   active: boolean                 // false = 声明了但暂无运行时消费
 }
