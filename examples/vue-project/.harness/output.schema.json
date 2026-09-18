@@ -39,6 +39,24 @@
         }
       }
     },
+    "violations": {
+      "description": "Policy judgments the harness itself produced, whatever their disposition.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "rule", "target", "severity", "action", "reason", "retryable"],
+        "properties": {
+          "kind": { "enum": ["file", "command", "rule"] },
+          "rule": { "type": "string", "minLength": 1 },
+          "target": { "type": "string", "minLength": 1 },
+          "severity": { "enum": ["error", "warning", "info"] },
+          "action": { "enum": ["reject", "review", "report"] },
+          "reason": { "type": "string", "minLength": 1 },
+          "retryable": { "type": "boolean" }
+        }
+      }
+    },
     "issues": {
       "type": "array",
       "items": { "type": "string", "minLength": 1 }

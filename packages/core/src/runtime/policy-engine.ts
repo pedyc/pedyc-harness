@@ -1,40 +1,35 @@
-import type { CommandPolicy, Policy, RuleAction, Severity } from '../contracts/index.js'
+import type {
+  CommandPolicy,
+  CommandPolicyContext,
+  Policy,
+  PolicyDecision,
+  PolicyViolation,
+  RuleAction,
+  ViolationMode,
+} from '../contracts/index.js'
 
 // Deciding whether a document is acceptable configuration moved to the config
 // layer, but `./policy` is a published subpath, so the name stays exported here.
 export { validatePolicy } from '../config/policy.js'
 
-/** Which of the three judgment families produced a violation. */
-export type ViolationKind = 'file' | 'command' | 'rule'
+// The judgment shapes are contract types now that `RunResult` carries them, but
+// this subpath is published, so they stay reachable from here too.
+export type { PolicyDecision, PolicyViolation, ViolationKind } from '../contracts/index.js'
+
+/** A policy always carries its disposition; absent means the strict default. */
+type Dispositioned = { onViolation?: ViolationMode }
 
 /**
- * One refusal.
+ * Applies the project's `onViolation` to a rule's disposition.
  *
- * Files, commands and registered rules all report in this shape so that a single
- * evaluator can decide them and a single consumer can act on the result. This is
- * the "unified Policy Evaluator" of
- * `docs/decisions/ADR-004-policy-severity-rules.md` §2.4: the point is not more
- * rules, it is that the three families cannot drift apart.
- *
- * `rule` is a stable id. The built-in rules use the name of the policy field they
- * enforce, which is also what lets a registered checker's id be addressed the
- * same way.
+ * `report` downgrades a rejection to a report; it never upgrades anything. Note
+ * what it does *not* do: it does not turn a refusal into an execution. A refused
+ * command is never started under either setting — this setting is about the
+ * disposition of a violation, not about whether the harness controls the side
+ * effect. See `docs/decisions/ADR-006-run-lifecycle.md` §2.3.
  */
-export interface PolicyViolation {
-  kind: ViolationKind
-  rule: string
-  target: string
-  severity: Severity
-  action: RuleAction
-  reason: string
-  retryable: boolean
-}
-
-/** The verdict for one judgment family, or for a whole evaluation. */
-export interface PolicyDecision {
-  allowed: boolean
-  violations: PolicyViolation[]
-}
+const applyViolationMode = (action: RuleAction, policy: Dispositioned): RuleAction =>
+  policy.onViolation === 'report' && action === 'reject' ? 'report' : action
 
 /**
  * Prefix matching, not glob: `src/` also matches `src-other/file.ts`, so a path
@@ -68,7 +63,7 @@ export const evaluateFiles = (files: string[], policy: Policy): PolicyDecision =
         rule: 'protectedPaths',
         target: file,
         severity: 'error',
-        action: 'reject',
+        action: applyViolationMode('reject', policy),
         reason: `Changed file is inside protected path '${protectedPath}': ${file}`,
         retryable: false,
       })
@@ -79,7 +74,7 @@ export const evaluateFiles = (files: string[], policy: Policy): PolicyDecision =
         rule: 'allowedProductPaths',
         target: file,
         severity: 'error',
-        action: 'reject',
+        action: applyViolationMode('reject', policy),
         reason: `Changed file is outside allowedProductPaths: ${file}`,
         retryable: false,
       })
@@ -101,9 +96,19 @@ export const findOutOfScopeChanges = (files: string[], policy: Policy): string[]
     .filter(({ rule }) => rule === 'allowedProductPaths')
     .map(({ target }) => target)
 
-/** Every file whose change the policy refuses, whatever the reason. */
+/**
+ * Every file whose change the policy refuses *and* escalates.
+ *
+ * Rejections only: under `onViolation: report` a refused file is recorded but no
+ * longer blocks the run, which is the compatibility path for a project that
+ * declared these fields while they did nothing.
+ */
 export const refusedFiles = (violations: PolicyViolation[]): string[] => [
-  ...new Set(violations.filter(({ kind }) => kind === 'file').map(({ target }) => target)),
+  ...new Set(
+    violations
+      .filter(({ kind, action }) => kind === 'file' && action === 'reject')
+      .map(({ target }) => target),
+  ),
 ]
 
 /**
@@ -123,6 +128,97 @@ export const describeFileViolations = (violations: PolicyViolation[]): string =>
   if (protectedHits.length > 0) parts.push(`Protected files changed: ${protectedHits.join(', ')}`)
   if (outside.length > 0) parts.push(`Out-of-scope files changed: ${outside.join(', ')}`)
   return parts.join('; ')
+}
+
+/**
+ * Splits a command invocation into the token sequence policy is matched against.
+ *
+ * Every part — the executable, each argument, and any single argument carrying
+ * several words — is split on whitespace, and a token's own matching surrounding
+ * quotes are removed. This is deliberately *not* shell parsing: a quoted string
+ * is one argument whose interior is not interpreted, so `sh -c "npm publish"`
+ * yields `['sh', '-c', '"npm', 'publish"']` and does **not** match `npm publish`.
+ * The boundary is recorded in `docs/interfaces/policy.md`.
+ */
+const tokenize = (command: string, args: string[] = []): string[] =>
+  [command, ...args]
+    .flatMap((part) => part.split(/\s+/))
+    .filter((token) => token.length > 0)
+    .map((token) => token.replace(/^(['"])(.*)\1$/, '$2'))
+
+/** `/usr/bin/npm` and `npm.cmd` both name `npm`. */
+const executableName = (token: string): string =>
+  (token.split(/[\\/]/).pop() ?? token).replace(/\.(cmd|exe|bat)$/i, '')
+
+/**
+ * Whether `pattern` appears as a contiguous run inside `tokens`.
+ *
+ * Contiguous containment — not a prefix, and not a substring: `npm publish` is
+ * matched by `npm publish --tag beta` and by `sudo npm publish`, while
+ * `npm publish-notes` is not, because its second token is a different token.
+ * Regex and arbitrary substring matching are deliberately out of scope for this
+ * version. See `docs/interfaces/policy.md` §2.
+ */
+const containsSequence = (tokens: string[], pattern: string[]): boolean => {
+  if (pattern.length === 0 || pattern.length > tokens.length) return false
+  for (let start = 0; start + pattern.length <= tokens.length; start += 1) {
+    if (pattern.every((token, offset) => tokens[start + offset] === token)) return true
+  }
+  return false
+}
+
+/**
+ * The command rules.
+ *
+ * `forbiddenCommands` is evaluated against the whole invocation rather than the
+ * executable name, so a pattern cannot be dodged by prefixing it. The executable
+ * is normalised to its bare name for that comparison, so `/usr/bin/npm publish`
+ * and `npm.cmd publish` are both the `npm publish` a project declared.
+ *
+ * `allowedAgentCommands` keeps its existing meaning — an exact member list of
+ * command names, empty meaning "no restriction" — because widening it would
+ * change what existing policies allow. A denial outranks an allowance, and
+ * neither can be relaxed into execution by `onViolation`.
+ */
+export const evaluateCommand = (
+  command: string,
+  args: string[] = [],
+  policy: CommandPolicyContext = {},
+): PolicyDecision => {
+  const violations: PolicyViolation[] = []
+  const display = [command, ...args].join(' ')
+  const tokens = tokenize(command, args)
+  const normalised = tokens.length > 0
+    ? [executableName(tokens[0] as string), ...tokens.slice(1)]
+    : tokens
+
+  const forbidden = (policy.forbiddenCommands ?? [])
+    .find((pattern) => containsSequence(normalised, tokenize(pattern)))
+  if (forbidden !== undefined) {
+    violations.push({
+      kind: 'command',
+      rule: 'forbiddenCommands',
+      target: display,
+      severity: 'error',
+      action: applyViolationMode('reject', policy),
+      reason: `Command matches forbiddenCommands entry '${forbidden}': ${display}`,
+      retryable: false,
+    })
+  }
+
+  if (!isCommandAllowed(command, policy)) {
+    violations.push({
+      kind: 'command',
+      rule: 'allowedAgentCommands',
+      target: display,
+      severity: 'error',
+      action: applyViolationMode('reject', policy),
+      reason: `Command is not in allowedAgentCommands: ${display}`,
+      retryable: false,
+    })
+  }
+
+  return { allowed: violations.length === 0, violations }
 }
 
 /** Whether an agent may run a command. An empty allow list means "no restriction". */

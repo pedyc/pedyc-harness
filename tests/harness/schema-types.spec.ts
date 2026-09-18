@@ -33,6 +33,19 @@ describe('contract types match their JSON Schemas', () => {
       implementationPlan: ['Inspect the current behaviour.', 'Apply the change.'],
       fileChanges: [{ file: 'packages/core/src/index.ts', change: 'Exported the new helper.' }],
       verification,
+      // A sample violation, not an empty list: the policy judgment shape is part
+      // of the output contract, so it has to be checked against the schema too.
+      violations: [
+        {
+          kind: 'file',
+          rule: 'protectedPaths',
+          target: 'src/generated/client.ts',
+          severity: 'error',
+          action: 'reject',
+          reason: "Changed file is inside protected path 'src/generated/': src/generated/client.ts",
+          retryable: false,
+        },
+      ],
       issues: [],
       phases: [{ name: 'coder', status: 'passed', details: 'Applied the plan.', iteration: 1 }],
       iterations: 1,

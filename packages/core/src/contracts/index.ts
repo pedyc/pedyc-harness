@@ -1,4 +1,16 @@
-export type { AgentMode, AgentRole, CommandPolicy, Policy, RuleAction, Severity } from './policy.js'
+export type {
+  AgentMode,
+  AgentRole,
+  CommandPolicy,
+  CommandPolicyContext,
+  Policy,
+  PolicyDecision,
+  PolicyViolation,
+  RuleAction,
+  Severity,
+  ViolationKind,
+  ViolationMode,
+} from './policy.js'
 export type { VerificationCheck } from './validation.js'
 export type { IntakeResult, NormalizedTask, RawTaskInput } from './task.js'
 export type { PresetManifest, ResolvedPreset } from './preset.js'

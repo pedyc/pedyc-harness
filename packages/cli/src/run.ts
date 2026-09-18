@@ -8,7 +8,14 @@ import { formatConfigError, loadHarnessConfig } from '@pedyc/harness-core/config
 import { loadSchemas, createValidators, validationDetails } from '@pedyc/harness-core/schema'
 import { createProviderRunner } from '@pedyc/harness-core/provider'
 import { runOrchestrator } from '@pedyc/harness-core/orchestrator'
-import type { IntakeResult, NormalizedTask, RunResult } from '@pedyc/harness-core/contracts'
+import { evaluateCommand } from '@pedyc/harness-core/policy'
+import type {
+  IntakeResult,
+  NormalizedTask,
+  PolicyViolation,
+  RunResult,
+  VerificationCheck,
+} from '@pedyc/harness-core/contracts'
 
 // Exit codes from `docs/interfaces/cli.md` §8.
 const EXIT_FAILED = 1
@@ -56,6 +63,7 @@ export const runHarness = async ({
     implementationPlan: [`Stop before implementation because the ${phase} phase failed.`],
     fileChanges: [],
     verification: [{ command: `harness:${phase}`, result: 'fail', details: message }],
+    violations: [],
     issues: [message],
     phases: [{ name: phase, status: 'failed', details: message }],
     iterations: 0,
@@ -119,6 +127,11 @@ export const runHarness = async ({
     return runCommand(root, packageManager.command, [...packageManager.args, script])
   }
 
+  // Violations the orchestrator cannot see — a verification command the policy
+  // refused — are collected here and merged into the result beside the ones the
+  // orchestrator already gathered.
+  const verificationViolations: PolicyViolation[] = []
+
   const runAgent = createProviderRunner({
     root,
     agents,
@@ -138,12 +151,26 @@ export const runHarness = async ({
     snapshot: () => snapshotFiles(root),
     changedFiles,
     runVerification: async () => {
-      const verification = []
+      const verification: VerificationCheck[] = []
       for (const script of checkedPolicy.requiredChecks ?? []) {
         const packageManager = detectPackageManager(root)
+        const command = `${packageManager.command} ${packageManager.args.join(' ')} ${script}`.trim()
+        // A gate whose command the policy refuses is never started, so it cannot
+        // have passed. `onViolation` decides whether the refusal also fails the
+        // run; it never decides whether the command may run.
+        const decision = evaluateCommand(packageManager.command, [...packageManager.args, script], checkedPolicy)
+        if (!decision.allowed) {
+          verificationViolations.push(...decision.violations)
+          verification.push({
+            command,
+            result: 'fail' as const,
+            details: decision.violations.map(({ reason }) => reason).join(' '),
+          })
+          continue
+        }
         const commandResult = await runPackageScript(script)
         verification.push({
-          command: `${packageManager.command} ${packageManager.args.join(' ')} ${script}`.trim(),
+          command,
           result: commandResult.code === 0 ? 'pass' as const : 'fail' as const,
           details: commandResult.code === 0 ? 'Command completed successfully.' : commandResult.stderr.trim() || 'Command failed.',
         })
@@ -168,6 +195,7 @@ export const runHarness = async ({
           details: orchestration.issues[0] ?? 'No verification was recorded.',
         }],
     issues: orchestration.issues,
+    violations: [...orchestration.violations, ...verificationViolations],
     phases: orchestration.phases,
     iterations: orchestration.iterations,
     dryRun,

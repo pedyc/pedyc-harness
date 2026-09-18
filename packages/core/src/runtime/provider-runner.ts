@@ -2,18 +2,18 @@ import type {
   AgentCallResult,
   AgentRole,
   AgentsConfig,
-  CommandPolicy,
+  CommandPolicyContext,
   StageRequest,
 } from '../contracts/index.js'
 import { parseAgentResponse, validateStageResponse } from './agent.js'
 import { runCommand } from './command.js'
-import { isCommandAllowed } from './policy-engine.js'
+import { evaluateCommand } from './policy-engine.js'
 import type { ResponseValidator, SchemaErrorFormatter } from '../contracts/validator.js'
 
 export interface ProviderRunnerOptions {
   root: string
   agents: AgentsConfig
-  policy: CommandPolicy
+  policy: CommandPolicyContext
   validator: ResponseValidator
   ajv: SchemaErrorFormatter
 }
@@ -38,8 +38,19 @@ export const createProviderRunner = ({ root, agents, policy, validator, ajv }: P
     if (!provider || typeof provider.command !== 'string' || !Array.isArray(provider.args)) {
       return { ok: false, details: `${name} provider '${config.provider}' is not configured.`, payload: {} }
     }
-    if (!isCommandAllowed(provider.command, policy)) {
-      return { ok: false, details: `${name} provider command is not in policy.allowedAgentCommands.`, payload: {} }
+    // Policy is evaluated before the process exists, so a refused command has no
+    // side effect to undo. The violation is returned rather than thrown: a
+    // refusal is a normal outcome the orchestrator records. Note that this
+    // happens whatever `onViolation` says — that setting decides whether the
+    // violation fails the run, never whether the command may start.
+    const decision = evaluateCommand(provider.command, provider.args, policy)
+    if (!decision.allowed) {
+      return {
+        ok: false,
+        details: decision.violations.map(({ reason }) => reason).join(' '),
+        payload: {},
+        violations: decision.violations,
+      }
     }
 
     const result = await runCommand(root, provider.command, provider.args, {

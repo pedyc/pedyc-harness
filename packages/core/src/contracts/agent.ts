@@ -1,4 +1,4 @@
-import type { AgentMode, AgentRole } from './policy.js'
+import type { AgentMode, AgentRole, PolicyViolation } from './policy.js'
 import type { FileChange } from './run.js'
 import type { NormalizedTask } from './task.js'
 import type { VerificationCheck } from './validation.js'
@@ -39,11 +39,19 @@ export interface AgentPayload {
   changedFiles?: string[]
 }
 
-/** The outcome of running one stage. `payload` stays empty for built-in stages. */
+/**
+ * The outcome of running one stage. `payload` stays empty for built-in stages.
+ *
+ * `violations` carries policy refusals the harness itself produced while trying
+ * to run the stage — notably a command that `forbiddenCommands` refused. The
+ * provider never supplies this: it is the harness's own finding, which is why it
+ * sits beside `payload` rather than inside it.
+ */
 export interface AgentCallResult {
   ok: boolean
   details: string
   payload: AgentPayload
+  violations?: PolicyViolation[]
 }
 
 interface StageRequestBase {

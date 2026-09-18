@@ -1,3 +1,4 @@
+import type { PolicyViolation } from './policy.js'
 import type { VerificationCheck } from './validation.js'
 
 export type RunStatus = 'passed' | 'failed'
@@ -27,6 +28,7 @@ export interface OrchestrationResult {
   implementationPlan: string[]
   fileChanges: FileChange[]
   verification: VerificationCheck[]
+  violations: PolicyViolation[]
   issues: string[]
   phases: PhaseRecord[]
   iterations: number
@@ -39,6 +41,7 @@ export interface RunResult {
   implementationPlan: string[]
   fileChanges: FileChange[]
   verification: VerificationCheck[]
+  violations: PolicyViolation[]
   issues: string[]
   phases: PhaseRecord[]
   iterations: number

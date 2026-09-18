@@ -56,6 +56,7 @@ export type { ParsedAgentResponse } from './runtime/agent.js'
 
 export {
   describeFileViolations,
+  evaluateCommand,
   evaluateFiles,
   findOutOfScopeChanges,
   isCommandAllowed,

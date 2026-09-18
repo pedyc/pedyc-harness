@@ -5,6 +5,7 @@ import type {
   PhaseRecord,
   PhaseStatus,
   Policy,
+  PolicyViolation,
   RunAgent,
   VerificationCheck,
 } from '../contracts/index.js'
@@ -47,6 +48,20 @@ export const runOrchestrator = async ({
   const phases: PhaseRecord[] = []
   const issues: string[] = []
   const fileChanges: FileChange[] = []
+  const violations: PolicyViolation[] = []
+
+  // Judgments are recorded once each: the loop can revisit the same file across
+  // iterations, and a repeated identical refusal is noise in the record.
+  const recordViolations = (found: PolicyViolation[] = []): void => {
+    for (const violation of found) {
+      const seen = violations.some((existing) =>
+        existing.kind === violation.kind
+        && existing.rule === violation.rule
+        && existing.target === violation.target
+        && existing.action === violation.action)
+      if (!seen) violations.push(violation)
+    }
+  }
   const implementationPlan: string[] = [
     `Analyze the requested feature: ${input.feature.trim()}.`,
     `Implement the objective while satisfying ${input.acceptanceCriteria.length} acceptance criteria.`,
@@ -65,7 +80,7 @@ export const runOrchestrator = async ({
     ] as const) {
       phases.push({ name, iteration: 1, status: 'passed', details })
     }
-    return { completed: true, implementationPlan, fileChanges, verification: [], issues, phases, iterations: 1 }
+    return { completed: true, implementationPlan, fileChanges, verification: [], violations, issues, phases, iterations: 1 }
   }
 
   const recordPhase = (name: string, status: PhaseStatus, details: string, iteration?: number): PhaseRecord => {
@@ -77,6 +92,7 @@ export const runOrchestrator = async ({
 
   recordPhase('planner', 'running', 'Validating task input and preparing an implementation plan.')
   const plan = await runAgent('planner', { phase: 'planner', input, implementationPlan })
+  recordViolations(plan.violations)
   phases[phases.length - 1] = { name: 'planner', status: plan.ok ? 'passed' : 'failed', details: plan.details }
   if (plan.payload.implementationPlan?.length) {
     implementationPlan.splice(0, implementationPlan.length, ...plan.payload.implementationPlan)
@@ -101,6 +117,7 @@ export const runOrchestrator = async ({
       status: coder.ok ? 'passed' : 'failed',
       details: coder.details,
     }
+    recordViolations(coder.violations)
 
     for (const file of changedFiles(before, snapshot())) {
       fileChanges.push({ file, change: `Changed during coder iteration ${iteration}.` })
@@ -122,6 +139,7 @@ export const runOrchestrator = async ({
     if (!externalTest.ok) {
       verification.push({ command: 'external tester', result: 'fail', details: externalTest.details })
     }
+    recordViolations(externalTest.violations)
     lastVerification = verification
 
     const testerOk = testerApproved(verification, externalTest)
@@ -150,6 +168,7 @@ export const runOrchestrator = async ({
     // such a path is normally *inside* the allowed set, so calling it
     // "out of scope" would misdescribe why the change was refused.
     const fileDecision = evaluateFiles(fileChanges.map(({ file }) => file), policy)
+    recordViolations(fileDecision.violations)
     const refused = refusedFiles(fileDecision.violations)
     const reviewer = await runAgent('reviewer', {
       phase: 'reviewer',
@@ -159,6 +178,7 @@ export const runOrchestrator = async ({
       fileChanges,
       iteration,
     })
+    recordViolations(reviewer.violations)
     const reviewerOk = reviewerApproved(reviewer, refused)
     const reviewerDetails = refused.length
       ? describeFileViolations(fileDecision.violations)
@@ -183,6 +203,7 @@ export const runOrchestrator = async ({
     implementationPlan,
     fileChanges,
     verification: lastVerification,
+    violations,
     issues,
     phases,
     iterations: phases.filter((phase) => phase.name === 'coder').length,
