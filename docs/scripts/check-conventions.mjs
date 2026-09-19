@@ -139,15 +139,29 @@ const main = () => {
 
   // Navigation completeness: direct links only, and not for the home page or
   // archived documents.
-  const indexed = new Set(
-    collectLinks(indexFile, existsSync(indexFile) ? readFileSync(indexFile, 'utf8') : '')
+  // Navigation completeness is transitive: `docs/README.md` links a directory's
+  // README, and that README indexes the directory's own members. Without the
+  // recursion every document in a subdirectory would have to be listed at the top
+  // level, which turns the map into a list and defeats the point of a directory.
+  const indexed = new Set()
+  const pendingIndexes = [indexFile]
+  const scannedIndexes = new Set()
+  while (pendingIndexes.length > 0) {
+    const from = pendingIndexes.pop()
+    if (scannedIndexes.has(resolve(from))) continue
+    scannedIndexes.add(resolve(from))
+    const links = collectLinks(from, existsSync(from) ? readFileSync(from, 'utf8') : [])
       .map(targetPathOf)
       .filter((value) => value !== null)
-      .map((value) => resolve(value)),
-  )
+      .map((value) => resolve(value))
+    for (const link of links) {
+      indexed.add(link)
+      if (basename(link) === 'README.md') pendingIndexes.push(link)
+    }
+  }
   for (const file of sources) {
     if (rel(file) === homePage || resolve(file) === resolve(indexFile)) continue
-    if (!indexed.has(resolve(file))) warnings.push(`${rel(file)}: not linked from docs/README.md`)
+    if (!indexed.has(resolve(file))) warnings.push(`${rel(file)}: not reachable from docs/README.md`)
   }
 
   for (const entry of broken) console.log(`broken  ${entry}`)
