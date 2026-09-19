@@ -93,6 +93,7 @@ interface Constraint {
 
 **术语纪律：「语义」只指需要模型的那一类。** 用 AST 读出 `duration = 1s` 属于**结构验证**，不叫
 "semantic verification"——否则它会与 ADR-005 的触发条件、预算与信任等级直接冲突。
+术语的完整对照见 [核心概念 §5](../核心概念.md)。
 
 一次典型的判定链路：
 

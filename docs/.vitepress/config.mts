@@ -88,7 +88,10 @@ export default defineConfig({
       },
       {
         text: '规范',
-        items: [{ text: '文档规范', link: '/CONVENTIONS' }],
+        items: [
+          { text: '文档规范', link: '/CONVENTIONS' },
+          { text: '核心概念', link: '/核心概念' },
+        ],
       },
       // `archived/` is intentionally absent: it is published for traceability,
       // not for reading, so it stays out of the navigation.
