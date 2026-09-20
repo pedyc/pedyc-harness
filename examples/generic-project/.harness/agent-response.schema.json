@@ -31,6 +31,27 @@
     "changedFiles": {
       "type": "array",
       "items": { "type": "string", "minLength": 1 }
+    },
+    "findings": {
+      "description": "The reviewer's structured judgments. Each rule id must be declared by an implementation; the harness disposes them by severity and action.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["rule", "target", "severity", "reason", "retryable"],
+        "properties": {
+          "rule": { "type": "string", "minLength": 1 },
+          "target": { "type": "string", "minLength": 1 },
+          "severity": { "enum": ["error", "warning", "info"] },
+          "reason": { "type": "string", "minLength": 1 },
+          "retryable": { "type": "boolean" },
+          "confidence": { "type": "number" },
+          "evidence": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
     }
   }
 }

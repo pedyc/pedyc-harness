@@ -1,4 +1,4 @@
-import { copyFile, cp, mkdir, mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises'
+import { copyFile, cp, mkdir, mkdtemp, readFile, readdir, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { spawn } from 'node:child_process'
@@ -200,12 +200,29 @@ describe('external project compatibility', () => {
     const output = JSON.parse(result.stdout) as {
       status: string
       phases: { name: string; status: string }[]
+      scope: { allowed: boolean; refusedFiles: string[] }
+      evidence: { trust: string; exitCode: number; durationMs: number; stdoutDigest: string }[]
       verification: { command: string; result: string }[]
     }
     expect(output.status).toBe('passed')
     expect(output.verification[0].command).toContain('npm run check')
     expect(output.verification[0].result).toBe('pass')
-    expect(output.phases.map(({ name }) => name)).toEqual(['planner', 'coder', 'tester', 'reviewer'])
+    // The verdict has to be re-checkable, not just asserted: the gate evidence
+    // carries its own provenance and the facts a later reader would re-run.
+    expect(output.evidence[0]).toMatchObject({ trust: 'harness-executed', exitCode: 0 })
+    expect(output.evidence[0].durationMs).toBeGreaterThanOrEqual(0)
+    expect(output.evidence[0].stdoutDigest).toMatch(/^sha256:/)
+    // Scope is reported as its own fact, separately from the reviewer's verdict.
+    expect(output.scope).toMatchObject({ allowed: true, refusedFiles: [] })
+
+    const runIds = await readdir(join(root, '.harness/runs'))
+    const artifact = JSON.parse(
+      await readFile(join(root, '.harness/runs', runIds[0] as string, 'iteration-1-verification.json'), 'utf8'),
+    ) as { trust: string; exitCode: number; durationMs: number }[]
+    expect(artifact[0]).toMatchObject({ trust: 'harness-executed', exitCode: 0 })
+    expect(artifact[0]?.durationMs).toBeGreaterThanOrEqual(0)
+
+    expect(output.phases.map(({ name }) => name)).toEqual(['planner', 'coder', 'tester', 'scope', 'reviewer'])
     expect(output.phases.every(({ status }) => status === 'passed')).toBe(true)
   })
 })

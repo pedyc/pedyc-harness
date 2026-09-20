@@ -29,6 +29,47 @@
         }
       }
     },
+    "scope": {
+      "description": "The harness's own scope judgment, reported independently of the reviewer's verdict. Absent on a dry run, which judges nothing.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allowed", "refusedFiles", "details"],
+      "properties": {
+        "allowed": { "type": "boolean" },
+        "refusedFiles": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "details": { "type": "string", "minLength": 1 }
+      }
+    },
+    "evidence": {
+      "description": "The evidence the run was judged on, with the provenance that says how much it may be trusted.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "source", "trust"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "source": { "type": "string", "minLength": 1 },
+          "trust": { "enum": ["harness-executed", "analyzer-derived", "review-derived", "agent-claimed"] },
+          "verification": { "enum": ["command", "structural", "heuristic", "semantic"] },
+          "name": { "type": "string", "minLength": 1 },
+          "command": { "type": "string", "minLength": 1 },
+          "packageManager": { "type": "string", "minLength": 1 },
+          "exitCode": { "type": "integer" },
+          "durationMs": { "type": "number", "minimum": 0 },
+          "startedAt": { "type": "string", "minLength": 1 },
+          "stdoutDigest": { "type": "string", "minLength": 1 },
+          "stderrDigest": { "type": "string", "minLength": 1 },
+          "stdout": { "type": "string" },
+          "stderr": { "type": "string" },
+          "skipped": { "type": "boolean" },
+          "details": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
     "verification": {
       "type": "array",
       "minItems": 1,
@@ -41,6 +82,65 @@
           "result": { "enum": ["pass", "fail"] },
           "details": { "type": "string", "minLength": 1 }
         }
+      }
+    },
+    "findings": {
+      "description": "What the rules said this iteration, before Policy disposed them. `violations` carries the disposition.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["rule", "target", "severity", "reason", "retryable"],
+        "properties": {
+          "rule": { "type": "string", "minLength": 1 },
+          "target": { "type": "string", "minLength": 1 },
+          "severity": { "enum": ["error", "warning", "info"] },
+          "reason": { "type": "string", "minLength": 1 },
+          "retryable": { "type": "boolean" },
+          "confidence": { "type": "number" },
+          "evidence": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+    "semantic": {
+      "description": "What the semantic layer did. Recorded even when nothing ran, so a green run that skipped its review is distinguishable from one that passed it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "triggered", "skipped", "calls"],
+      "properties": {
+        "status": { "enum": ["ran", "disabled", "idle"] },
+        "triggered": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "skipped": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "severity", "reason"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "severity": { "enum": ["error", "warning", "info"] },
+              "reason": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "calls": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "independence": {
+      "description": "How the two stages that check each other were routed. Declared and audited, not enforced.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["coder", "reviewer", "sameSource"],
+      "properties": {
+        "coder": { "type": "string", "minLength": 1 },
+        "reviewer": { "type": "string", "minLength": 1 },
+        "sameSource": { "type": "boolean" }
       }
     },
     "violations": {

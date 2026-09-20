@@ -1,6 +1,7 @@
 import type { AgentsConfig } from './agent.js'
 import type { Policy } from './policy.js'
 import type { ResolvedPreset } from './preset.js'
+import type { ResolvedCheck } from './rules.js'
 
 /**
  * The `.harness/harness.json` manifest.
@@ -8,8 +9,7 @@ import type { ResolvedPreset } from './preset.js'
  * It is the entry point that answers "which configuration does this project
  * load", not the whole configuration. A field that points at another document
  * is a path relative to `.harness/`; the same field may also carry the document
- * inline. `verification` is accepted and reported, but no runtime consumes it
- * yet.
+ * inline. `verification` points at the document that declares checks.
  *
  * There is deliberately no `rules` field here. Rule dispositions have exactly one
  * home, `Policy.rules`, and a manifest-level duplicate would be a second, silent
@@ -21,6 +21,7 @@ export interface HarnessManifest {
   presets?: string[]
   policy?: Policy | string
   agents?: AgentsConfig | string
+  /** Path to a checks document inside `.harness/`. */
   verification?: string
 }
 
@@ -46,6 +47,7 @@ export type ConfigErrorCode =
   | 'preset_manifest_invalid'
   | 'preset_cyclic'
   | 'preset_path_outside_package'
+  | 'check_conflict'
 
 /**
  * A configuration problem found before any stage runs.
@@ -92,6 +94,13 @@ export interface LoadedHarnessConfig {
    * `harness.json`, but only the resolver knows what they pull in.
    */
   presets: ResolvedPreset[]
+  /**
+   * Every check the run may judge, with the document that declared it.
+   *
+   * The rule set of a run is `builtInRules` plus these; a `policy.rules` key is
+   * only legal when one of the two declares it.
+   */
+  checks: ResolvedCheck[]
   sources: ConfigSource[]
 }
 

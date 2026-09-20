@@ -1,5 +1,98 @@
 import { asRecord } from './json.js'
 import type { ConfigProblem } from './json.js'
+import {
+  actionAtLeast,
+  defaultActionFor,
+  knownRule,
+  severityAtLeast,
+} from './rules.js'
+import type { ResolvedCheck } from '../contracts/index.js'
+
+const SEVERITIES = ['error', 'warning', 'info']
+const ACTIONS = ['reject', 'review', 'report']
+
+const isSeverity = (value: unknown): value is 'error' | 'warning' | 'info' =>
+  typeof value === 'string' && SEVERITIES.includes(value)
+
+const isAction = (value: unknown): value is 'reject' | 'review' | 'report' =>
+  typeof value === 'string' && ACTIONS.includes(value)
+
+/**
+ * Checks one `policy.rules` entry.
+ *
+ * Two things are refused here rather than at run time: a key no implementation
+ * declares, and a value that loosens the rule's own severity or action.
+ * Tightening is a project's prerogative; loosening a safety semantic is not.
+ */
+const ruleSettingProblems = (
+  id: string,
+  setting: unknown,
+  checks: readonly ResolvedCheck[],
+): ConfigProblem[] => {
+  const field = `rules.${id}`
+  const declaration = knownRule(id, checks)
+  if (declaration === null) {
+    return [{ field, message: `Harness policy rules refers to unknown rule id '${id}'; no implementation declares it.` }]
+  }
+  const candidate = asRecord(setting)
+  if (!candidate) return [{ field, message: `Harness policy rules entry '${id}' must be an object.` }]
+
+  const problems: ConfigProblem[] = []
+  for (const key of Object.keys(candidate)) {
+    if (key !== 'severity' && key !== 'action') {
+      problems.push({ field: `${field}.${key}`, message: `Harness policy rules entry '${id}' has no field '${key}'.` })
+    }
+  }
+  const { severity, action } = candidate
+  if (severity !== undefined) {
+    if (!isSeverity(severity)) {
+      problems.push({ field: `${field}.severity`, message: `Harness policy rules.${id}.severity must be one of ${SEVERITIES.join(', ')}.` })
+    } else if (!severityAtLeast(severity, declaration.severity)) {
+      problems.push({
+        field: `${field}.severity`,
+        message: `Harness policy cannot loosen rule '${id}' from '${declaration.severity}' to '${severity}'.`,
+      })
+    }
+  }
+  if (action !== undefined) {
+    const floor = defaultActionFor(declaration.severity)
+    if (!isAction(action)) {
+      problems.push({ field: `${field}.action`, message: `Harness policy rules.${id}.action must be one of ${ACTIONS.join(', ')}.` })
+    } else if (!actionAtLeast(action, floor)) {
+      problems.push({
+        field: `${field}.action`,
+        message: `Harness policy cannot loosen rule '${id}' from '${floor}' to '${action}'.`,
+      })
+    }
+  }
+  return problems
+}
+
+/** Checks the `severityActions` table: shape, then the no-loosening rule. */
+const severityActionProblems = (value: unknown): ConfigProblem[] => {
+  const candidate = asRecord(value)
+  if (!candidate) return [{ field: 'severityActions', message: 'Harness policy severityActions must be an object.' }]
+
+  const problems: ConfigProblem[] = []
+  for (const [severity, action] of Object.entries(candidate)) {
+    if (!isSeverity(severity)) {
+      problems.push({ field: `severityActions.${severity}`, message: `Harness policy severityActions has no severity '${severity}'.` })
+      continue
+    }
+    const floor = defaultActionFor(severity)
+    if (!isAction(action)) {
+      problems.push({ field: `severityActions.${severity}`, message: `Harness policy severityActions.${severity} must be one of ${ACTIONS.join(', ')}.` })
+      continue
+    }
+    if (!actionAtLeast(action, floor)) {
+      problems.push({
+        field: `severityActions.${severity}`,
+        message: `Harness policy cannot loosen the default disposition of '${severity}' from '${floor}' to '${action}'.`,
+      })
+    }
+  }
+  return problems
+}
 
 /**
  * Checks a policy document read from disk or declared inline in the manifest.
@@ -14,8 +107,12 @@ import type { ConfigProblem } from './json.js'
  * schema-level field nobody consumes is how `protectedPaths` and
  * `forbiddenCommands` came to be accepted for two milestones without doing
  * anything, so a new field arrives with its consumer or not at all.
+ *
+ * `checks` is the rule set this run actually has (built-ins plus every declared
+ * check). It is an argument rather than an import because a `verification`
+ * document a preset declares is part of what makes a `policy.rules` key legal.
  */
-export const policyProblems = (policy: unknown): ConfigProblem[] => {
+export const policyProblems = (policy: unknown, checks: readonly ResolvedCheck[] = []): ConfigProblem[] => {
   const candidate = asRecord(policy)
   if (!candidate) return [{ message: 'Policy must be an object.' }]
 
@@ -59,9 +156,31 @@ export const policyProblems = (policy: unknown): ConfigProblem[] => {
   ) {
     problems.push({ field: 'maxChangedFiles', message: 'Harness policy maxChangedFiles must be a positive integer.' })
   }
+  if (candidate.rules !== undefined) {
+    const rules = asRecord(candidate.rules)
+    if (!rules) {
+      problems.push({ field: 'rules', message: 'Harness policy rules must be an object.' })
+    } else {
+      for (const [id, setting] of Object.entries(rules)) {
+        problems.push(...ruleSettingProblems(id, setting, checks))
+      }
+    }
+  }
+  if (candidate.severityActions !== undefined) {
+    problems.push(...severityActionProblems(candidate.severityActions))
+  }
+  if (
+    candidate.maxSemanticCalls !== undefined
+    && (!Number.isInteger(candidate.maxSemanticCalls) || (candidate.maxSemanticCalls as number) < 1)
+  ) {
+    problems.push({
+      field: 'maxSemanticCalls',
+      message: 'Harness policy maxSemanticCalls must be a positive integer.',
+    })
+  }
   return problems
 }
 
 /** The first problem, or `null` when the document may be treated as a `Policy`. */
-export const validatePolicy = (policy: unknown): string | null =>
-  policyProblems(policy)[0]?.message ?? null
+export const validatePolicy = (policy: unknown, checks: readonly ResolvedCheck[] = []): string | null =>
+  policyProblems(policy, checks)[0]?.message ?? null

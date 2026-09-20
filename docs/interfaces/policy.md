@@ -9,9 +9,16 @@
 ```ts
 type AgentMode = 'internal' | 'external'
 type AgentRole = 'planner' | 'coder' | 'tester' | 'reviewer'
+type Severity = 'error' | 'warning' | 'info'
+type RuleAction = 'reject' | 'review' | 'report'
 
 interface CommandPolicy {
   allowedAgentCommands?: string[]
+}
+
+interface RuleSetting {
+  severity?: Severity   // 只能在规则声明的级别上收紧
+  action?: RuleAction   // 只能在默认映射上收紧
 }
 
 interface Policy extends CommandPolicy {
@@ -21,6 +28,10 @@ interface Policy extends CommandPolicy {
   requiredChecks?: string[]
   forbiddenCommands?: string[]
   agentTimeoutMs?: number
+  maxChangedFiles?: number
+  onViolation?: 'fail' | 'report'
+  rules?: Record<string, RuleSetting>
+  severityActions?: Partial<Record<Severity, RuleAction>>
 }
 ```
 
@@ -39,6 +50,8 @@ interface Policy extends CommandPolicy {
 | `allowedAgentCommands` | ❌          | 必须是数组                 | ✅ `evaluateCommand`,精确成员名;denial 优先         |
 | `maxChangedFiles`      | ❌          | 正整数                     | ✅ `evaluateChangeBudget`,按单次 Coder 迭代计数     |
 | `onViolation`          | ❌          | `'fail'` \| `'report'`     | ✅ 决定违规是否升级为运行失败                       |
+| `rules`                | ❌          | 对象;key 必须是已声明的 rule id,**只能收紧** | ✅ `evaluateFindings` 解析每条 Finding 的严重级别与处置 |
+| `severityActions`      | ❌          | 对象;**只能收紧**默认映射   | ✅ `actionFor`,默认 `error→reject`、`warning→review`、`info→report` |
 
 字段分成四组,这是**文档大纲,不是结构**:文档保持扁平,字段名不因分组而改变。
 
@@ -47,15 +60,16 @@ interface Policy extends CommandPolicy {
 | Scope                | `allowedProductPaths`、`protectedPaths`                        |
 | Command Constraints  | `forbiddenCommands`、`allowedAgentCommands`                    |
 | Execution Constraints| `requiredChecks`、`maxIterations`、`agentTimeoutMs`、`maxChangedFiles` |
-| Enforcement          | `onViolation`                                                  |
+| Enforcement          | `onViolation`、`rules`、`severityActions`                       |
 
 **要点:`maxIterations`、`protectedPaths`、`requiredChecks` 在类型上可选,但不写就会被
 `validatePolicy` 拒绝。** 只有 `allowedProductPaths`、`maxIterations`、`protectedPaths`、
 `requiredChecks` 四项齐全的文档才能通过校验。
 
-**没有 `rules` 字段。** 规则处置表推迟到 M8:在第一个 rule 实现存在之前声明它,等于发布一个唯一
-合法值为空的字段——正是 M7 花力气清掉的那类「声明了但没人读」的字段。见
-[ADR-008](../decisions/ADR-008-policy-scope-and-deferred-rule-disposition.md)。
+**`rules` 的 key 必须由实现声明。** 今天声明表只有一处:内置规则
+(`packages/core/src/config/rules.ts`),包含 M7 的文件/命令/预算规则与
+`change.claimed-file-missing`。Preset 注册规则属于 M21 的代码扩展契约。一个没人声明的 key 会被
+`validatePolicy` 拒绝——为不存在的规则写覆盖,读起来与实际生效的规则一模一样。
 
 `onViolation` 控制的是**违规的处置级别**,不是危险副作用的开关:被拒绝的命令在任何模式下都
 不会被启动。见 [ADR-006](../decisions/ADR-006-run-lifecycle.md) §2.3。
@@ -89,31 +103,44 @@ Shell wrapper、命令链和 shell 字符串的深入解析属于后续安全模
 validatePolicy(policy: unknown): string | null
 policyProblems(policy: unknown): ConfigProblem[]
 
-// 三类判定共用的 Policy Evaluator(运行时)
+// 四类判定共用的 Policy Evaluator(运行时)
 evaluateFiles(files: string[], policy: Policy): PolicyDecision
 evaluateCommand(command: string, args: string[], policy: CommandPolicyContext): PolicyDecision
 evaluateChangeBudget(changedCount: number, policy: Policy): PolicyDecision
+evaluateFindings(findings: Finding[], policy: Policy, confirmed?: string[]): FindingDecision
 
-// 兼容与展示
+// 处置映射与兼容展示
+actionFor(severity: Severity, policy: { severityActions?: … }): RuleAction
 findOutOfScopeChanges(files: string[], policy: Policy): string[]
 isCommandAllowed(command: string, policy: CommandPolicy): boolean
 refusedFiles(violations: PolicyViolation[]): string[]
 describeFileViolations(violations: PolicyViolation[]): string
-actionFor(severity: Severity, policy: { severityActions?: … }): RuleAction
+
+// 内置规则声明表(配置层)
+builtInRules: Readonly<Record<string, CheckDeclaration>>
+knownRule(rule: string): CheckDeclaration | null
+defaultActionFor(severity: Severity): RuleAction
 ```
 
-`PolicyDecision` 是三类判定共同的结论形状:`{ allowed, violations }`,其中每条
+`PolicyDecision` 是各类判定共同的结论形状:`{ allowed, violations }`,其中每条
 `PolicyViolation` 带 `kind`(file / command / rule)、`rule`、`target`、`severity`、
-`action`、`reason`、`retryable`。三类的 `action` 都已在 evaluator 内与项目的 `onViolation`
-调和过,调用方不再自行推导。
+`action`、`reason`、`retryable`。各类的 `action` 都已在 evaluator 内与项目的 `onViolation`、
+`severityActions` 调和过,调用方不再自行推导。`FindingDecision` 在此基础上多一个 `unknown`:
+没人声明的 rule id 列表。
 
 - **`validatePolicy` / `policyProblems`** —— 校验从磁盘读到的文档。输入是 `unknown`(不受信任的
-  JSON),返回问题描述或全部问题。返回 `null` / 空数组的调用方可以把它当作 `Policy` 使用。
+  JSON),返回问题描述或全部问题。返回 `null` / 空数组的调用方可以把它当作 `Policy` 使用。除形状
+  之外还会拒绝放宽 `rules` / `severityActions` 的配置。
 - **`evaluateFiles`** —— 文件判定。`protectedPaths` 与 `allowedProductPaths` 两条规则独立触发;
   同一文件可以同时命中两者(受保护路径通常就在允许集合内)。
 - **`evaluateCommand`** —— 命令判定。`forbiddenCommands` 与 `allowedAgentCommands` 两条规则,
   denial 优先于 allowance。
 - **`evaluateChangeBudget`** —— 单次 Coder 迭代的改动文件数上限。
+- **`evaluateFindings`** —— 规则判定。取「规则声明的级别」「`policy.rules` 覆盖」「Finding 自述」
+  三者中最严格者,再由 `actionFor` 得到处置。`warning → review` 需要 Reviewer 确认(见
+  [验证契约](./verification.md) §3);未知 rule id 不产生判定,只记入 `unknown`,由调用方失败。
+- **`actionFor`** —— severity 的默认映射,`severityActions` 只能收紧;夹紧逻辑在 evaluator 内也
+  再执行一次,使未经校验的内存对象无法放宽安全语义。
 - **`findOutOfScopeChanges`** —— `evaluateFiles` 的投影,只返回 `allowedProductPaths` 规则命中的
   文件;`isCommandAllowed` 是允许列表的精确成员判断(空表表示不限制)。两者保留是为了兼容已发布
   的 `./policy` 子路径。
@@ -132,37 +159,35 @@ files.filter((file) => !policy.allowedProductPaths.some((p) => file.startsWith(p
 
 命令匹配的语义见下方 `### forbiddenCommands`。
 
-## 5. 规则处置层(推迟到 M8)
-
-> **目标(M8)** 以下形状随**第一个 rule 实现**一起落地,**当前不存在**:`rules` 与
-> `severityActions` 已从 Schema、契约与校验中移除。理由见
-> [ADR-008](../decisions/ADR-008-policy-scope-and-deferred-rule-disposition.md)。
+## 5. 规则处置层(已实现)
 
 ```ts
 type Severity = 'error' | 'warning' | 'info'
 type RuleAction = 'reject' | 'review' | 'report'
 
 interface RuleSetting {
-  severity?: Severity   // 覆盖规则声明的默认级别
-  action?: RuleAction   // 覆盖默认映射
+  severity?: Severity   // 覆盖规则声明的默认级别(只能收紧)
+  action?: RuleAction   // 覆盖默认映射(只能收紧)
 }
 
 interface Policy extends CommandPolicy {
   // ...§1 的字段...
   rules?: Record<string, RuleSetting>
   severityActions?: Partial<Record<Severity, RuleAction>>
-  onViolation?: 'fail' | 'report'
 }
 ```
 
-落地时必须守住的约束:
+落地时守住的约束:
 
-- `rules` 的 key 是 **rule id**,由内置 checker 或 Preset 注册的规则提供;**匹配逻辑不在 Policy 里**。
-  目前 `knownRules` 为空,所以任何 id 都报错。
+- `rules` 的 key 是 **rule id**,由实现声明;**匹配逻辑不在 Policy 里**。
 - `severity` 只能被更高层**收紧**,不能被放宽。`enabled` **尚未提供**:判定哪些规则属于不可关闭的
   安全规则需要 M19 的安全模型。
 - 默认映射为 `error → reject`、`warning → review`、`info → report`;由 `actionFor` 解析,可被
-  `severityActions` 覆盖。Finding 的形状见[验证契约](./verification.md)。
+  `severityActions` 覆盖——但只能更严格。
+- Reviewer 报告一个没人声明的 rule id 时,运行以 `agent_error` 结束并列出该 id;这条 Finding
+  不会被静默丢弃,也不会被猜一个级别出来。
+- 越界改动与受保护路径命中**不参与** `severity → action` 映射:它们由 `allowedProductPaths` /
+  `protectedPaths` 两条规则直接判定,`onViolation` 是它们唯一的兼容退路。
 
 > **目标(M19)** 规则化的 Policy(条件与效果)、多 Policy 优先级与冲突解决、deny-wins 合并、
 > 不可被普通 Override 解除的安全约束——以上**未实现**。当前 Policy 仍是扁平设置对象 + 处置表,
@@ -171,8 +196,10 @@ interface Policy extends CommandPolicy {
 ### 目标形态的其余部分
 
 规则的**种类**(`constraint` / `preference` / `instruction` / `verification`)由规则声明设定,决定默认
-合并语义与默认级别;Policy 只覆盖处置,不能改 kind。形状见
-[验证契约](./verification.md) 与 [ADR-007](../decisions/ADR-007-rule-kinds-and-constraints.md)。
+合并语义与默认级别;Policy 只覆盖处置,不能改 kind。`CheckDeclaration`(`id` / `kind` /
+`verification` / `severity`)已经存在并被内置规则表使用,完整的合并语义(deny-wins、conflicts)
+属于 M17。形状见[验证契约](./verification.md) 与
+[ADR-007](../decisions/ADR-007-rule-kinds-and-constraints.md)。
 
 语义检查通过 `SemanticVerification` 声明自己的**默认级别**(见[验证契约](./verification.md)),
 `policy.rules` 覆盖它;匹配逻辑仍不在 Policy 里,模型与凭证也不在语义检查的声明里

@@ -41,22 +41,57 @@ describe('the policy schema and the policy validator agree', () => {
   })
 })
 
-// The rule-disposition table is deferred to M8, and these two assertions are what
-// keeps it deferred: re-introducing it has to be a deliberate edit here too,
-// rather than a field quietly appearing in the schema with no consumer.
-describe('the rule-disposition layer stays deferred', () => {
-  const properties = (readJson('schemas/policy.schema.json') as { properties?: Record<string, unknown> }).properties ?? {}
+// Every field of the disposition layer is now consumed, so the samples include
+// it: the schema describes the shape, `policyProblems` also rejects an override
+// that loosens a declared rule, and both sides are asserted to agree on shape.
+describe('the rule-disposition layer', () => {
+  const tightening: Array<[string, unknown]> = [
+    ['no rule overrides at all', { ...base, rules: {} }],
+    ['a rule raised from warning to error', { ...base, rules: { 'change.claimed-file-missing': { severity: 'error' } } }],
+    ['a rule action raised from review to reject', { ...base, rules: { 'change.claimed-file-missing': { action: 'reject' } } }],
+    ['a warning raised to reject for the whole table', { ...base, severityActions: { warning: 'reject' } }],
+    ['an info kept at report', { ...base, severityActions: { info: 'report' } }],
+    ['a rules value that is not an object', { ...base, rules: { 'change.claimed-file-missing': 'error' } }],
+    ['a rules entry with an unknown field', { ...base, rules: { 'change.claimed-file-missing': { level: 'error' } } }],
+    ['an unknown severity', { ...base, rules: { 'change.claimed-file-missing': { severity: 'fatal' } } }],
+    ['an unknown severityActions key', { ...base, severityActions: { fatal: 'reject' } }],
+    ['a severityActions value that is not an action', { ...base, severityActions: { warning: 'ignore' } }],
+  ]
 
-  it('does not declare rules or severityActions on a policy', () => {
-    expect(Object.keys(properties)).not.toContain('rules')
-    expect(Object.keys(properties)).not.toContain('severityActions')
+  it.each(tightening)('%s is judged the same way by both', (_name, policy) => {
+    expect(policyProblems(policy).length === 0, JSON.stringify(policySchema.errors ?? [])).toBe(policySchema(policy))
   })
 
-  it('still rejects a policy that declares them, so a stale habit fails loudly', () => {
-    expect(policySchema({ ...base, rules: { 'vue/no-options-api': { severity: 'error' } } })).toBe(true)
-    // Unknown keys are tolerated by design, so the guard is the schema's own
-    // property list above; this records what the tolerant behaviour actually is.
-    expect(policyProblems({ ...base, rules: {} }).length).toBe(0)
+  it('rejects a rule id no implementation declares', () => {
+    const problems = policyProblems({ ...base, rules: { 'vue/no-options-api': { severity: 'error' } } })
+
+    expect(problems).toHaveLength(1)
+    expect(problems[0]?.field).toBe('rules.vue/no-options-api')
+    expect(problems[0]?.message).toContain('unknown rule id')
+  })
+
+  it('refuses to loosen a rule, because safety semantics only ever tighten', () => {
+    const loosened = policyProblems({
+      ...base,
+      rules: { 'change.claimed-file-missing': { severity: 'info', action: 'report' } },
+    })
+
+    expect(loosened.map(({ message }) => message).join(' ')).toContain("cannot loosen rule 'change.claimed-file-missing' from 'warning' to 'info'")
+    // The action floor comes from the severity the *rule* declared, not from the
+    // severity the project asked for, so lowering the severity cannot smuggle a
+    // looser action through either.
+    expect(loosened.map(({ message }) => message).join(' ')).toContain("cannot loosen rule 'change.claimed-file-missing' from 'review' to 'report'")
+  })
+
+  it('refuses to loosen the default disposition of a severity', () => {
+    const loosened = policyProblems({ ...base, severityActions: { error: 'report' } })
+
+    expect(loosened).toEqual([
+      {
+        field: 'severityActions.error',
+        message: "Harness policy cannot loosen the default disposition of 'error' from 'reject' to 'report'.",
+      },
+    ])
   })
 })
 

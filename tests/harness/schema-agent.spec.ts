@@ -20,6 +20,9 @@ describe('core schema and agent contracts', () => {
   it('rejects invalid stage responses with actionable details', () => {
     expect(validateStageResponse('tester', { approved: true })).toContain('evidence')
     expect(validateStageResponse('reviewer', {})).toContain('approved')
+    // The structured channel is enough on its own: `approved` is the pre-1.3
+    // shape, not the requirement.
+    expect(validateStageResponse('reviewer', { findings: [] })).toBeNull()
   })
 
   it('validates policy and identifies out-of-scope files', () => {

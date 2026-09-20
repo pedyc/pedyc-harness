@@ -49,8 +49,11 @@ const runWith = (changed: string[], overrides: Partial<Policy> = {}) =>
     runVerification: async () => [{ command: 'build', result: 'pass', details: 'ok' }],
   })
 
-const reviewerDetails = (phases: Array<{ name: string; details: string }>): string | undefined =>
-  phases.find(({ name }) => name === 'reviewer')?.details
+const scopeDetails = (phases: Array<{ name: string; details: string }>): string | undefined =>
+  phases.find(({ name }) => name === 'scope')?.details
+
+const reviewerStatus = (phases: Array<{ name: string; status: string }>): string | undefined =>
+  phases.find(({ name }) => name === 'reviewer')?.status
 
 describe('policy evaluator: file rules', () => {
   it('allows a change inside allowedProductPaths', () => {
@@ -111,20 +114,24 @@ describe('policy evaluator: orchestration', () => {
   it('fails a run on a protected path even when every agent approves', async () => {
     const result = await runWith(['src/generated/client.ts'], { protectedPaths: ['src/generated/'] })
     expect(result.completed).toBe(false)
-    expect(reviewerDetails(result.phases)).toBe('Protected files changed: src/generated/client.ts')
+    // Scope is reported as its own step: the reviewer phase states the
+    // reviewer's verdict, and the scope phase states what the harness observed.
+    expect(scopeDetails(result.phases)).toBe('Protected files changed: src/generated/client.ts')
+    expect(reviewerStatus(result.phases)).toBe('passed')
     expect(result.issues).toContain('Protected files changed: src/generated/client.ts')
+    expect(result.scope).toMatchObject({ allowed: false, refusedFiles: ['src/generated/client.ts'] })
   })
 
   it('keeps the documented out-of-scope wording for an outside change', async () => {
     const result = await runWith(['lib/util.ts'])
     expect(result.completed).toBe(false)
-    expect(reviewerDetails(result.phases)).toBe('Out-of-scope files changed: lib/util.ts')
+    expect(scopeDetails(result.phases)).toBe('Out-of-scope files changed: lib/util.ts')
   })
 
   it('reports both reasons when a change breaks both file rules', async () => {
     const result = await runWith(['.harness/policy.json'], { protectedPaths: ['.harness/'] })
     expect(result.completed).toBe(false)
-    expect(reviewerDetails(result.phases)).toBe(
+    expect(scopeDetails(result.phases)).toBe(
       'Protected files changed: .harness/policy.json; Out-of-scope files changed: .harness/policy.json',
     )
   })

@@ -24,8 +24,8 @@ Policy 是 `.harness/policy.json` 这一份**扁平设置对象**加上一张**�
 Policy 描述的是「**这一次**允许做什么」,不是「Agent 理论上能做什么」。允许集合之外的一切都视为
 越界,不需要额外声明禁止项。
 
-规则处置层**尚未实现**(见 §5.1,随 M8 的第一个 rule 实现一起落地):规则实现产生 Finding,Policy
-声明该规则有多严重、该怎么处置。它仍然是**处置声明**,不是条件匹配。
+规则处置层**已随第一个 rule 实现落地**:规则实现产生 Finding,Policy 声明该规则有多严重、该怎么
+处置(见 §5.1)。它仍然是**处置声明**,不是条件匹配。
 
 ## 2. 什么时候执行
 Policy 在五个不同时机被读取,后果各不相同:
@@ -33,11 +33,12 @@ Policy 在五个不同时机被读取,后果各不相同:
 | 时机                 | 动作                                                                              | 不满足时                  |
 | -------------------- | --------------------------------------------------------------------------------- | ------------------------- |
 | `init`               | Preset 的 `policy` 原样写成 `.harness/policy.json`                                | —                         |
-| `verify`(命令)       | `validatePolicy` 校验形状,并断言 `requiredChecks` 的脚本确实存在于 `package.json` | 非零退出,不进入执行       |
+| `verify`(命令)       | `validatePolicy` 校验形状(含 `rules` 只能收紧),并断言 `requiredChecks` 的脚本确实存在于 `package.json` | 非零退出,不进入执行 |
 | `run` 加载阶段       | `validatePolicy`,不通过即终止                                                     | 运行失败,不调用任何 Agent |
 | 每次 Provider 调用前 | `evaluateCommand` | 该阶段失败 |
 | 每条验证命令执行前 | `evaluateCommand` | 该闸门不执行,判定为不通过 |
 | 每次 Coder 返回后 | `evaluateFiles`、`evaluateChangeBudget`(快照 diff) | Reviewer 判定不通过 |
+| Reviewer 返回后 | `evaluateFindings`(Finding → severity → action) | 按处置决定重试或终止 |
 
 范围判定的位置很关键:**它在 Coder 之后、Reviewer 之前**,依据是 Harness 自己的文件快照比较,
 而不是 Agent 的声明。这是「实际改了什么」与「允许改什么」的直接比对。
@@ -51,6 +52,8 @@ Policy 在五个不同时机被读取,后果各不相同:
 | `validatePolicy`        | 这份配置能不能用   | 输入是不受信任的 JSON;返回问题描述或 `null` |
 | `isCommandAllowed`      | 这次调用放不放行   | 允许列表为空 = 不限制                       |
 | `findOutOfScopeChanges` | 这批改动算不算越界 | **前缀匹配**,不是 glob                      |
+| `evaluateFindings`      | 这批 Finding 怎么处置 | 取声明、项目覆盖与自述三者中最严格者;未知 rule id 不判定 |
+| `actionFor`             | 这个 severity 对应什么 action | 默认映射,可被 `severityActions` 收紧 |
 
 编排层消费它们的返回值:命令不被允许 → 该 Provider 阶段失败;存在越界文件 →
 `reviewerApproved` 直接不通过,**即使 Reviewer 自己批准了**。范围检查留在 Harness 侧,是刻意的
@@ -86,15 +89,9 @@ Policy 的每一个字段现在都真的参与判定(M7 落地前后,`protectedP
 > **目标(M19)** 配置组合语义(**M17** 的字段级合并与 **M19** 的安全模型)仍未实现:当前既没有合并
 > 语义,也没有 deny-wins。
 
-### 5.1 规则处置层(推迟到 M8)
+### 5.1 规则处置层(已实现)
 
-> **目标(M8)** 以下内容**未实现**,且**不随 M7 发布**:`policy.json` 里没有规则处置表。
-> 原因是产出 Finding 的实现属于 M8(结构分析器)与 M21(Preset 注册规则),在它们存在之前
-> `rules` 唯一合法的值是空对象——发布这样一个字段,等于把「被 schema 接受却没有任何效果」
-> 重新引入,而 M7 的其余部分正是在清除这类字段。见
-> [ADR-008](../decisions/ADR-008-policy-scope-and-deferred-rule-disposition.md),它取代 ADR-004。
-
-规则实现产生 Finding,Policy 声明 `rule id → severity → action`:
+`policy.json` 里有规则处置表,规则实现产生 Finding,Policy 声明 `rule id → severity → action`:
 
 | Severity  | 默认 Action | 含义                       |
 | --------- | ----------- | -------------------------- |
@@ -102,14 +99,21 @@ Policy 的每一个字段现在都真的参与判定(M7 落地前后,`protectedP
 | `warning` | `review`    | 需 Reviewer 确认后才算通过 |
 | `info`    | `report`    | 只记录,不影响判定          |
 
-落地时三点必须守住:
+已落地的部分与三点约束一一对应:
 
 - **Policy 声明处置,不声明匹配。** 条件表达式、优先级与冲突解决仍不进入 `policy.json`;匹配逻辑
-  属于内置 checker 或 Preset 注册的规则(见 [Preset 设计 §8](./preset.md))。
-- **统一 Evaluator。** 文件、命令、规则三类判定由同一个 Policy 模块给出结论,避免"文件一套逻辑、
-  命令一套逻辑、规则又一套逻辑"。前两类已随 M7 落地,第三类到位时沿用同一形状。
+  属于规则实现。今天存在的都是内置规则(`packages/core/src/config/rules.ts` 是它们唯一的声明表),
+  Preset 注册规则仍属于 M21 的代码扩展契约。
+- **统一 Evaluator。** 文件、命令、规则三类判定由同一个 Policy 模块给出同一形状的结论
+  (`PolicyDecision` / `PolicyViolation`),避免"文件一套逻辑、命令一套逻辑、规则又一套逻辑"。
 - **severity 属于安全语义。** 更高层只能收紧(把 `warning` 提升为 `error`、把 `report` 改为
-  `reject`),不能放宽;降低级别、关闭规则、把 `reject` 改为 `report` 都视为放宽,必须被拒绝。
+  `reject`),不能放宽;`validatePolicy` 会对放宽的配置直接报错,`evaluateFindings` 与 `actionFor`
+  也会再夹一次,使未经校验的内存对象同样无法放宽。
+- **未知 rule id 报错,而不是静默忽略。** `policy.rules` 的 key 必须由某个实现声明;Reviewer 报告
+  一个没人声明的 rule id 会让运行以 `agent_error` 结束,而不是把这条 Finding 丢掉。
+
+`warning` 的"Reviewer 明确确认"具体指:harness 产生的 warning 需要 Reviewer 报告同一条 rule id 才算
+确认,未确认按不通过处理;Reviewer 自己报告的 warning 天然是已确认的。
 
 详见 [治理流水线](./governance.md)。
 
