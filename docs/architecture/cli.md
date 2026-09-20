@@ -34,18 +34,15 @@ CLI 本身**不承担治理判定**。Policy 校验、范围检查、闸门执�
 
 CLI 是编排的宿主,但每个阶段的判定都在 Core:
 
-```text
-配置层解析 .harness/(清单 → 预设 → policy / agents)
-        ↓
-归一化输入(--task / --prompt / --input 三选一)
-        ↓
-写 .harness/runs/<runId>/{input,policy}.json        ← 在快照窗口之前
-        ↓
-runOrchestrator:planner → coder → tester → reviewer
-        ↓
-每轮写 iteration-<n>-verification.json              ← 在快照窗口之后
-        ↓
-写 output.json,并按 --json / --output 输出 RunResult
+```mermaid
+flowchart TD
+  A["配置层解析 .harness/(清单 → 预设 → policy / agents)"]
+  B["归一化输入(--task / --prompt / --input 三选一)"]
+  C["写 .harness/runs/&lt;runId&gt;/{input,policy}.json<br/>← 在快照窗口之前"]
+  D["runOrchestrator:planner → coder → tester → reviewer"]
+  E["每轮写 iteration-&lt;n&gt;-verification.json<br/>← 在快照窗口之后"]
+  F["写 output.json,并按 --json / --output 输出 RunResult"]
+  A --> B --> C --> D --> E --> F
 ```
 
 CLI 在这里的职责是**准备与记录**:准备配置与任务,记录运行产物。它不做通过与否的判断。配置在
@@ -84,12 +81,12 @@ intake 的行为值得注意:缺少目标或验收标准时**不报错**,而是�
 
 `init` 是 Preset 的**唯一消费者**,当前语义是「声明 + 安装」,而不是复制内容:
 
-```text
-init --preset vue
-      ↓
-解析 → @pedyc/harness-preset-vue(缺失则安装)
-      ↓
-写 .harness/harness.json(只记包名)+ 由预设的 instruction 写 AGENTS.md
+```mermaid
+flowchart TD
+  A["init --preset vue"]
+  B["解析 → @pedyc/harness-preset-vue(缺失则安装)"]
+  C["写 .harness/harness.json(只记包名)<br/>+ 由预设的 instruction 写 AGENTS.md"]
+  A --> B --> C
 ```
 
 Preset 的内容(policy / agents)由解析器在**运行时**从包内读取,**不进入目标项目**——这正是升级

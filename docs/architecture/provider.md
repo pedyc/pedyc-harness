@@ -10,12 +10,13 @@
 Provider 把 Harness 的一次「阶段请求」翻译成对某个具体 Agent 的调用,再把 Agent 的输出翻译回
 Harness 能解读的响应。它是一个**函数**,不是一层框架:
 
-```text
-Claude Code / Codex / 其他 Agent
-        ↑
-   Provider(一次进程调用:stdin 一个 JSON,stdout 一个 JSON)
-        ↓
-      Runtime
+```mermaid
+flowchart TD
+  A["Claude Code / Codex / 其他 Agent"]
+  B["Provider<br/>一次进程调用:stdin 一个 JSON,stdout 一个 JSON"]
+  C["Runtime"]
+  A <--> B
+  B <--> C
 ```
 
 Runtime 只认识「阶段请求进、结构化响应出」这一个形状。因此换一个 Agent 不需要修改 Harness。

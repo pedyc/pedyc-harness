@@ -35,16 +35,13 @@ Harness 的执行与范围检查才能被采信。
 
 一次迭代内的顺序是固定的:
 
-```text
-Coder 返回
-   ↓
-Harness 快照比对          ← 范围检查的输入
-   ↓
-逐个执行 requiredChecks   ← 串行,由探测到的包管理器执行
-   ↓
-外部 tester 判定证据
-   ↓
-两条都通过 → Reviewer;否则回到 Coder 重试
+```mermaid
+flowchart TD
+  A["Coder 返回"] --> B["Harness 快照比对<br/>← 范围检查的输入"]
+  B --> C["逐个执行 requiredChecks<br/>← 串行,由探测到的包管理器执行"]
+  C --> D["外部 tester 判定证据"]
+  D --> E["两条都通过 → Reviewer;否则回到 Coder 重试"]
+  E -.重试.-> A
 ```
 
 > **目标(M8)** 目标形态在"逐个执行 requiredChecks"之后汇总 Evidence(含 Preset 注册的确定性

@@ -77,15 +77,15 @@ projectA
 
 它们经 Resolution 合成 Effective Governance,再分发给 Runtime 的三个消费面:
 
-```text
-Presets → Preset Resolution → Effective Governance
-                                      │
-                        ┌─────────────┼─────────────┐
-                        ↓             ↓             ↓
-                     Contract       Policy     Verification
-                        └─────────────┼─────────────┘
-                                      ↓
-                                    Agent
+```mermaid
+flowchart TD
+  A["Presets"] --> B["Preset Resolution"] --> C["Effective Governance"]
+  C --> D["Contract"]
+  C --> E["Policy"]
+  C --> F["Verification"]
+  D --> G["Agent"]
+  E --> G
+  F --> G
 ```
 
 Preset 是治理体系的**规范来源层**。
@@ -210,8 +210,9 @@ Preset **不携带**可执行验证脚本——`requiredChecks` 仍然只指向�
 代码加载插在 [ADR-002](../decisions/ADR-002-preset-validation-resolution.md) 生命周期的 `VALIDATED`
 与 `COMPATIBLE` 之间:
 
-```text
-LOADED → SCHEMA_VALID → RESOLVED → VALIDATED → CODE_LOADED → REGISTERED → COMPATIBLE → ACTIVE
+```mermaid
+flowchart TD
+  LOADED --> SCHEMA_VALID --> RESOLVED --> VALIDATED --> CODE_LOADED --> REGISTERED --> COMPATIBLE --> ACTIVE
 ```
 
 因此 Schema 不兼容、依赖缺失、路径越界与清单冲突仍在**任何 Preset 代码执行之前**暴露;任一阶段
@@ -225,33 +226,38 @@ LOADED → SCHEMA_VALID → RESOLVED → VALIDATED → CODE_LOADED → REGISTERE
 
 Preset 支持多层继承与组合,因此依赖模型是 **DAG**:
 
-```text
-base
- ├── web ───────── vue
- ├── accessibility
- └── security ──── acme
+```mermaid
+flowchart LR
+  V["vue"] --> W["web"] --> B["base"]
+  AC["accessibility"] --> B
+  A["acme"] --> S["security"] --> B
 ```
 
 允许菱形依赖(`A → B`、`A → C`、`B → D`、`C → D`),禁止环(`A → B → C → A`)。
 
 解析流程:
 
-```text
-Root Presets → Preset Resolver → Dependency Graph → Cycle Detection
-  → Topological Sort → Preset Validation → Governance Composition
-  → Config Resolution → Effective Governance
+```mermaid
+flowchart TD
+  A["Root Presets"] --> B["Preset Resolver"] --> C["Dependency Graph"] --> D["Cycle Detection"]
+  D --> E["Topological Sort"] --> F["Preset Validation"] --> G["Governance Composition"]
+  G --> H["Config Resolution"] --> I["Effective Governance"]
 ```
 
 Resolver 必须做到:递归加载依赖、去重、检测循环、生成拓扑顺序、验证 Preset、生成 Effective
 Governance。**每个 Preset 在一次 Resolution 中只加载一次**,依赖始终先于使用它的 Preset:
 
-```text
-project ├── vue    → web
-        ├── motion → web
-        └── company → security
-
-解析顺序:web → vue → motion → security → company → project
+```mermaid
+flowchart LR
+  P["project"] --> V["vue"]
+  P --> M["motion"]
+  P --> C["company"]
+  V --> W["web"]
+  M --> W
+  C --> S["security"]
 ```
+
+解析顺序:`web → vue → motion → security → company → project`。
 
 算法选择记录在 [ADR-001](../decisions/ADR-001-preset-resolution.md)与
 [ADR-002](../decisions/ADR-002-preset-validation-resolution.md)。
@@ -316,12 +322,12 @@ Runtime 只消费这个产物:它不需要知道 motion-preset 是怎么实现�
 
 规则冲突按下面的顺序判定:
 
-```text
-① 安全语义优先        constraint 之间取交集(deny-wins)
-        ↓
-② 同 kind 按配置层级   Task > Project > Team > Organization > Global
-        ↓
-③ 仍未定 → 记入 conflicts,取更严格者,并要求项目侧显式声明
+```mermaid
+flowchart TD
+  A["① 安全语义优先<br/>constraint 之间取交集(deny-wins)"]
+  B["② 同 kind 按配置层级<br/>Task &gt; Project &gt; Team &gt; Organization &gt; Global"]
+  C["③ 仍未定 → 记入 conflicts,取更严格者,并要求项目侧显式声明"]
+  A --> B --> C
 ```
 
 第三步**不能只取更严格者就算完**:必须记录,否则审计无法回答「为什么 300ms 赢了 400ms」。

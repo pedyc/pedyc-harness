@@ -51,7 +51,7 @@ Build、Test、Typecheck 与 Release 编排，不承载 Runtime。workspace 范�
 且静默权威的定义。
 
 四个包均为 `publishConfig.access: public`，`engines.node` 为 `>=20`。仓库固定使用
-`pnpm@10.15.0`（`packageManager` 字段）。目标项目使用 npm、pnpm 或 yarn 均可，与发布流程无关。
+`pnpm@12.5.1`（`packageManager` 字段）。目标项目使用 npm、pnpm 或 yarn 均可，与发布流程无关。
 
 ---
 
@@ -75,14 +75,11 @@ pedyc-harness  →  @pedyc/harness-core
 
 发布顺序由 `scripts/harness/publish.ts` 固定为：
 
-```text
-@pedyc/harness-core
-        ↓
-@pedyc/harness-preset-generic
-        ↓
-@pedyc/harness-preset-vue
-        ↓
-pedyc-harness
+```mermaid
+flowchart TD
+  A["@pedyc/harness-core"] --> B["@pedyc/harness-preset-generic"]
+  B --> C["@pedyc/harness-preset-vue"]
+  C --> D["pedyc-harness"]
 ```
 
 今天真正被依赖方向要求的只有「Core 在 CLI 之前」这一条；预设排在 CLI 之前是刻意的约定，让发布
@@ -136,22 +133,17 @@ packages/<name>/
 发布前必须通过完整验证。CI 在每次 push 与 pull request 上按固定顺序执行
 （`.github/workflows/harness-verify.yml`）：
 
-```text
-pnpm install --frozen-lockfile
-        ↓
-pnpm run build          # 先构建：Harness 通过发布入口解析 workspace 包
-        ↓
-pnpm run harness:verify
-        ↓
-pnpm run schemas:check
-        ↓
-pnpm run verify:examples
-        ↓
-pnpm run release:check
-        ↓
-pnpm run type-check
-        ↓
-pnpm run test:unit
+```mermaid
+flowchart TD
+  A["pnpm install --frozen-lockfile"]
+  B["pnpm run build<br/># 先构建:Harness 通过发布入口解析 workspace 包"]
+  C["pnpm run harness:verify"]
+  D["pnpm run schemas:check"]
+  E["pnpm run verify:examples"]
+  F["pnpm run release:check"]
+  G["pnpm run type-check"]
+  H["pnpm run test:unit"]
+  A --> B --> C --> D --> E --> F --> G --> H
 ```
 
 `build` 必须排在第一位：Harness 通过各包的**发布入口**（`exports`）解析 workspace 包，因此
@@ -417,30 +409,21 @@ Changelog 面向使用者，说明**对使用者意味着什么**，而不是罗
 
 标准流程如下，每一步都对应第 5、6 节中的真实命令：
 
-```text
-代码变更
-   ↓
-pnpm run build
-   ↓
-pnpm run harness:verify
-   ↓
-pnpm run schemas:check
-   ↓
-pnpm run verify:examples
-   ↓
-pnpm run release:check        # 产物闸门：pack / tarball / 真实 npm install / CLI 全流程
-   ↓
-pnpm run type-check
-   ↓
-pnpm run test:unit
-   ↓
-更新 CHANGELOG.md 与四个 package 版本（保持相同）
-   ↓
-pnpm run release:publish -- --dry-run    # 预览
-   ↓
-pnpm run release:publish                 # 按依赖顺序发布四个包
-   ↓
-Publish 后 Smoke Test（下一节）
+```mermaid
+flowchart TD
+  A["代码变更"]
+  B["pnpm run build"]
+  C["pnpm run harness:verify"]
+  D["pnpm run schemas:check"]
+  E["pnpm run verify:examples"]
+  F["pnpm run release:check<br/># 产物闸门:pack / tarball / 真实 npm install / CLI 全流程"]
+  G["pnpm run type-check"]
+  H["pnpm run test:unit"]
+  I["更新 CHANGELOG.md 与四个 package 版本(保持相同)"]
+  J["pnpm run release:publish -- --dry-run<br/># 预览"]
+  K["pnpm run release:publish<br/># 按依赖顺序发布四个包"]
+  L["Publish 后 Smoke Test(下一节)"]
+  A --> B --> C --> D --> E --> F --> G --> H --> I --> J --> K --> L
 ```
 
 `Publish` 不是流程终点，发布后必须验证真实安装结果。
@@ -506,14 +489,9 @@ Release 不属于 Harness Runtime，两者边界清晰：
 | Runtime | Task、Contract、Policy、Agent、Verification、Diff、Review、RunResult |
 | Release | Build、Version、Package、Publish、Distribution |
 
-```text
-Development / Release
-        ↓
-npm package
-        ↓
-Installed Project
-        ↓
-Harness Runtime
+```mermaid
+flowchart TD
+  A["Development / Release"] --> B["npm package"] --> C["Installed Project"] --> D["Harness Runtime"]
 ```
 
 ---
@@ -554,16 +532,9 @@ Credentials
 
 仍然属于未来的是**自动发布**：
 
-```text
-Tag
- ↓
-CI
- ↓
-Verify
- ↓
-Build
- ↓
-Publish npm
+```mermaid
+flowchart TD
+  A["Tag"] --> B["CI"] --> C["Verify"] --> D["Build"] --> E["Publish npm"]
 ```
 
 自动 Publish 必须建立在稳定版本策略、可信 CI 与明确 npm 权限之上。在此之前，发布由人工执行

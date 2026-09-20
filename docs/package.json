@@ -12,6 +12,8 @@
     "check": "pnpm run docs:conventions && pnpm run docs:build"
   },
   "devDependencies": {
-    "vitepress": "^1.6.4"
+    "mermaid": "^11.0.0",
+    "vitepress": "^1.6.4",
+    "vitepress-mermaid-plugin": "^3.0.0"
   }
 }

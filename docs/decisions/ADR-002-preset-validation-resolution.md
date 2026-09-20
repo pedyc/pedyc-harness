@@ -24,14 +24,9 @@ Preset 可能存在：
 
 采用：
 
-```text
-Load
-  ↓
-Resolve
-  ↓
-Validate
-  ↓
-Activate
+```mermaid
+flowchart TD
+  Load --> Resolve --> Validate --> Activate
 ```
 
 ### Resolution
@@ -62,18 +57,9 @@ Activate
 
 ## 3. Preset Lifecycle
 
-```text
-LOADED
-  ↓
-SCHEMA_VALID
-  ↓
-RESOLVED
-  ↓
-VALIDATED
-  ↓
-COMPATIBLE
-  ↓
-ACTIVE
+```mermaid
+flowchart TD
+  LOADED --> SCHEMA_VALID --> RESOLVED --> VALIDATED --> COMPATIBLE --> ACTIVE
 ```
 
 任一关键阶段失败，则 Preset 不得进入 `ACTIVE`。
@@ -84,20 +70,9 @@ ACTIVE
 
 Harness 不直接信任第三方 Preset，而是逐层建立信任：
 
-```text
-Package
-  ↓
-Schema
-  ↓
-Resolution
-  ↓
-Semantic Validation
-  ↓
-Verification
-  ↓
-Compatibility
-  ↓
-ACTIVE
+```mermaid
+flowchart TD
+  Package --> Schema --> Resolution --> SV["Semantic Validation"] --> Verification --> Compatibility --> ACTIVE
 ```
 
 Preset 可以提供 Domain-specific Validator，但必须遵守 Harness 定义的 Validator Contract。

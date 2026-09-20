@@ -1,9 +1,10 @@
 import { defineConfig } from 'vitepress'
+import { withMermaid } from 'vitepress-mermaid-plugin'
 
 // The documentation site lives inside `docs/`, so `srcDir` is `docs/` itself:
 // every markdown file there is a page. The package is private and defines no
 // `build` script, so the root build and the release pipeline never touch it.
-export default defineConfig({
+const config = defineConfig({
   lang: 'zh-CN',
   title: 'pedyc-harness',
   description: '面向 AI Agent 的声明式治理运行时',
@@ -115,3 +116,30 @@ export default defineConfig({
     },
   },
 })
+
+// `withMermaid` renders ```mermaid fences as diagrams: it registers the
+// `Mermaid` client component and replaces the fence renderer. The diagram is
+// drawn in the browser, so `vitepress build` never parses it and a malformed
+// diagram cannot fail the build — validate diagrams explicitly (see
+// docs/CONVENTIONS.md section 9).
+const mermaidConfig = withMermaid(config)
+
+// `withMermaid` hints Vite to prebundle a fixed list of mermaid's CommonJS
+// dependencies (`dayjs`, `cytoscape`, `fastdom`, …). That approach cannot work
+// here: pnpm does not link mermaid's transitive dependencies into
+// `docs/node_modules`, so Vite cannot resolve the hints from the site root, and
+// the list is incomplete for current mermaid versions anyway — every one it misses
+// reaches the browser as raw CommonJS and fails with "does not provide an export
+// named 'default'".
+//
+// Prebundling mermaid itself is the structural fix: esbuild resolves and interops
+// mermaid's whole dependency closure, whatever that closure contains, and the
+// hints are replaced rather than extended. Upstream's own answer is
+// `pnpm install --shamefully-hoist`, which would change dependency resolution for
+// every package in the workspace.
+const optimizeDeps = mermaidConfig.vite?.optimizeDeps
+if (optimizeDeps) {
+  optimizeDeps.include = ['mermaid']
+}
+
+export default mermaidConfig

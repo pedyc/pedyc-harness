@@ -10,20 +10,23 @@
 
 ## 1. 系统由什么组成
 
-```text
-Project                          Harness                        Agent
-├── .harness/  (治理定义)         ┌─────────┐
-├── AGENTS.md                    │   CLI   │  入口:init / verify / doctor / diff / update / run
-├── package.json                 └────┬────┘
-└── src/  (产品代码)                  │
-                                 ┌────▼─────┐
-                                 │ Runtime  │  契约 · Policy · 编排 · 独立验证 · Diff · Review
-                                 └────┬─────┘
-                                 ┌────▼─────┐
-                                 │ Provider │  Adapter:stdin 一个 JSON,stdout 一个 JSON
-                                 └────┬─────┘
-                                      ▼
-                              Claude Code / Codex / 其他
+```mermaid
+flowchart LR
+  subgraph Project
+    direction TB
+    P1[".harness/  (治理定义)"]
+    P2["AGENTS.md"]
+    P3["package.json"]
+    P4["src/  (产品代码)"]
+  end
+  subgraph Harness
+    direction TB
+    CLI["CLI<br/>入口:init / verify / doctor / diff / update / run"]
+    RT["Runtime<br/>契约 · Policy · 编排 · 独立验证 · Diff · Review"]
+    PV["Provider<br/>Adapter:stdin 一个 JSON,stdout 一个 JSON"]
+    CLI --> RT --> PV
+  end
+  PV --> Agent["Agent<br/>Claude Code / Codex / 其他"]
 ```
 
 四层各自的执行时机不同:
@@ -47,10 +50,11 @@ Preset 提供能力,但何时使用由 Runtime 决定;判定的完整链路见[�
 
 真实的依赖边由各包 `package.json` 决定:
 
-```text
-pedyc-harness (CLI) ──→ @pedyc/harness-core (Runtime)
-        │
-        └────────────→ @pedyc/harness-preset-*  ──→ @pedyc/harness-core
+```mermaid
+flowchart LR
+  CLI["pedyc-harness (CLI)"] --> CORE["@pedyc/harness-core (Runtime)"]
+  CLI --> PRESET["@pedyc/harness-preset-*"]
+  PRESET --> CORE
 ```
 
 `@pedyc/harness-core` 是最低层,不依赖 CLI、Preset、Vue 或任何具体 Provider。注意 Preset 依赖的是
@@ -143,17 +147,15 @@ Policy 当前的执行能力需要准确理解(`runtime/policy-engine.ts` 共三
 
 > **Agent 的自我描述不是独立验证证据。**
 
-```text
-Agent ──self-report──→ Agent 的自述
-                            │ 不直接信任
-                            ▼
-                   Harness 独立观察
-                    ├── 实际 Diff
-                    └── 独立执行的闸门
-                            ▼
-                    Review(含范围检查)
-                            ▼
-                        RunResult
+```mermaid
+flowchart TD
+  A["Agent"] -->|self-report| B["Agent 的自述"]
+  B -->|不直接信任| C["Harness 独立观察"]
+  C --> D["实际 Diff"]
+  C --> E["独立执行的闸门"]
+  D --> F["Review(含范围检查)"]
+  E --> F
+  F --> G["RunResult"]
 ```
 
 因此 Harness 必须自己执行验证并记录结果,而不是采信 Agent 的"已完成"。当前记录的每条闸门结果是
@@ -165,14 +167,13 @@ Agent ──self-report──→ Agent 的自述
 
 配置由一个独立的**配置层**解析(`packages/core/src/config/`),它拥有所有对项目配置文档的读取:
 
-```text
-.harness/harness.json (Manifest)
-        ↓
-resolvePresets            预设解析:递归 extends、去重、环检测
-        ↓
-policy / agents           来自预设,或项目自己的 .harness/ 文档
-        ↓
-LoadedHarnessConfig       含 sources:每个值是从哪读到的
+```mermaid
+flowchart TD
+  A[".harness/harness.json (Manifest)"]
+  B["resolvePresets<br/>预设解析:递归 extends、去重、环检测"]
+  C["policy / agents<br/>来自预设,或项目自己的 .harness/ 文档"]
+  D["LoadedHarnessConfig<br/>含 sources:每个值是从哪读到的"]
+  A --> B --> C --> D
 ```
 
 `.harness/harness.json` 是**入口配置**,不是全部配置:它只回答「这个项目加载哪些配置」。`run` 与

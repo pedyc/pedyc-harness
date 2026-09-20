@@ -185,17 +185,16 @@ rules 与 verification 谁都不执行,`1s` 的动画时长也不会有人检查
 
 > **目标(M17、M8)** 目标形态把它们**编译**成一份生效治理,而不是挑一份文档:
 
-```text
-motion-preset + minimal-design-preset
-        ↓ Preset Resolver(编译)
-EffectiveGovernance
-├── rules         两者并存;constraint 取交集,preference 追加
-│                 ├── motion.animation-duration  <= 400ms(error)
-│                 └── design.no-unnecessary-abstraction(error)
-├── verification  两者都执行(union)
-├── instructions  只取最后一个声明者(见 §5.2)
-├── provenance    每条值来自哪个包与版本
-└── conflicts     两个 Preset 对同一属性给出不同约束时,记录最终取值与理由
+```mermaid
+flowchart TD
+  A["motion-preset + minimal-design-preset"] -->|"Preset Resolver(编译)"| B["EffectiveGovernance"]
+  B --> R["rules<br/>两者并存;constraint 取交集,preference 追加"]
+  R --> R1["motion.animation-duration &lt;= 400ms(error)"]
+  R --> R2["design.no-unnecessary-abstraction(error)"]
+  B --> V["verification<br/>两者都执行(union)"]
+  B --> I["instructions<br/>只取最后一个声明者(见 §5.2)"]
+  B --> P["provenance<br/>每条值来自哪个包与版本"]
+  B --> C["conflicts<br/>两个 Preset 对同一属性给出不同约束时,记录最终取值与理由"]
 ```
 
 冲突不会静默解决:`constraint` 之间取交集,同 kind 按配置层级(`Task > Project > Team >
@@ -322,12 +321,12 @@ npx pedyc-harness run --prompt "给按钮加一个淡入动效"
 
 一次运行固定走四个阶段:
 
-```text
-配置层解析 .harness/            ← 失败即退出码 5,不进入执行
-        ↓
-planner → coder → tester → reviewer
-        ↓
-.harness/runs/<runId>/{input,policy,iteration-<n>-verification,output}.json
+```mermaid
+flowchart TD
+  A["配置层解析 .harness/<br/>← 失败即退出码 5,不进入执行"]
+  B["planner → coder → tester → reviewer"]
+  C[".harness/runs/&lt;runId&gt;/{input,policy,iteration-&lt;n&gt;-verification,output}.json"]
+  A --> B --> C
 ```
 
 其中 Tester 阶段的判定是两个独立条件的合取:**Harness 自己执行的闸门全部通过**,**且**外部 tester 认可

@@ -68,22 +68,12 @@ Preset 只能注册下列能力，注册面之外没有入口：
 
 ADR-002 的生命周期新增两个阶段：
 
-```text
-LOADED
-  ↓
-SCHEMA_VALID
-  ↓
-RESOLVED
-  ↓
-VALIDATED
-  ↓
-CODE_LOADED        ← 新增：解析并加载入口模块
-  ↓
-REGISTERED         ← 新增：校验注册面、id 冲突与能力边界
-  ↓
-COMPATIBLE
-  ↓
-ACTIVE
+```mermaid
+flowchart TD
+  LOADED --> SCHEMA_VALID --> RESOLVED --> VALIDATED
+  VALIDATED --> CODE_LOADED["CODE_LOADED<br/>← 新增:解析并加载入口模块"]
+  CODE_LOADED --> REGISTERED["REGISTERED<br/>← 新增:校验注册面、id 冲突与能力边界"]
+  REGISTERED --> COMPATIBLE --> ACTIVE
 ```
 
 任一阶段失败都不得进入 `ACTIVE`。代码只在 `CODE_LOADED` 之后执行，因此 Schema 不兼容、依赖缺失、

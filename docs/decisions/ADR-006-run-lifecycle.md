@@ -65,11 +65,12 @@ type RunStatus = 'passed' | 'failed'        // 由 orchestration.completed 派�
 
 ### 2.4 状态机
 
-```text
-CREATED → PREFLIGHT → RUNNING → VERIFYING → REVIEW → DONE(approved | rejected)
-                         │           │
-                         └── 终止原因 ─┘   timeout / cancelled / policy_violation /
-                                          agent_error / max_iterations
+```mermaid
+flowchart LR
+  CREATED --> PREFLIGHT --> RUNNING --> VERIFYING --> REVIEW
+  REVIEW --> DONE["DONE(approved | rejected)"]
+  RUNNING -.终止原因.-> T["timeout / cancelled / policy_violation / agent_error / max_iterations"]
+  VERIFYING -.终止原因.-> T
 ```
 
 规则：**文档里出现的每一个状态，要么有实现，要么带明确的里程碑标记。** 解除

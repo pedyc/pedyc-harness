@@ -5,3 +5,9 @@ packages:
   # `build` script, and is therefore never picked up by the root build or by
   # the release pipeline.
   - docs
+
+# pnpm 11+ does not run install scripts of dependencies unless the package is
+# approved here. `esbuild` needs its install script to place the platform
+# binary; everything else in the tree installs without one.
+allowBuilds:
+  esbuild: true

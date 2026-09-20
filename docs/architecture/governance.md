@@ -11,14 +11,11 @@
 
 治理流水线是 Harness 对一次改动做出"接受 / 不接受"判定的完整链路：
 
-```text
-Actual Changes
-      ↓
-① Evidence      实际发生了什么？（确定性）
-      ↓
-② Review        这些变化是否符合任务意图？（语义）
-      ↓
-③ Gate          最终允许通过吗？（处置）
+```mermaid
+flowchart TD
+  A["Actual Changes"] --> B["① Evidence<br/>实际发生了什么？（确定性）"]
+  B --> C["② Review<br/>这些变化是否符合任务意图？（语义）"]
+  C --> D["③ Gate<br/>最终允许通过吗？（处置）"]
 ```
 
 它建立在整个系统唯一的信任规则之上：
@@ -76,18 +73,14 @@ Actual Changes
 
 当前一次迭代的顺序（已实现）：
 
-```text
-Coder 返回
-   ↓
-Harness 快照比对              ← 越界判定的输入
-   ↓
-逐个执行 requiredChecks       ← Evidence 的一部分
-   ↓
-外部 Tester 判定证据
-   ↓
-越界检查 + 外部 Reviewer
-   ↓
-两条都通过 → 结束；否则回到 Coder 重试
+```mermaid
+flowchart TD
+  A["Coder 返回"] --> B["Harness 快照比对<br/>← 越界判定的输入"]
+  B --> C["逐个执行 requiredChecks<br/>← Evidence 的一部分"]
+  C --> D["外部 Tester 判定证据"]
+  D --> E["越界检查 + 外部 Reviewer"]
+  E --> F["两条都通过 → 结束；否则回到 Coder 重试"]
+  F -.重试.-> A
 ```
 
 > **目标（M7、M8）** 目标形态在这条链路上插入两处：`requiredChecks` 之外增加 Preset 注册的

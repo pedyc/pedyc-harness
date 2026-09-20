@@ -68,12 +68,12 @@ interface Constraint {
 
 规则冲突按下面的顺序判定：
 
-```text
-① 安全语义优先        constraint 之间取交集(deny-wins)
-        ↓
-② 同 kind 按配置层级   Task > Project > Team > Organization > Global
-        ↓
-③ 仍未定 → 记入 conflicts,并取更严格者,同时要求在项目侧显式声明
+```mermaid
+flowchart TD
+  A["① 安全语义优先<br/>constraint 之间取交集(deny-wins)"]
+  B["② 同 kind 按配置层级<br/>Task &gt; Project &gt; Team &gt; Organization &gt; Global"]
+  C["③ 仍未定 → 记入 conflicts,并取更严格者,同时要求在项目侧显式声明"]
+  A --> B --> C
 ```
 
 第 ③ 步不能只"取更严格者"就算完：**必须记录**，否则审计无法回答「为什么 300ms 赢了 400ms」。因此
@@ -97,14 +97,15 @@ interface Constraint {
 
 一次典型的判定链路：
 
-```text
-改动后的源码
-   ↓ 结构验证(CSS 分析器, analyzer-derived)
-事实: { property: "animation-duration", value: "1s" }
-   ↓ 规则: motion.animation-duration, kind=constraint, { operator: "<=", value: "400ms" }
-Finding: { rule, target, severity: error, reason: "1s > 400ms" }
-   ↓ Policy: rule id → severity → action
-REJECT
+```mermaid
+flowchart TD
+  A["改动后的源码"]
+  B["事实: { property: #quot;animation-duration#quot;, value: #quot;1s#quot; }"]
+  C["Finding: { rule, target, severity: error, reason: #quot;1s #gt; 400ms#quot; }"]
+  D["REJECT"]
+  A -->|"结构验证(CSS 分析器, analyzer-derived)"| B
+  B -->|"规则: motion.animation-duration, kind=constraint, { operator: #lt;=, value: #quot;400ms#quot; }"| C
+  C -->|"Policy: rule id → severity → action"| D
 ```
 
 分析器**不认识规则**，规则**不认识语法**：分析器只产出事实，规则只做比较。这样第三方可以只发布

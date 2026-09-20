@@ -35,16 +35,9 @@
 
 ## 文档关系
 
-```text
-项目目标
-   ↓
-架构
-   ↓
-接口
-   ↓
-决策 ←── 权衡
-   ↓
-Milestones / Release
-   ↓
-Archived
+```mermaid
+flowchart TD
+  A["项目目标"] --> B["架构"] --> C["接口"] --> D["决策"]
+  E["权衡"] --> D
+  D --> F["Milestones / Release"] --> G["Archived"]
 ```
