@@ -46,7 +46,7 @@
       "minLength": 1
     },
     "verification": {
-      "description": "Declared for forward compatibility; no runtime consumes it yet.",
+      "description": "Path to the checks document this preset declares, relative to the package. Its checks are unioned with every other resolved source, and each becomes a rule id a policy may address. The analyzers a declaration names are supplied separately.",
       "type": "string",
       "minLength": 1
     },

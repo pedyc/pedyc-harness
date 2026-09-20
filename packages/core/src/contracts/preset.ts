@@ -35,7 +35,14 @@ export interface PresetManifest {
    * resolver validates only that the path stays inside the package and exists.
    */
   entry?: string
-  /** Declared for forward compatibility; no runtime consumes it yet. */
+  /**
+   * Path to the checks document this preset declares.
+   *
+   * Read by the config layer on every run: the checks of every resolved preset
+   * are unioned with the project's own document, and each one becomes a rule id
+   * a policy may address. The analyzers a declaration names are code and are
+   * supplied separately (built-in today, registered through `entry` at M21).
+   */
   verification?: string
   /** Declared for forward compatibility; no runtime consumes it yet. */
   rules?: string[]

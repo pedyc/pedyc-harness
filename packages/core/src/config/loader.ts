@@ -1,14 +1,18 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { agentProblems } from './agents.js'
+import { mergeChecks, verificationProblems } from './checks.js'
+import type { CheckSource } from './checks.js'
 import { defaultAgents, defaultPolicy } from './defaults.js'
 import { configError } from './errors.js'
 import { policyProblems } from './policy.js'
+import { asRecord } from './json.js'
 import { manifestFile, manifestPath, readManifest } from './manifest.js'
 import { presetFile, resolvePresets } from './presets.js'
 import type { ConfigProblem } from './json.js'
 import type {
   AgentsConfig,
+  CheckDeclaration,
   ConfigErrorCode,
   ConfigSource,
   HarnessConfigError,
@@ -16,6 +20,7 @@ import type {
   LoadConfigResult,
   LoadedHarnessConfig,
   Policy,
+  ResolvedCheck,
   ResolvedPreset,
 } from '../contracts/index.js'
 
@@ -23,6 +28,21 @@ import type {
 export const harnessDirectory = '.harness'
 
 const describe = (error: unknown): string => (error instanceof Error ? error.message : 'unknown error')
+
+/**
+ * Resolves a path relative to the directory that declared it, or `null` when it
+ * escapes.
+ *
+ * A checks document may point at its own prompts and nothing else: a committed
+ * package must not be able to read anything the process can, and `.harness/` is
+ * the project-side equivalent of the package boundary.
+ */
+const within = (base: string, path: string): string | null => {
+  if (isAbsolute(path)) return null
+  const offset = relative(base, resolve(base, path))
+  if (!offset || offset.startsWith('..') || isAbsolute(offset)) return null
+  return offset
+}
 
 /**
  * Resolves a manifest path and proves it stays inside `.harness/`.
@@ -83,7 +103,7 @@ const problemsToErrors = (
 /** The parts that differ between reading a policy and reading an agent routing. */
 interface DocumentKind<T> {
   kind: 'policy' | 'agents'
-  problems: (value: unknown) => ConfigProblem[]
+  problems: (value: unknown, checks: readonly ResolvedCheck[]) => ConfigProblem[]
   fallback: () => T
 }
 
@@ -105,6 +125,7 @@ const resolveDocument = <T>(
   manifest: HarnessManifest | null,
   presets: ResolvedPreset[],
   kind: DocumentKind<T>,
+  checks: readonly ResolvedCheck[] = [],
 ): Resolved<T> | { errors: HarnessConfigError[] } => {
   const declared: unknown = manifest?.[kind.kind]
 
@@ -118,13 +139,13 @@ const resolveDocument = <T>(
     }
     const document = readDocument(root, file)
     if ('errors' in document) return document
-    const problems = kind.problems(document.value)
+    const problems = kind.problems(document.value, checks)
     if (problems.length) return { errors: problemsToErrors(problems, 'config_file_invalid', file) }
     return { value: document.value as T, source: { kind: kind.kind, location: file, active: true } }
   }
 
   if (declared !== undefined) {
-    const problems = kind.problems(declared)
+    const problems = kind.problems(declared, checks)
     if (problems.length) return { errors: problemsToErrors(problems, 'manifest_invalid', manifestFile, kind.kind) }
     return {
       value: declared as T,
@@ -136,7 +157,7 @@ const resolveDocument = <T>(
   if (existsSync(join(root, conventional))) {
     const document = readDocument(root, conventional)
     if ('errors' in document) return document
-    const problems = kind.problems(document.value)
+    const problems = kind.problems(document.value, checks)
     if (problems.length) return { errors: problemsToErrors(problems, 'config_file_invalid', conventional) }
     return { value: document.value as T, source: { kind: kind.kind, location: conventional, active: true } }
   }
@@ -147,7 +168,7 @@ const resolveDocument = <T>(
     const label = presetFile(preset, path)
     const document = readDocument(preset.directory, path, label)
     if ('errors' in document) return document
-    const problems = kind.problems(document.value)
+    const problems = kind.problems(document.value, checks)
     if (problems.length) return { errors: problemsToErrors(problems, 'config_file_invalid', label) }
     return { value: document.value as T, source: { kind: kind.kind, location: label, active: true } }
   }
@@ -163,33 +184,121 @@ const policyKind: DocumentKind<Policy> = {
 
 const agentsKind: DocumentKind<AgentsConfig> = {
   kind: 'agents',
-  problems: agentProblems,
+  problems: (value) => agentProblems(value),
   fallback: defaultAgents,
 }
 
 /**
- * Records the manifest's remaining sources: the ones no runtime consumes yet.
+ * Reads every checks document a run may judge from.
  *
- * Reporting them keeps `doctor` honest: a declared document that is silently
- * ignored is the same failure mode as a fallback that never says it fell back.
+ * Unlike policy and agents, checks are not selected: each source contributes its
+ * own declarations and the result is their union, because a preset's checks are
+ * additions to the project's governance rather than a competing value. The
+ * project's own document is read last, so it is the more specific statement when
+ * a conflict message names two documents.
+ *
+ * A rule id declared twice with different bodies is an error, not a silent
+ * winner: choosing one (deny-wins, plus the `conflicts` record that explains the
+ * choice) belongs to configuration composition (M17).
  */
-const recordDeclaredSources = (
+const readChecks = (
   root: string,
-  manifest: HarnessManifest,
-): { sources: ConfigSource[] } | { errors: HarnessConfigError[] } => {
-  const sources: ConfigSource[] = []
+  manifest: HarnessManifest | null,
+  presets: ResolvedPreset[],
+): { checks: ResolvedCheck[]; sources: ConfigSource[] } | { errors: HarnessConfigError[] } => {
+  const collected: CheckSource[] = []
+  const declared: ConfigSource[] = []
   const errors: HarnessConfigError[] = []
+  // Prompts are resolved here rather than at dispatch time: the runtime only
+  // ever sees values the config layer already read, and a prompt that escapes its
+  // declaring package or `.harness/` is a configuration error, not a run failure.
+  const prompts = new Map<string, string>()
 
-  if (manifest.verification !== undefined) {
-    const file = insideHarness(root, manifest.verification)
-    if (!file) {
-      errors.push(configError('config_path_outside_harness', manifestFile, `verification must point at a file inside ${harnessDirectory}/; '${manifest.verification}' does not.`, 'verification'))
-    } else {
-      sources.push({ kind: 'verification', location: file, active: false })
+  const add = (
+    base: string,
+    path: string,
+    label: string,
+    promptBase: string,
+    escapeCode: ConfigErrorCode,
+  ): void => {
+    const document = readDocument(base, path, label)
+    if ('errors' in document) {
+      errors.push(...document.errors)
+      return
+    }
+    const problems = verificationProblems(document.value)
+    if (problems.length > 0) {
+      errors.push(...problemsToErrors(problems, 'config_file_invalid', label))
+      return
+    }
+    collected.push({ label, value: document.value })
+    declared.push({ kind: 'verification', location: label, active: true })
+
+    const entries = asRecord(document.value)?.checks
+    for (const entry of Array.isArray(entries) ? entries : []) {
+      const check = entry as CheckDeclaration
+      if (check.verification !== 'semantic' || typeof check.prompt !== 'string') continue
+      const offset = within(promptBase, check.prompt)
+      if (offset === null) {
+        errors.push(configError(escapeCode, label, `Check '${check.id}' prompt must stay inside the declaring directory; '${check.prompt}' does not.`, `checks.${check.id}.prompt`))
+        continue
+      }
+      try {
+        prompts.set(check.id, readFileSync(join(promptBase, offset), 'utf8'))
+      } catch (error) {
+        errors.push(configError('config_file_missing', label, `Check '${check.id}' prompt '${check.prompt}' could not be read: ${describe(error)}`, `checks.${check.id}.prompt`))
+      }
     }
   }
 
-  return errors.length > 0 ? { errors } : { sources }
+  const projectBase = join(root, harnessDirectory)
+
+  // Presets first, dependencies before the presets that inherit from them, so a
+  // conflict message reads in resolution order.
+  for (const preset of presets) {
+    const path = preset.manifest.verification
+    if (path !== undefined) {
+      add(preset.directory, path, presetFile(preset, path), preset.directory, 'preset_path_outside_package')
+    }
+  }
+
+  if (manifest?.verification !== undefined) {
+    const file = insideHarness(root, manifest.verification)
+    if (!file) {
+      errors.push(configError('config_path_outside_harness', manifestFile, `verification must point at a file inside ${harnessDirectory}/; '${manifest.verification}' does not.`, 'verification'))
+    } else if (!existsSync(join(root, file))) {
+      errors.push(configError('config_file_missing', manifestFile, `verification points at ${file}, which does not exist.`, 'verification'))
+    } else {
+      add(root, file, file, projectBase, 'config_path_outside_harness')
+    }
+  } else {
+    const conventional = `${harnessDirectory}/verification.json`
+    if (existsSync(join(root, conventional))) {
+      add(root, conventional, conventional, projectBase, 'config_path_outside_harness')
+    }
+  }
+
+  if (errors.length > 0) return { errors }
+
+  const { checks, conflicts } = mergeChecks(collected)
+  if (conflicts.length > 0) {
+    return {
+      errors: conflicts.map(({ id, first, second }) => configError(
+        'check_conflict',
+        second,
+        `Check id '${id}' is declared by ${first} and by ${second} with different bodies. ` +
+          'Configuration composition (deny-wins plus a conflicts record) is not implemented yet, so no winner is chosen.',
+        `checks.${id}`,
+      )),
+    }
+  }
+  return {
+    checks: checks.map((check) => {
+      const promptText = prompts.get(check.id)
+      return promptText === undefined ? check : { ...check, promptText }
+    }),
+    sources: declared,
+  }
 }
 
 /**
@@ -226,16 +335,16 @@ export const loadHarnessConfig = (root: string): LoadConfigResult => {
   if (!resolved.ok) return { ok: false, errors: resolved.errors }
   const presets = resolved.presets
 
-  if (manifest) {
-    const declared = recordDeclaredSources(root, manifest)
-    if ('errors' in declared) return { ok: false, errors: declared.errors }
-    sources.push(...declared.sources)
-  }
+  // Checks are read before the policy, because a `policy.rules` key is only
+  // legal when a declaration exists — built-in or declared by one of these
+  // documents.
+  const checks = readChecks(root, manifest, presets)
+  if ('errors' in checks) return { ok: false, errors: checks.errors }
 
-  const policy = resolveDocument(root, manifest, presets, policyKind)
+  const policy = resolveDocument(root, manifest, presets, policyKind, checks.checks)
   if ('errors' in policy) return { ok: false, errors: policy.errors }
 
-  const agents = resolveDocument(root, manifest, presets, agentsKind)
+  const agents = resolveDocument(root, manifest, presets, agentsKind, checks.checks)
   if ('errors' in agents) return { ok: false, errors: agents.errors }
 
   // Reported in the order a reader resolves them: the entry point, the values
@@ -244,6 +353,7 @@ export const loadHarnessConfig = (root: string): LoadConfigResult => {
     ...sources.filter(({ kind }) => kind === 'manifest'),
     policy.source,
     agents.source,
+    ...checks.sources,
     ...presets.map(({ packageName }): ConfigSource => ({ kind: 'preset', location: packageName, active: true })),
     ...sources.filter(({ kind }) => kind !== 'manifest'),
   ]
@@ -254,6 +364,7 @@ export const loadHarnessConfig = (root: string): LoadConfigResult => {
     policy: policy.value,
     agents: agents.value,
     presets,
+    checks: checks.checks,
     sources: ordered,
   }
   return { ok: true, config }

@@ -1,10 +1,19 @@
+import {
+  defaultActionFor,
+  knownRule,
+  stricterAction,
+  stricterSeverity,
+} from '../config/rules.js'
 import type {
+  CheckDeclaration,
   CommandPolicy,
   CommandPolicyContext,
+  Finding,
   Policy,
   PolicyDecision,
   PolicyViolation,
   RuleAction,
+  Severity,
   ViolationMode,
 } from '../contracts/index.js'
 
@@ -18,6 +27,24 @@ export type { PolicyDecision, PolicyViolation, ViolationKind } from '../contract
 
 /** A policy always carries its disposition; absent means the strict default. */
 type Dispositioned = { onViolation?: ViolationMode }
+
+/** The part of a policy that answers "what happens to this severity". */
+type Disposed = { severityActions?: Partial<Record<Severity, RuleAction>> }
+
+/**
+ * Resolves the disposition of one severity.
+ *
+ * The default mapping is `error → reject`, `warning → review`, `info → report`.
+ * `severityActions` may override it, but only in the stricter direction: the
+ * clamp is applied here as well as in config validation, so an in-memory policy
+ * that was never validated cannot loosen a safety semantic either. See
+ * `docs/decisions/ADR-004-policy-severity-rules.md` §2.5.
+ */
+export const actionFor = (severity: Severity, policy: Disposed = {}): RuleAction => {
+  const fallback = defaultActionFor(severity)
+  const override = policy.severityActions?.[severity]
+  return override === undefined ? fallback : stricterAction(override, fallback)
+}
 
 /**
  * Applies the project's `onViolation` to a rule's disposition.
@@ -250,3 +277,77 @@ export const evaluateCommand = (
 /** Whether an agent may run a command. An empty allow list means "no restriction". */
 export const isCommandAllowed = (command: string, policy: CommandPolicy): boolean =>
   !policy.allowedAgentCommands?.length || policy.allowedAgentCommands.includes(command)
+
+/** The verdict for a set of findings, plus the rule ids nobody declares. */
+export interface FindingDecision extends PolicyDecision {
+  /**
+   * Rule ids that no implementation declares.
+   *
+   * A finding about an unknown rule cannot be disposed, and guessing a severity
+   * for it would invent the very semantics the rule was supposed to declare.
+   * Callers fail loudly on a non-empty list rather than dropping it.
+   */
+  unknown: string[]
+}
+
+/**
+ * The rule family of the evaluator: findings in, dispositions out.
+ *
+ * Three severities meet here and the strictest wins: the rule's declaration,
+ * the project's `policy.rules` override, and what the producer claimed. A
+ * finding is never allowed to loosen anything, and Policy never decides what was
+ * found — it only says how serious the finding is and what to do about it.
+ *
+ * `confirmed` names the rule ids a reviewer explicitly confirmed. A `review`
+ * disposition asks for exactly that confirmation: a warning nobody confirmed is
+ * not a pass. `checks` is the resolved rule set beyond the built-ins — a
+ * declared check makes its rule id judgeable, and omitting it means only the
+ * built-in rules exist. See `docs/architecture/governance.md` §5.2.
+ */
+export const evaluateFindings = (
+  findings: readonly Finding[],
+  policy: Policy,
+  confirmed: readonly string[] = [],
+  checks: readonly CheckDeclaration[] = [],
+): FindingDecision => {
+  const violations: PolicyViolation[] = []
+  const unknown: string[] = []
+
+  for (const finding of findings) {
+    const declaration = knownRule(finding.rule, checks)
+    if (declaration === null) {
+      if (!unknown.includes(finding.rule)) unknown.push(finding.rule)
+      continue
+    }
+
+    const setting = policy.rules?.[finding.rule]
+    let severity = stricterSeverity(declaration.severity, finding.severity)
+    if (setting?.severity !== undefined) severity = stricterSeverity(severity, setting.severity)
+    const configured = setting?.action ?? actionFor(severity, policy)
+    let action = stricterAction(configured, actionFor(severity, policy))
+    let reason = finding.reason
+
+    if (action === 'review' && !confirmed.includes(finding.rule)) {
+      // "Unconfirmed" is not a pass: the disposition asked a reviewer to look,
+      // and nobody did.
+      action = 'reject'
+      reason = `${reason} (unconfirmed: no reviewer confirmed this warning.)`
+    }
+
+    violations.push({
+      kind: 'rule',
+      rule: finding.rule,
+      target: finding.target,
+      severity,
+      action,
+      reason,
+      retryable: finding.retryable,
+    })
+  }
+
+  return {
+    allowed: unknown.length === 0 && violations.every(({ action }) => action !== 'reject'),
+    violations,
+    unknown,
+  }
+}

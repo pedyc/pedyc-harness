@@ -50,8 +50,11 @@ export const validateStageResponse = (name: AgentRole, payload: AgentPayload): s
     if (typeof payload.approved !== 'boolean') return 'tester must return a boolean approved field.'
     if (!Array.isArray(payload.evidence) || payload.evidence.length === 0) return 'tester must return non-empty evidence.'
   }
-  if (name === 'reviewer' && typeof payload.approved !== 'boolean') {
-    return 'reviewer must return a boolean approved field.'
+  if (name === 'reviewer' && typeof payload.approved !== 'boolean' && !Array.isArray(payload.findings)) {
+    // A reviewer answers either way: a boolean for a pre-1.3 adapter, or the
+    // structured findings this version actually dispositions. Requiring the
+    // boolean would keep the old shape mandatory in the new protocol.
+    return 'reviewer must return a findings array or a boolean approved field.'
   }
   return null
 }

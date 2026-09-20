@@ -82,24 +82,39 @@ export interface CommandPolicyContext extends CommandPolicy {
 }
 
 /**
+ * How a project overrides one declared rule's disposition.
+ *
+ * Both fields may only ever *tighten* what the rule declared: a project can
+ * raise `warning` to `error`, or `review` to `reject`, but it cannot lower a
+ * rule's severity or turn a rejection into a report. Safety semantics belong to
+ * the layer that declared them. See
+ * `docs/decisions/ADR-004-policy-severity-rules.md` §2.5.
+ */
+export interface RuleSetting {
+  severity?: Severity
+  action?: RuleAction
+}
+
+/**
  * A project's `.harness/policy.json`.
  *
  * The fields group into four jobs, which the documentation uses as its outline:
  * **scope** (`allowedProductPaths`, `protectedPaths`), **command constraints**
  * (`allowedAgentCommands`, `forbiddenCommands`), **execution constraints**
  * (`requiredChecks`, `maxIterations`, `agentTimeoutMs`, `maxChangedFiles`) and
- * **enforcement** (`onViolation`). The grouping is documentation, not structure:
- * the document stays flat so a field name never depends on which group it is in.
+ * **enforcement** (`onViolation`, `rules`, `severityActions`). The grouping is
+ * documentation, not structure: the document stays flat so a field name never
+ * depends on which group it is in.
  *
  * Only `allowedProductPaths` is required: `validatePolicy` rejects a policy
  * without it, and out-of-scope detection dereferences it directly. Every other
  * field stays optional because the document is untrusted JSON and callers fall
  * back to defaults.
  *
- * There is deliberately no rule-disposition table. Declaring one before a single
- * rule implementation exists would ship a field whose only legal value is empty
- * — the same "declared but nothing reads it" failure this milestone set out to
- * remove. See `docs/decisions/ADR-008-policy-scope-and-deferred-rule-disposition.md`.
+ * `rules` addresses rule ids that an implementation declares — built-in checks
+ * today, Preset-registered ones with M21. A key nobody declares is rejected
+ * rather than silently ignored, because an override for a rule that does not
+ * exist reads exactly like an enforced rule.
  */
 export interface Policy extends CommandPolicy {
   allowedProductPaths: string[]
@@ -116,4 +131,16 @@ export interface Policy extends CommandPolicy {
    */
   maxChangedFiles?: number
   onViolation?: ViolationMode
+  /** Per-rule severity and action overrides; tightening only. */
+  rules?: Record<string, RuleSetting>
+  /** Overrides the default `severity → action` mapping; tightening only. */
+  severityActions?: Partial<Record<Severity, RuleAction>>
+  /**
+   * The most semantic review calls this run may make.
+   *
+   * Absent means no budget. The *arithmetic* of cost (tokens, model choice,
+   * thresholds) belongs to `docs/tradeoffs/成本权衡.md`; what this bounds is the
+   * harness's own dispatch count, which is what makes running out observable.
+   */
+  maxSemanticCalls?: number
 }

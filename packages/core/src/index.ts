@@ -8,19 +8,29 @@ export type * from './contracts/index.js'
 export type { ConfigProblem, ManifestResult } from './config/index.js'
 export {
   agentProblems,
+  analyzerDeclarations,
+  analyzerTarget,
   asRecord,
+  builtInRules,
   compileSchema,
   configError,
   createAjv,
   createValidators,
+  defaultActionFor,
   defaultAgents,
   defaultPolicy,
+  effectiveRules,
   formatConfigError,
   harnessDirectory,
+  independenceOf,
+  isKnownAnalyzer,
+  isKnownRule,
+  knownRule,
   loadHarnessConfig,
   loadSchemas,
   manifestFile,
   manifestPath,
+  mergeChecks,
   policyProblems,
   presetDocument,
   presetFile,
@@ -29,11 +39,18 @@ export {
   readManifest,
   readSchema,
   resolvePresets,
+  stricterAction,
+  stricterSeverity,
   validateAgents,
   validatePolicy,
   validationDetails,
+  verificationProblems,
 } from './config/index.js'
 export type {
+  AnalyzerDeclaration,
+  CheckConflict,
+  CheckSource,
+  CollectedChecks,
   HarnessSchemas,
   HarnessValidators,
   PresetsResult,
@@ -55,16 +72,46 @@ export { parseAgentResponse, validateStageResponse } from './runtime/agent.js'
 export type { ParsedAgentResponse } from './runtime/agent.js'
 
 export {
+  analyzerEvidence,
+  claimedEvidence,
+  digest,
+  evidenceFromCommand,
+  isEvidence,
+  judgingEvidence,
+  mayJudge,
+  normalizeEvidence,
+  reviewEvidence,
+  skippedEvidence,
+  toVerificationCheck,
+  toVerificationChecks,
+  truncate,
+} from './runtime/evidence.js'
+export type { CommandEvidenceInput, SkippedEvidenceInput } from './runtime/evidence.js'
+
+export { builtInAnalyzers } from './runtime/analyzers.js'
+export type { Analyzer, AnalyzerContext, AnalyzerFact } from './runtime/analyzers.js'
+export { compareConstraint, runStructuralChecks } from './runtime/structural.js'
+export type { Comparison, StructuralOptions, StructuralOutcome } from './runtime/structural.js'
+export { planSemantic, ruleHits, semanticChecks, triggerFired } from './runtime/semantic.js'
+export type { SemanticCandidate, SemanticPlan, SemanticPlanOptions } from './runtime/semantic.js'
+
+export {
   describeFileViolations,
   evaluateChangeBudget,
   evaluateCommand,
   evaluateFiles,
+  evaluateFindings,
   findOutOfScopeChanges,
   isCommandAllowed,
   refusedFiles,
+  actionFor,
 } from './runtime/policy-engine.js'
-export type { PolicyDecision, PolicyViolation, ViolationKind } from './runtime/policy-engine.js'
-export { testerApproved, reviewerApproved } from './runtime/approval-gate.js'
+export type { FindingDecision, PolicyDecision, PolicyViolation, ViolationKind } from './runtime/policy-engine.js'
+export { findingVerdict, reviewerApproved, reviewerVerdict, testerApproved } from './runtime/approval-gate.js'
+export type { FindingVerdict } from './runtime/approval-gate.js'
+export { claimMismatches, confirmedRules, dedupeFindings, sanitizeEvidenceRefs } from './runtime/findings.js'
+export { judgeScope } from './runtime/scope.js'
+export type { ScopeJudgment } from './runtime/scope.js'
 
 export { createProviderRunner } from './runtime/provider-runner.js'
 export type { ProviderRunnerOptions } from './runtime/provider-runner.js'

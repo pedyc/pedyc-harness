@@ -4,17 +4,18 @@ import { normalizeTask, readTaskFile } from '@pedyc/harness-core/intake'
 import { detectPackageManager } from '@pedyc/harness-core/package-manager'
 import { runCommand } from '@pedyc/harness-core/command'
 import { changedFiles, snapshotFiles } from '@pedyc/harness-core/snapshots'
-import { formatConfigError, loadHarnessConfig } from '@pedyc/harness-core/config'
+import { formatConfigError, independenceOf, loadHarnessConfig } from '@pedyc/harness-core/config'
 import { loadSchemas, createValidators, validationDetails } from '@pedyc/harness-core/schema'
 import { createProviderRunner } from '@pedyc/harness-core/provider'
 import { runOrchestrator } from '@pedyc/harness-core/orchestrator'
 import { evaluateCommand } from '@pedyc/harness-core/policy'
+import { evidenceFromCommand, skippedEvidence } from '@pedyc/harness-core'
 import type {
+  Evidence,
   IntakeResult,
   NormalizedTask,
   PolicyViolation,
   RunResult,
-  VerificationCheck,
 } from '@pedyc/harness-core/contracts'
 
 // Exit codes from `docs/interfaces/cli.md` §8.
@@ -51,6 +52,11 @@ export const runHarness = async ({
   const outputPath = readArg('--output')
   const dryRun = hasFlag('--dry-run')
   const jsonOnly = hasFlag('--json')
+  // `--semantic=disabled` and `--semantic disabled` both read as the switch;
+  // anything else (including absence) leaves the layer enabled.
+  const semanticValue = argv.find((arg) => arg.startsWith('--semantic='))?.slice('--semantic='.length)
+    ?? readArg('--semantic')
+  const semantic = semanticValue === 'disabled' ? 'disabled' as const : 'enabled' as const
   const runId = new Date().toISOString().replaceAll(/[-:.TZ]/g, '').slice(0, 14)
   const runDirectory = join(root, '.harness', 'runs', runId)
 
@@ -65,7 +71,11 @@ export const runHarness = async ({
     summary: `Harness stopped during ${phase}.`,
     implementationPlan: [`Stop before implementation because the ${phase} phase failed.`],
     fileChanges: [],
+    // Nothing was observed, so nothing is claimed: a failure before execution
+    // has no evidence to record, only an issue.
+    evidence: [],
     verification: [{ command: `harness:${phase}`, result: 'fail', details: message }],
+    findings: [],
     violations: [],
     issues: [message],
     phases: [{ name: phase, status: 'failed', details: message }],
@@ -90,7 +100,7 @@ export const runHarness = async ({
     for (const error of loaded.errors) console.error(formatConfigError(error))
     return EXIT_CONFIG
   }
-  const { policy: checkedPolicy, agents } = loaded.config
+  const { policy: checkedPolicy, agents, checks } = loaded.config
 
   const validators = createValidators(loadSchemas(root))
 
@@ -158,34 +168,51 @@ export const runHarness = async ({
     runAgent,
     snapshot: () => snapshotFiles(root),
     changedFiles,
+    // Declared checks come from the resolved configuration, so a project's
+    // `policy.rules` and its `verification` documents describe the same rule set
+    // the run actually evaluates.
+    checks,
+    semantic,
+    independence: independenceOf(agents),
     runVerification: async () => {
-      const verification: VerificationCheck[] = []
-      for (const script of checkedPolicy.requiredChecks ?? []) {
+      const evidence: Evidence[] = []
+      for (const [index, script] of (checkedPolicy.requiredChecks ?? []).entries()) {
         const packageManager = detectPackageManager(root)
         const command = `${packageManager.command} ${packageManager.args.join(' ')} ${script}`.trim()
+        const id = `requiredChecks:${index + 1}:${script}`
         // A gate whose command the policy refuses is never started, so it cannot
         // have passed. `onViolation` decides whether the refusal also fails the
         // run; it never decides whether the command may run.
         const decision = evaluateCommand(packageManager.command, [...packageManager.args, script], checkedPolicy)
         if (!decision.allowed) {
           verificationViolations.push(...decision.violations)
-          verification.push({
+          evidence.push(skippedEvidence({
+            id,
+            source: 'requiredChecks',
+            name: script,
             command,
-            result: 'fail' as const,
-            details: decision.violations.map(({ reason }) => reason).join(' '),
-          })
+            packageManager: packageManager.name,
+            reason: decision.violations.map(({ reason }) => reason).join(' '),
+          }))
           continue
         }
+        const startedAt = new Date().toISOString()
+        const startedAtMs = Date.now()
         const commandResult = await runPackageScript(script)
-        verification.push({
+        evidence.push(evidenceFromCommand({
+          id,
+          source: 'requiredChecks',
+          name: script,
           command,
-          result: commandResult.code === 0 ? 'pass' as const : 'fail' as const,
-          details: commandResult.code === 0 ? 'Command completed successfully.' : commandResult.stderr.trim() || 'Command failed.',
-        })
+          packageManager: packageManager.name,
+          result: commandResult,
+          durationMs: Date.now() - startedAtMs,
+          startedAt,
+        }))
       }
-      return verification
+      return evidence
     },
-    writeVerification: (iteration, verification) => writeJson(join(runDirectory, `iteration-${iteration}-verification.json`), verification),
+    writeVerification: (iteration, evidence) => writeJson(join(runDirectory, `iteration-${iteration}-verification.json`), evidence),
   })
 
   const result: RunResult = {
@@ -196,6 +223,11 @@ export const runHarness = async ({
       : `Harness could not complete ${input.feature.trim()}.`,
     implementationPlan: orchestration.implementationPlan,
     fileChanges: orchestration.fileChanges,
+    scope: orchestration.scope,
+    evidence: orchestration.evidence,
+    findings: orchestration.findings,
+    semantic: orchestration.semantic,
+    independence: orchestration.independence,
     verification: orchestration.verification.length > 0
       ? orchestration.verification
       : [{

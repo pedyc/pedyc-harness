@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://pedyc.dev/harness/policy.schema.json",
   "title": "Harness policy",
-  "description": "The shape of .harness/policy.json. Fields group into four jobs — scope, command constraints, execution constraints and enforcement — which is a documentation outline rather than structure: the document stays flat so no field name depends on its group. Unknown keys are tolerated on purpose, because the runtime validator is permissive about fields it does not know and a schema that disagreed with it would be a second, silent definition. There is no rule-disposition table: declaring one before a rule implementation exists would ship a field whose only legal value is empty. See docs/decisions/ADR-008-policy-scope-and-deferred-rule-disposition.md.",
+  "description": "The shape of .harness/policy.json. Fields group into four jobs — scope, command constraints, execution constraints and enforcement — which is a documentation outline rather than structure: the document stays flat so no field name depends on its group. Unknown keys are tolerated on purpose, because the runtime validator is permissive about fields it does not know and a schema that disagreed with it would be a second, silent definition. `rules` and `severityActions` may only tighten a rule's declared severity and action; the no-loosening rule is enforced by validatePolicy, since JSON Schema cannot compare them. See docs/decisions/ADR-004-policy-severity-rules.md and docs/decisions/ADR-008-policy-scope-and-deferred-rule-disposition.md.",
   "type": "object",
   "required": ["allowedProductPaths", "maxIterations", "protectedPaths", "requiredChecks"],
   "properties": {
@@ -51,6 +51,33 @@
     "onViolation": {
       "description": "Enforcement. Whether a violation fails the run or is only recorded. Never weakens side-effect control.",
       "enum": ["fail", "report"]
+    },
+    "rules": {
+      "description": "Enforcement. Per-rule severity and action overrides, keyed by a rule id an implementation declares. A project may only tighten what the rule declared.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "severity": { "enum": ["error", "warning", "info"] },
+          "action": { "enum": ["reject", "review", "report"] }
+        }
+      }
+    },
+    "severityActions": {
+      "description": "Enforcement. Overrides the default severity-to-action mapping (error→reject, warning→review, info→report), tightening only.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "error": { "enum": ["reject", "review", "report"] },
+        "warning": { "enum": ["reject", "review", "report"] },
+        "info": { "enum": ["reject", "review", "report"] }
+      }
+    },
+    "maxSemanticCalls": {
+      "description": "Execution constraints. The most semantic review calls this run may make; absent means no budget. Running out skips warnings and fails closed on errors.",
+      "type": "integer",
+      "minimum": 1
     }
   }
 }
