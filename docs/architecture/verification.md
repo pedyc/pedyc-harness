@@ -40,13 +40,15 @@ flowchart TD
   A["Coder 返回"] --> B["Harness 快照比对<br/>← 范围检查的输入"]
   B --> C["逐个执行 requiredChecks<br/>← 串行,由探测到的包管理器执行"]
   C --> D["外部 tester 判定证据"]
-  D --> E["两条都通过 → Reviewer;否则回到 Coder 重试"]
-  E -.重试.-> A
+  D --> E["scope 判定 + 结构验证 + Reviewer"]
+  E --> F["语义层(按触发合批一次调用)"]
+  F --> G["Findings 按 severity → action 处置"]
+  G --> H["通过 → 结束;可修复 → 回 Coder 重试;否则终止"]
+  H -.重试.-> A
 ```
 
-> **目标(M8)** 目标形态在"逐个执行 requiredChecks"之后汇总 Evidence(含 Preset 注册的确定性
-> 分析器),并把 Reviewer 的输出从 `approved: boolean` 升级为 Findings 列表,由 Gate 按 Policy 的
-> `severity → action` 处置。
+Evidence 在 C 与 E 两处产生(命令闸门与确定性分析器),Reviewer 与语义层的产出是 Findings,
+处置统一由 Policy Evaluator 给出。
 
 ## 4. 验证的四种形态
 
@@ -59,9 +61,10 @@ flowchart TD
 | 启发式 | 可解释的分数 + 贡献项 | Harness | `analyzer-derived` | Level 1 |
 | 语义审查 | 需要理解意图 | Harness 调度,Provider 执行 | `review-derived` | Level 2 |
 
-**今天只有第一种。** `requiredChecks` 是包脚本名,由包管理器执行;退出码之外的事实——例如改动后的
-CSS 里 `animation-duration: 1s`——没有任何东西会去看。结构验证是 M8 的增量:分析器只产出事实,
-规则只做比较,两者可以由不同的包分别提供。
+**今天实现的是命令验证、结构验证与语义审查三类**(启发式没有引擎,声明它会被拒绝)。
+命令验证是 `requiredChecks` 的包脚本;结构验证由 `verification` 文档声明的约束与内置分析器
+(`css.duration`、`json.property`)完成;语义审查由 Harness 按触发条件合批一次调用,产出
+`review-derived` 的 Findings。
 
 术语纪律:**「语义」只指需要模型的那一类**。用 AST 读出属性值属于结构验证,不叫 semantic
 verification——否则它会与触发条件、预算和信任等级冲突。定义与判定链路见
@@ -69,21 +72,21 @@ verification——否则它会与触发条件、预算和信任等级冲突。�
 
 ## 5. 如何参与决策
 
-通过条件是两个**独立**条件的合取:
+通过条件是若干**独立**条件的合取:
 
 | 条件 | 由谁给出 |
 | -------------------------------- | -------------- |
 | 所有闸门的结果都是 `pass` | Harness 执行得出 |
 | 外部 tester 返回 `approved: true` | Agent 判定 |
+| 存在可判定的 Evidence | Harness 判定 |
+| 范围判定允许(无被拒文件) | Harness 判定(`judgeScope`) |
+| 没有 `reject` 处置的 Finding | Policy Evaluator |
 
-第二个条件不能替代第一个:Agent 认可一套全红的闸门也不会通过。反过来,闸门全绿但 tester 拒绝,
-同样不通过。两者缺一不可。
-
-一个容易忽略的推论:没有配置任何闸门时,「全部通过」是**空真**,因此 `requiredChecks` 为空等于
-验证形同虚设。
+任何一个条件都不能替代另一个:Agent 认可一套全红的闸门也不会通过;闸门全绿但越界同样不通过;
+没有证据时 Reviewer 不得批准。
 
 失败后的流程:回到 Coder 重试,上限为 `min(input.maxIterations, policy.maxIterations)`,缺省 3。
-Coder 会收到上一轮完整的闸门结果,这是失败原因回流给 Agent 的**唯一通道**。
+Coder 会收到上一轮完整的闸门结果与**结构化 Findings**,这是失败原因回流给 Agent 的两条通道。
 
 ## 6. 两个角色必须区分
 
@@ -95,25 +98,24 @@ Coder 会收到上一轮完整的闸门结果,这是失败原因回流给 Agent 
 把「执行」留给 Harness、把「认可」交给 Agent,是这套设计的核心:`approved` 可以被 Agent 影响,
 但闸门结果不能。
 
-> **目标(M8)** Reviewer 的目标输出是**结构化 Findings**(rule id、目标、级别、说明、是否可修复),
-> 而不是一句批准;它与 Coder 的**同源问题**(是否同一 Provider、同一模型)也需要可声明、可审计。
+Reviewer 的目标输出是**结构化 Findings**(rule id、目标、级别、说明、是否可修复),`approved`
+只作为兼容字段保留。它与 Coder 的**同源问题**(是否同一 Provider、同一模型)由
+`agents.json` 的 `source` 声明并写进 `RunResult.independence`——可审计,但今天不强制:
+所有阶段共用一个 provider 仍是合法配置。
 
-## 7. 证据当前记什么
+## 7. 证据记什么
 
-一条闸门的结果只有三个字段:可读命令、`pass`/`fail`、说明文本。落盘位置是
-`.harness/runs/<runId>/iteration-<n>-verification.json`。
+一条命令闸门的证据包含:可读命令、退出码、耗时、起止时间、stdout/stderr 的截断副本与覆盖全文的
+`sha256` 摘要、来源(`source`)与**信任等级**(`trust`)。结构验证的事实记为 `analyzer-derived`,
+语义审查的结论记为 `review-derived`,被检查方的自述记为 `agent-claimed`(只作线索,不参与判定)。
+落盘位置是 `.harness/runs/<runId>/iteration-<n>-verification.json`(该轮的 `Evidence[]`)与
+`output.json` 的 `evidence`。
 
-> **目标(M8)** 下列内容**未实现**:退出码的结构化记录、stdout 留存与截断策略、每条闸门的耗时与
-> 时间戳、统一的证据模型与持久化、证据的**信任等级**(`harness-executed` / `analyzer-derived` /
-> `review-derived` / `agent-claimed`),以及 Preset 注册的 Evidence Provider。
->
-> 因此当前只做到了**结果层面的独立执行**,尚未做到**过程层面的可复核**。这是本组件已知的最大缺口。
+运行级 `status` 仍由「编排是否完成」派生,不是由证据评估派生:也就是说 `passed` 表示流程走通了,
+不表示某一套证据被独立复核过。逐条判定在 `violations` / `findings` / `scope` 里。
 
-还有一处需要留意:运行级 `status` 由「编排是否完成」派生,不是由证据评估派生。也就是说
-`passed` 表示流程走通了,不表示某一套证据被独立复核过。
-
-> **目标(ADR-006)** 把「循环为什么停下」(`termination`)与「治理结论是什么」(`verdict`)从
-> `status` 里拆出来,见 [Governance Runtime 架构](./runtime.md)。
+> **目标(ADR-006)** 把「循环为什么停下」(`termination`)与「治理结论是什么」(`verdict`)进一步
+> 拆开,见 [Governance Runtime 架构](./runtime.md)。`termination` 已实现。
 
 ## 8. 失败模式
 
@@ -121,10 +123,12 @@ Coder 会收到上一轮完整的闸门结果,这是失败原因回流给 Agent 
 | -------------------- | -------------------------------------------------- |
 | 闸门脚本不存在 | 配置闸门失败,并列出缺失的脚本名 |
 | 闸门非零退出 | 该条记为 `fail`,说明取 stderr |
-| 结构验证发现约束不满足 | 产生 `analyzer-derived` 的 Finding,按 severity 处置(**目标 M8**) |
+| 结构验证发现约束不满足 | 产生 `analyzer-derived` 的 Finding,按 severity 处置 |
+| 声明的约束无法求值 | 报错并终止(`policy_violation`),不静默通过 |
+| 语义预算耗尽 | `warning` 记 `skipped`, `error` fail-closed |
 | 外部 tester 拒绝 | 即使闸门全绿也判定不通过 |
 | 超出重试上限 | 运行失败,记录「未在上限内通过验证」 |
-| 改动越界 | Reviewer 阶段判定不通过,即使 Agent 已批准 |
+| 改动越界 | 独立判定不通过,即使 Agent 已批准 |
 
 ## 9. 边界
 

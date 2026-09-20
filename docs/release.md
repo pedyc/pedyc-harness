@@ -41,10 +41,10 @@ Build、Test、Typecheck 与 Release 编排，不承载 Runtime。workspace 范�
 
 | Package | 版本 | `files` | `exports` 子路径数 |
 | ----------------------------- | ----- | -------------------------------------------------------------- | ----------------- |
-| `@pedyc/harness-core` | 1.2.0 | `dist`, `README.md` | 12 |
-| `pedyc-harness` | 1.2.0 | `dist`, `templates`, `README.md` | 2 |
-| `@pedyc/harness-preset-generic` | 1.2.0 | `preset.json`, `policy.json`, `agents.json`, `AGENTS.md`, `README.md` | 1(`./preset.json`) |
-| `@pedyc/harness-preset-vue` | 1.2.0 | 同上 | 1(`./preset.json`) |
+| `@pedyc/harness-core` | 1.3.0 | `dist`, `schemas`, `README.md` | 12 |
+| `pedyc-harness` | 1.3.0 | `dist`, `templates`, `README.md` | 2 |
+| `@pedyc/harness-preset-generic` | 1.3.0 | `preset.json`, `policy.json`, `agents.json`, `AGENTS.md`, `README.md` | 1(`./preset.json`) |
+| `@pedyc/harness-preset-vue` | 1.3.0 | 同上 | 1(`./preset.json`) |
 
 两个 Preset 包是**数据包**:它们不携带 `dist/`、`src/` 或任何 `scripts`,因此 `pnpm -r run build`
 不会构建它们。`release:check` 会断言这一点——一个仍然发布代码的预设会成为「什么是该预设」的第二份、
@@ -552,23 +552,24 @@ Four-package split
 Core / CLI / Preset separation
 Config Foundation / Preset System     (M15、M16)
 Declarative configuration layer       (1.2.0，M12)
+Policy enforcement + evidence chain   (1.3.0，M7、M8)
 ```
 
 M15、M16 与发布里程碑 M12 都已完成：配置入口、Preset 解析、文档收尾与 1.2.0 发布都已做完，第 10 节
-也已按「预设是数据包」的现状重写。迁移说明见[迁移到 1.2.0](./migrating-to-1.2.0.md)，编号依据见
-第 11 节的「未消费 API」例外，版本内容见[里程碑路线](./milestones/milestones.md) 的版本阶梯。
-**下一个发布是 1.3.0（治理执行）。**
+也已按「预设是数据包」的现状重写。M7 与 M8 已完成并进入 1.3.0：四个包的版本、CHANGELOG、
+[迁移到 1.3.0](./migrating-to-1.3.0.md) 与文档都已更新，**发布准备就绪，只差推送四个包到 npm**。
+编号依据见第 11 节，版本内容见[里程碑路线](./milestones/milestones.md) 的版本阶梯。
+**下一个发布后的里程碑是 M17（生效配置与审计），它属于 1.4.0。**
 
-当前阶段的 Release 重点不再是搭建 Release Infrastructure——第 6 节的闸门与 `release:check` 已经
-可用——而是：
+当前阶段的 Release 重点是：
 
 1. 保持四个 package 稳定独立构建；
 2. 保持 `exports` 公开面清晰、子路径名稳定；
-3. 让**策略真正可执行**：M7（Policy Enforcement）与 M8（独立验证与证据链）是当前工作，
-   它们决定声明出来的策略是否真的拦得住；
-4. 为 1.3.0 判定语义级别：`protectedPaths` / `forbiddenCommands` 从「声明但不管用」变成
-   「真的拦」属于「CLI 行为导致旧用法失效」，要判 MINOR 必须同时提供 `onViolation: report`
-   作为兼容退路；
+3. 让**治理真正生效并留下可复核的记录**：M7 与 M8 已交付，后续是 M9（统一 RunRecord）与
+   M17（字段级合并与 provenance）；
+4. 为 1.3.0 的语义级别留档：`protectedPaths` / `forbiddenCommands` 从「声明但不管用」变成
+   「真的拦」属于「CLI 行为导致旧用法失效」，本次按 MINOR 处理，兼容退路是 `onViolation: report`
+   与保留的 `RunResult.verification` 投影；
 5. 补齐第 18 节的敏感文件自动扫描。
 
 阶段划分、依赖关系与验收标准见 [里程碑路线](./milestones/milestones.md)。

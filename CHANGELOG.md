@@ -6,59 +6,75 @@
 所有 workspace 包共享同一个版本号，同步发布。升级规则见 [发布与版本规则](./docs/release.md)。
 
 
-## [Unreleased]
+## [1.3.0] - 2026-09-20
 
-> 目标版本 **1.3.0**（治理执行：M7 + M8）。本节目前只包含 M7（策略可执行）。发布时按
-> [发布与版本规则](./docs/release.md) 改为 `## [1.3.0] - <日期>`。
+治理执行：**声明出来的策略真的拦得住，验证结果真的可复核**（M7 + M8）。本版本按
+[发布与版本规则](./docs/release.md) §11 判为 **MINOR**，依据见下方 `Breaking Changes` 一节——
+行为会变，但 `onViolation: report` 提供了兼容退路。迁移步骤见
+[迁移到 1.3.0](./docs/migrating-to-1.3.0.md)。
 
 ### Added
 
-- **`forbiddenCommands` 真正生效。** 匹配对象是 `command + args` 经规范化后的 token 序列，
-  采用**有序 token 序列包含**语义：`npm publish` 会拦下 `npm publish --tag beta` 与
-  `sudo npm publish`，但不会拦下 `npm publish-notes`。可执行名取 basename 并去掉
-  `.cmd`/`.exe`/`.bat`。第一版不支持正则与任意子串匹配，也不解析引号内的 shell 字符串
-  （`sh -c "npm publish"` 不命中）——这是记录的边界，不是遗漏。
-- **`protectedPaths` 真正生效。** 命中受保护路径的改动会被拒绝，并单独报告为
-  `Protected files changed: …`，与 `allowedProductPaths` 的越界区分开。
-- **验证命令也过策略。** `requiredChecks` 的每条命令在执行前经过同一个 Policy Evaluator，
-  被拒绝的闸门不会被启动。
-- `onViolation: fail | report`（默认 `fail`）。
-- `agentTimeoutMs` 到期会终止该次 Provider 调用并记录 `timeout`；Ctrl+C 会被记录为
-  `cancelled`（CLI 把 SIGINT 接到取消管线上）。
-- `maxChangedFiles`：限制单次 Coder 迭代的改动文件数。
-- `RunResult` 新增 `violations`（本次运行产生的策略判定）与可选的 `termination`
-  （`completed` / `timeout` / `max_iterations` / `policy_violation` / `agent_error` /
-  `cancelled`）。
-- 新增 `schemas/policy.schema.json`：`.harness/policy.json` 的正式 Schema，随
-  `@pedyc/harness-core` 一起发布。
+- **结构化证据（`Evidence`）。** `iteration-<n>-verification.json` 与 `RunResult.evidence` 现在记录
+  命令、退出码、耗时、起止时间、stdout/stderr 的截断副本与覆盖全文的 `sha256` 摘要，以及
+  **来源与信任等级**：`harness-executed` / `analyzer-derived` / `review-derived` / `agent-claimed`。
+  被策略拒绝或因预算未执行的检查记为 `skipped` 并写明原因，而不是从记录里消失。
+- **结构化 Findings 与处置层。** Reviewer 可以返回 `findings`（`rule` / `target` / `severity` /
+  `reason` / `retryable` / `confidence` / `evidence`）；`policy.json` 新增 `rules` 与
+  `severityActions`，把 `severity → action` 的默认映射（`error → reject`、`warning → review`、
+  `info → report`）按项目需要**收紧**。可修复的 `reject` Finding 会带着 Finding 本身回流 Coder；
+  不可修复的直接终止；没人声明的 rule id 让运行以 `agent_error` 结束，而不是被静默丢弃。
+- **一致性检查。** Agent 声称改了某个文件、而本轮 diff 中不存在时，记一条
+  `change.claimed-file-missing`（`warning`、可修复）的 Finding，交给 Reviewer 确认。
+- **范围判定独立成步。** 越界与受保护路径命中由 `judgeScope` 独立执行并单独报告（`scope` 阶段 +
+  `RunResult.scope`），Reviewer 的裁定是另一项独立事实。
+- **结构验证。** `verification` 文档（`.harness/verification.json`，或 Preset 的 `verification`
+  路径）可以声明检查：分析器从改动后的文件提取事实（内置 `css.duration`、`json.property`），
+  规则只与声明好的约束比较（`<=` `>=` `<` `>` `==` `in` `not-in`）。分析器与规则解耦，事实记为
+  `analyzer-derived` 证据。
+- **语义检查由 Harness 调度。** `verification` 文档可以声明 `verification: 'semantic'` 的检查
+  （`prompt` 路径 + `trigger` + `severity` + 可选 `role`）。触发条件为规则命中（`rules` / `any`），
+  被触发的多条检查**按轮合批为一次调用**，走既有 Provider 协议；声明里没有模型、端点或凭证。
+- `policy.maxSemanticCalls`：语义调用预算。耗尽时 `warning` 记 `skipped`，`error` fail-closed。
+- `run --semantic=disabled`（等价 `--semantic disabled`）：显式禁用语义层，并在
+  `RunResult.semantic` 记录 `status: 'disabled'` 与被跳过的检查。
+- `RunResult` 新增可选的 `scope` / `evidence` / `findings` / `semantic` / `independence`：
+  范围判定、证据、规则原话、语义层状态，以及 Coder 与 Reviewer 的来源（同源关系可声明、可审计）。
+- `agents.json` 的每个 role 可以声明 `source`：命名该阶段背后的来源身份（而不只是 provider 命令），
+  使「Reviewer 是否与 Coder 同源」可以从运行记录里回答。
+- `@pedyc/harness-core` 新增导出：`evidenceFromCommand`、`analyzerEvidence`、`reviewEvidence`、
+  `judgingEvidence`、`normalizeEvidence`、`evaluateFindings`、`actionFor`、`findingVerdict`、
+  `judgeScope`、`runStructuralChecks`、`compareConstraint`、`planSemantic`、`mergeChecks`、
+  `verificationProblems`、`builtInRules`、`builtInAnalyzers`、`independenceOf` 与相关类型。
 
 ### Changed
 
-- **`policy.json` 的字段收敛为四类职责**（scope / command constraints / execution constraints /
-  enforcement），分组只是文档大纲，文档保持扁平。规则处置表（`rules`、`severityActions`）**没有**
-  随之发布：在第一个 rule 实现存在之前，它唯一合法的值是空对象，等于发布一个「声明了但没人读」的
-  字段。它推迟到 M8，与第一个 checker 同批落地。见
-  [ADR-008](./docs/decisions/ADR-008-policy-scope-and-deferred-rule-disposition.md)。
-- `.harness/harness.json` **不接受 `rules` 字段**：规则配置没有 manifest 级归属。该字段此前标注为
-  「无运行时消费」，因此没有项目依赖它。
-- `forbiddenCommands`、`allowedAgentCommands`、`onViolation`、`agentTimeoutMs`、
-  `maxChangedFiles` 现在做形状校验：非法值在配置阶段失败，而不是静默不生效。
-- `RunResult.termination` 在循环未运行时（dry-run、配置 / intake / schema 失败）不写。
-- 命令执行在 Windows 上停止进程时改为终止整棵进程树：只终止 shell 会让工作继续运行，并持有
-  输出管道使其永不关闭。
+- **Reviewer 现在返回 Findings，而不是一句批准。** `approved: boolean` 只作为兼容字段保留：缺省
+  视为「无异议」，显式 `false` 仍然拒绝。Reviewer 响应必须给出 `findings` 数组**或** `approved`。
+- **没有任何可判定的 Evidence 时 Reviewer 不得批准。** `requiredChecks` 为空的项目不再因为「空真」
+  而悄悄通过，运行会以 `agent_error` 结束并说明缺少证据。
+- `.harness/harness.json` 的 `verification` 字段与 Preset 的 `verification` 现在**被真正读取**：
+  它们是检查声明文档。多个来源按**并集**合并（每个 Preset 各自贡献），同名检查内容不同时报
+  `check_conflict`——「谁赢」属于 M17 的合成语义，今天不猜。
+- `@pedyc/harness-core` 的 `runOrchestrator` 的 `runVerification` 接受 `Evidence[]`，同时继续接受
+  1.2.0 的 `VerificationCheck[]`（自动升级为 `harness-executed` 证据，退出码由 `result` 推出）。
+- `RunResult.verification` 保留为 `Evidence` 的投影，既有消费者无需迁移。
 
 ### Breaking Changes
 
 - **声明了 `protectedPaths`、`forbiddenCommands` 或 `agentTimeoutMs` 的项目，行为会变。**
   这些字段此前只被 schema 接受、没有任何执行力；现在它们真的拦。按
   [发布与版本规则](./docs/release.md) §11，这属于「CLI 行为导致旧用法失效」。
+- **`requiredChecks` 为空的运行不再可能通过。** 没有证据时 Reviewer 不得批准，这是 M8 的验收项。
+  项目需要至少一条闸门。
 
-  唯一需要的动作：**如果你依赖的是「声明了但不管用」的旧行为，在 `policy.json` 里加上
+  需要的动作：**如果你依赖的是「声明了但不管用」的旧行为，在 `policy.json` 里加上
   `"onViolation": "report"`。** 它把违规降级为记录，不再让运行失败。请注意它**不**解除对
-  危险副作用的控制——被禁止的命令在任何模式下都不会被启动，只是不再据此把运行判失败。
+  危险副作用的控制——被禁止的命令在任何模式下都不会被启动，只是不再据此把运行判失败；
+  它也不改变「没有证据不得批准」。
 
-  `onViolation: report` 的存在是本次按 MINOR 判定的前提（release.md §11）；实际语义级别由
-  发布里程碑 M14 决定。
+  迁移步骤与逐项对照见[迁移到 1.3.0](./docs/migrating-to-1.3.0.md)。`onViolation: report`
+  的存在是本次按 MINOR 判定的前提（release.md §11）。
 
 
 ## [1.2.0] - 2026-09-17

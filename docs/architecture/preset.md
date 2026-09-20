@@ -415,13 +415,13 @@ Governance → Runtime` 的前三段已经实现,后两段(M17)没有。
 | Preset 继承 | **DAG:`extends` + 去重 + 环检测** | DAG + 拓扑序 |
 | Contract | 基础 | Preset Contract |
 | Policy | 预设提供一份 policy 文档 | Governance Policy |
-| Rules | `rules` 字段已声明,**无人消费** | 规则声明 + 默认严重级别 |
-| 规则种类 | 无 | `kind` → 合并语义 → 默认级别(ADR-007) |
-| 规则处置 | 无(判定只有通过/不通过) | severity → action 处置层(M7) |
-| Verification | 默认 Check | Domain Verification |
-| 结构验证 | 无(验证只有包脚本一种形态) | 分析器产出事实 + 约束比较(ADR-007、M8) |
-| Evidence | 无 | Preset 注册的确定性分析器(M21、M8) |
-| Review | 无(审查规范只能写在 `AGENTS.md` 里) | Preset 注册的审查定义与提示词(M21、M8) |
+| Rules | `rules` 字段已声明,**无人消费** | 规则声明 + 默认严重级别(M21 注册面) |
+| 规则种类 | `kind` 已进入契约与声明表 | `kind` → 合并语义 → 默认级别(ADR-007) |
+| 规则处置 | `severity → action` 处置层已实现 | `policy.rules` 收紧、`conflicts` 记录(M17) |
+| Verification | `verification` 文档已可声明检查 | Domain Verification |
+| 结构验证 | **已实现**:分析器产出事实 + 约束比较(ADR-007、M8) | Preset 提供分析器(M21) |
+| Evidence | **已实现**:命令与 `analyzer-derived` 事实都带信任等级 | Preset 注册的确定性分析器(M21) |
+| Review | **已实现**:Reviewer 返回 Findings,语义检查按触发合批调用 | Preset 注册的审查定义(M21) |
 | Agent Guidance | **预设的 instruction 文件**(`init` 据此播种 `AGENTS.md`) | Structured Guidance |
 | 配置入口 | **`.harness/harness.json`** | `harness.json` |
 | 合并语义 | 未定义——解析结果是有序列表,不是合并后的配置 | 字段级 Merge Strategy |

@@ -23,12 +23,36 @@
 
 ## 2. 记录类型
 
-整个验证面只有一个类型:
+判定所依据的**记录形态**是 `Evidence`(1.3.0 起,来源 `contracts/evidence.ts`):
+
+```ts
+type EvidenceTrust = 'harness-executed' | 'analyzer-derived' | 'review-derived' | 'agent-claimed'
+
+interface Evidence {
+  id: string
+  source: string            // requiredChecks、某个分析器 id,或 tester-claim
+  trust: EvidenceTrust
+  name?: string
+  command?: string          // 形如 `pnpm run build`
+  packageManager?: string
+  exitCode?: number
+  durationMs?: number
+  startedAt?: string
+  stdoutDigest?: string     // `sha256:<hex>`,覆盖未截断的全文
+  stderrDigest?: string
+  stdout?: string           // 截断保存,便于复核;digest 才是可比对的那份
+  stderr?: string
+  skipped?: boolean         // 未执行:被策略拒绝、被禁用或超出预算
+  details?: string
+}
+```
+
+`VerificationCheck` 是 1.2.0 的形状,现在只是 `Evidence` 的投影,由 `toVerificationCheck` 派生:
 
 ```ts
 interface VerificationCheck {
   command: string
-  result: 'pass' | 'fail'
+  result: 'pass' | 'fail'    // skipped 或非零退出码即 fail
   details: string
 }
 ```
@@ -36,40 +60,66 @@ interface VerificationCheck {
 | 字段 | 内容 |
 | --------- | -------------------------------------------------------------- |
 | `command` | 形如 `pnpm run build` 的可读命令串 |
-| `result` | 退出码为 0 时 `'pass'`,否则 `'fail'` |
-| `details` | 失败时取 stderr;成功时为固定文案 `Command completed successfully.` |
+| `result` | 真正执行且退出码为 0 时 `'pass'`,否则 `'fail'` |
+| `details` | 失败时取 stderr(被拒绝的检查取拒绝理由);成功时为固定文案 `Command completed successfully.` |
+
+字段可选**不是可编造**:没有执行的检查就没有退出码,分析器没有命令。给一个从未观察到的事实补一个值,
+正是让记录无法审计的原因。
+
+### 信任等级
+
+| 等级 | 产生者 | 是否参与判定 |
+| ------------------ | -------------------------------- | ------------ |
+| `harness-executed` | Harness 亲自执行(闸门、快照比对) | ✅ |
+| `analyzer-derived` | Harness 或 Preset 的确定性分析器  | ✅ |
+| `review-derived` | Harness 派发的语义审查(Provider 执行) | ✅ |
+| `agent-claimed` | 被检查方的自述(例如 Tester 复述自己看到的证据) | ❌ 只作线索 |
+
+`agent-claimed` 的证据会进入记录,但 `judgingEvidence` 会在判定前把它过滤掉,因此 Tester 自述
+「测试都通过了」不能把一条失败闸门变成通过。
 
 ## 3. 阶段通过条件
 
 两条判定都在 Harness 侧,不采信 Agent 的自我描述:
 
 ```ts
-testerApproved(verification, externalTest) =
-  verification.every((check) => check.result === 'pass')
+testerApproved(evidence, externalTest) =
+  judgingEvidence(evidence).every((item) => item.skipped !== true && item.exitCode === 0)
   && externalTest.ok
   && externalTest.payload.approved === true
 
-reviewerApproved(reviewer, refusedFiles) =
-  reviewer.ok
+reviewerVerdict(reviewer, evidence) =               // Reviewer 阶段自己的裁定
+  judgingEvidence(evidence).length > 0
+  && reviewer.ok
   && reviewer.payload?.approved === true
-  && refusedFiles.length === 0
+
+reviewerApproved(reviewer, refusedFiles, evidence) =  // 阶段裁定 + Harness 的范围判定
+  reviewerVerdict(reviewer, evidence) && refusedFiles.length === 0
+
+findingVerdict(evaluateFindings(findings, policy, confirmed)) =
+  { passed, blocking, retry }
 ```
 
-两个要点:
+四个要点:
 
 - **Tester 通过需要两个独立条件同时成立**:所有闸门真的通过,且外部 tester 认可它收到的证据。
-  没有闸门时 `every` 为 `true`,因此 `requiredChecks` 为空意味着验证形同虚设。
-- **范围检查由 Harness 执行**,不交给 Agent。即使 reviewer 批准,只要有越界文件就判定不通过。
-
-> **目标(M8)** 第二条判定扩展为 Findings:Finding 携带 rule id、目标、级别与是否可修复,Gate 按
-> Policy 的 `severity → action` 处置;**可修复**的 Findings 回 Coder,**不可修复**的终止,越界改动
-> 仍然不参与映射、直接终止。形状见 §8。
+  判据来自 `Evidence` 的退出码,不来自 Agent 复述的证据。
+- **没有任何可判定的 Evidence 时 Reviewer 不得批准**:一个没拿到证据的 Reviewer 没有什么可批准,
+  「Agent 说没问题」不是独立验证。这条在 `requiredChecks` 为空时也会触发,运行随即以
+  `agent_error` 结束并给出「no verification evidence」的说明。
+- **范围判定是 Harness 自己的一步,不是 Reviewer 裁定的一部分**:`judgeScope` 在 Reviewer 之前
+  执行并单独报告(`scope` 阶段记录与 `RunResult.scope`)。`reviewerVerdict` 只表达 Reviewer 自己的
+  裁定,`reviewerApproved` 才是两者的合取——记录因此能回答「是哪一项为假」。即使 reviewer 批准,
+  只要有越界文件,运行仍然不通过。
+- **Findings 由 Harness 处置**:`blocking` 是 `action: reject` 的那些;全部可修复则回 Coder 重试,
+  否则终止。Reviewer 的 `approved: true` 不能抵消一条 reject Finding。存在没人声明的 rule id 时
+  `passed` 为 `false` 且 `retry` 为 `false`,运行以 `agent_error` 结束。越界改动**从不**重试。
 
 ## 4. 重试
 
 Tester 未通过时回到 Coder,上限为 `min(input.maxIterations, policy.maxIterations)`,缺省 3。
-Coder 会收到上一轮完整的 `verification` 数组作为 `previousVerification`——这是失败原因回流给
-Agent 的唯一通道。
+Coder 会收到上一轮完整的 `verification` 数组作为 `previousVerification`,以及上一轮的结构化
+Findings 作为 `previousFindings`——两者都是失败原因回流给 Agent 的通道,后者不是自然语言总结。
 
 Planner、Coder、Reviewer 任一失败都会**直接终止**,不重试。
 
@@ -81,22 +131,26 @@ Planner、Coder、Reviewer 任一失败都会**直接终止**,不重试。
 | -------------------------------------- | ---------------------------- |
 | `input.json` | 编排开始前 |
 | `policy.json` | 编排开始前 |
-| `iteration-<n>-verification.json` | 每轮 Tester 之后 |
+| `iteration-<n>-verification.json` | 每轮 Tester 之后,内容是该轮的 `Evidence[]` |
 | `output.json` | 结束时的最终 `RunResult` |
 
 `runId` 由 ISO 时间戳去掉非数字字符后取前 14 位生成。
 
-## 6. 尚未记录的内容
+`iteration-<n>-verification.json` 现在保存结构化证据:每条含 `command`、`exitCode`、`durationMs`、
+`stdoutDigest` / `stderrDigest` 与 `trust`,`RunResult.evidence` 是同一份内容在最终结果里的副本。
 
-> **目标(M8)** 下列内容均**未实现**,`VerificationCheck` 里没有对应字段:
->
-> - 退出码的结构化记录(现在只折叠成 `pass`/`fail`)
-> - stdout 留存与截断策略
-> - 每条闸门的耗时与起止时间戳
-> - 统一的 `ValidationEvidence` 模型与证据持久化
+## 6. 已经记录的内容
 
-因此「Agent 的自我描述不是证据」这条原则在当前实现里只做到了**结果层面的独立执行**,尚未做到
-**过程层面的可复核**。
+1.3.0 起以下事实都随证据落盘,「Agent 的自我描述不是证据」因此不只停在结果层面,也能在过程层面复核:
+
+* 退出码(`exitCode`),不再只折叠成 `pass`/`fail`;
+* stdout / stderr 的截断副本与覆盖全文的 `sha256` 摘要;
+* 每条闸门的耗时(`durationMs`)与起始时间(`startedAt`);
+* 每条证据的来源与信任等级(`source` / `trust`);
+* 未执行的检查(`skipped`)与原因,而不是让它从记录里消失。
+
+Findings 的记录随 §8 一起落地(`RunResult.findings` 是规则实现说的话,`violations` 是它们的处置);
+仍然属于目标形态的是**语义审查的调度**(§9)与**结构验证**(§10)。
 
 ## 7. 另一条独立闸门:`verify` 命令
 
@@ -107,46 +161,32 @@ schema 是否齐全、JSON 是否可解析、`validatePolicy` 是否通过、`ag
 若项目存在 `.harness/verify.mjs`,则用它以 `--root <项目根>` 调用该脚本,并**透传其退出码**。
 这条钩子只在 `verify` 命令里执行,`run` 流程不会调用它。
 
-## 8. 目标(M8):Evidence 与 Finding
+## 8. Finding 与 ReviewResult(已实现)
 
-> **目标(M8)** 以下形状**尚未实现**,字段名以落地时的 Schema 为准。语义见
-> [治理流水线](../architecture/governance.md)与 [ADR-004](../decisions/ADR-004-policy-severity-rules.md)。
+来源:`contracts/finding.ts`、`runtime/findings.ts`、`runtime/policy-engine.ts`。
 
 ```ts
-type EvidenceTrust = 'harness-executed' | 'analyzer-derived' | 'review-derived' | 'agent-claimed'
 type Severity = 'error' | 'warning' | 'info'
 
-interface Evidence {
-  id: string
-  source: string            // 内置 checker 的 id,或 Preset 注册的 provider id
-  trust: EvidenceTrust
-  command?: string
-  exitCode?: number
-  durationMs?: number
-  stdoutDigest?: string
-  stderrDigest?: string
-  skipped?: boolean
-}
-
 interface Finding {
-  rule: string              // 对应 policy.rules 的 key
+  rule: string              // 必须由某个实现声明,否则运行失败
   target: string            // 例如某个文件
   severity: Severity
   reason: string
   retryable: boolean        // 由 Finding 自己声明,不由 Agent 事后解释
   confidence?: number       // 仅供排序与路由人工,不参与判定
-  evidence?: readonly string[]  // 必须能在本轮快照/diff 中找到,否则丢弃
+  evidence?: readonly string[]  // 不在本轮快照/diff 里的路径被丢弃
 }
 
 interface ReviewResult {
   findings: Finding[]
-  approved?: boolean        // 兼容当前形状;最终判定仍由 Harness 给出
+  approved?: boolean        // 兼容字段;最终判定仍由 Harness 给出
 }
 ```
 
-六条要点:
+要点:
 
-- 没有任何 Evidence 时 Reviewer **不得批准**;
+- 没有任何 Evidence 时 Reviewer **不得批准**(见 §3);
 - `agent-claimed` 只能作为线索进入上下文,**不参与判定**;`review-derived` 是 Harness 派发的观察,
   与被检查方的自述分开记录;
 - `warning` 需要 Reviewer 明确确认,未确认即不通过;`info` 只记录;
@@ -155,25 +195,28 @@ interface ReviewResult {
   "Agent claim ≠ Actual Change");
 - 越界改动与受保护路径命中**不参与** `severity → action` 映射,直接终止。
 
-## 9. 目标(M8):语义检查声明
+今天产生 Finding 的实现是 Harness 自己的一致性检查:Agent 声称改了某个文件、而本轮 diff 中不存在
+时,`change.claimed-file-missing` 记一条 `warning`、`retryable: true` 的 Finding,并把这条 Harness
+自己观察到的事实交给 Reviewer 确认。Reviewer 也可以在 `findings` 里报告自己的判断;两者的区别在
+记录里是 `source`/确认关系,而不是同一个字段的两种读法。Preset 注册的检查与语义审查仍属于 M21、
+M8 的后续工作项。
 
-> **目标(M8)** 以下形状**尚未实现**,字段名以落地时的 Schema 为准。语义与边界见
-> [ADR-005](../decisions/ADR-005-semantic-governance.md)。
+## 9. 语义检查声明与调度(已实现)
+
+来源:`contracts/rules.ts`(`CheckDeclaration` 的语义字段)、`config/checks.ts`、
+`runtime/semantic.ts`、`runtime/executor.ts`。
 
 ```ts
 type SemanticTrigger =
   | { kind: 'rules'; rules: readonly string[] }              // 规则命中即触发
-  | { kind: 'score'; threshold: number }                     // 分数阈值
   | { kind: 'any'; triggers: readonly SemanticTrigger[] }    // 任一命中
 
-interface SemanticVerification {
-  id: string
-  type: 'semantic'
-  prompt: string                  // 包内相对路径;提示词是数据,不是代码
+interface CheckDeclaration {
+  // ...§10 的字段...
+  verification: 'semantic'
+  prompt: string                  // 声明者目录内的相对路径;提示词是数据,不是代码
   trigger: SemanticTrigger
-  severity: Severity              // 默认级别,可被 policy.rules 覆盖
-  evidence?: readonly string[]    // 需要哪些 Evidence 作为输入
-  role?: string                   // 由哪个 Provider role 承接,默认 reviewer
+  role?: AgentRole                // 由哪个 Provider role 承接,默认 reviewer
 }
 ```
 
@@ -181,17 +224,23 @@ interface SemanticVerification {
 
 - 声明里**没有**模型、端点与凭证:调用由 Harness 调度,Preset 只表达需求;不新增独立的
   `LLMProvider` 注册表,而是复用既有 Provider role 与 stdin/stdout 协议。
-- `prompt` 是数据不是代码,因此可 diff、可审计、可被项目覆写。
-- 触发是 `规则命中 OR 分数阈值`:单一分数会漏检,把权重与阈值放进 Preset 会让它变成不可审计的
-  调参器。
-- 被触发的多条检查**按轮批量合成一次调用**;调用次数由触发决定,不由检查条数决定。
+- `prompt` 是数据不是代码,因此可 diff、可审计、可被项目覆写;它在配置阶段被读取并留在
+  `ResolvedCheck.promptText` 里,只能指向声明者自己的目录(预设包内,或 `.harness/`)。
+- 触发是 `规则命中`(`rules` 或 `any` 组合)。**`score` 触发在本构建里没有读者**:没有启发式引擎
+  产出可比较的分数,声明它会被配置校验拒绝,而不是被接受后永不触发。
+- 被触发的多条检查**按轮批量合成一次调用**(同一 role 一批);调用次数由触发决定,不由检查条数决定。
+  多个 role 各自一批,这是角色路由的代价,也是它唯一的例外。
 - `confidence` 与分数**不参与判定**,只用于排序与路由到人工。
-- 预算耗尽:`warning` 记 `skipped`,`error` fail-closed;`--semantic=disabled` 必须写入 Run Record。
+- 预算耗尽(`policy.maxSemanticCalls`):`warning` 记 `skipped` 并继续,`error` fail-closed;
+  `--semantic=disabled` 在 `RunResult.semantic` 里记录 `status: 'disabled'` 与被跳过的检查。
 
-## 10. 目标(M8):检查声明与可执行约束
+`RunResult.semantic` 即使什么都没做也会记录(`status: 'idle'`),因为「没有调用模型」与
+「这一层被关掉了」是两个不同的事实。语义调用的产出记为 `review-derived` 证据。
 
-> **目标(M8)** 以下形状**尚未实现**,字段名以落地时的 Schema 为准。语义与合并规则见
-> [ADR-007](../decisions/ADR-007-rule-kinds-and-constraints.md)。
+## 10. 检查声明与可执行约束(结构验证已实现)
+
+来源:`contracts/rules.ts`、`config/checks.ts`、`config/analyzers.ts`、`runtime/analyzers.ts`、
+`runtime/structural.ts`。
 
 ```ts
 type RuleKind = 'constraint' | 'preference' | 'instruction' | 'verification'
@@ -210,24 +259,39 @@ interface CheckDeclaration {
   kind: RuleKind
   verification: VerificationKind
   severity: Severity                // 默认级别,只能被 policy.rules 收紧
-  constraint?: Constraint           // 声明式约束;需要计算的检查改用 analyzer
-  analyzer?: string                 // 结构验证:分析器 id(内置或 Preset 注册)
-  command?: string                  // 命令验证:要执行的脚本名
+  constraint?: Constraint           // 声明式约束
+  analyzer?: string                 // 结构验证:分析器 id
 }
+```
+
+检查声明来自**并集**:每个预设的 `verification` 文档与项目自己的那份(`.harness/verification.json`
+或清单里的 `verification` 路径)相加,同名不同内容报 `check_conflict`。触发与执行在
+`runStructuralChecks`:
+
+```text
+改动后的文件 → 分析器(事实: css 的 animation-duration = 1s)
+             → 规则/声明(比较: <= 400ms)
+             → Finding(rule / target / severity / reason / retryable)
+             → Evidence(trust: analyzer-derived)
 ```
 
 要点:
 
 - **`kind` 决定合并语义**(`constraint` → deny-wins、`preference` / `instruction` → append、
-  `verification` → union),不由字段名决定;项目只能收紧 `severity`,不能改 `kind`。
-- **声明式约束有表达力上限**:它只能表达「取一个属性与一个值比较」。需要计算、跨文件推理或理解意图的
-  检查必须由 `analyzer` 实现,不能硬塞进 `constraint`。
-- **分析器与规则解耦**:分析器只产出事实(`duration = 1s`),规则只做比较,两者可以由不同的包提供;
-  因此第三方可以只发布分析器(纯计算、无网络),见
-  [ADR-003](../decisions/ADR-003-preset-as-code.md)。
+  `verification` → union),不由字段名决定;项目只能收紧 `severity`,不能改 `kind`。今天实现的是
+  `verification` 的并集;deny-wins 与 `conflicts` 属于 M17。
+- **声明式约束有表达力上限**:它只能表达「取一个属性与一个值比较」。超出上限的形状在配置校验阶段
+  被拒(`operator` 与 `value` 形状不匹配、`structural` 检查没有 `constraint` 或 `analyzer`、
+  分析器 id 不存在、约束的 `target` 与分析器产出的种类不一致);运行期还会拒绝**无法比较**的取值
+  (例如把 `1s` 与 `400px` 比大小)—— 报错并终止,绝不静默通过。
+- **分析器与规则解耦**:分析器只产出事实(`animation-duration = 1s`),声明只做比较,两者由不同的
+  模块提供,引擎只认 id;因此第三方可以只发布分析器(纯计算、无网络),见
+  [ADR-003](../decisions/ADR-003-preset-as-code.md)。本构建内置 `css.duration` 与 `json.property`
+  两个分析器,`config/analyzers.ts` 是它们唯一的声明表。
+- **属性不存在不算违规**:约束说的是「这个属性必须满足 X」,不是「这个属性必须存在」。
 - **「语义」只指 `verification: 'semantic'`**;用 AST 提取属性值属于 `structural`,不是 semantic。
-- 同一个 rule id 的冲突按 `安全语义优先 → 同 kind 按层级 → 仍未定则记入 conflicts` 判定,
-  **记录不可省略**。
+  本构建尚未实现 heuristic / semantic / command 三类声明的执行器,声明它们会被明确拒绝而不是被
+  接受后不做任何事。
 
 ## 11. 相关文档
 

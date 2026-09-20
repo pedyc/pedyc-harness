@@ -10,6 +10,7 @@
 ## 开始
 
 * [从零接入 Harness](./getting-started.md) — 端到端走查:接入、选预设、声明配置、跑一次
+* [迁移到 1.3.0](./migrating-to-1.3.0.md) — 治理真正生效后的行为变化、`onViolation: report` 退路与新的可选能力
 * [迁移到 1.2.0](./migrating-to-1.2.0.md) — 从「只有 policy.json」迁移到 `harness.json`,以及不迁移时的行为
 
 ## 规范

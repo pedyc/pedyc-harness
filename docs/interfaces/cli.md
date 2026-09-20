@@ -45,6 +45,10 @@
 | `--root <dir>` | 当前目录 | 项目根 |
 | `--dry-run` | 关 | 只做预览 |
 | `--json` | 关 | 结果写入 stdout |
+| `--semantic <mode>` | `enabled` | `disabled` 显式关闭语义层,并写入 `RunResult.semantic`;也接受 `--semantic=disabled` |
+
+`--semantic=disabled` 不会让语义层「静默不跑」:运行记录里 `semantic.status` 为 `disabled`,
+且列出因此被跳过的检查。除 `disabled` 以外的取值一律视为 `enabled`。
 
 输入解析优先级:**`--task` > `--prompt` > `--input`**。`--task` 指向的文件不存在即失败;既无
 `--task` 也无 `--prompt`、且 `--input` 不存在时同样失败。第一个不带 `-` 的参数也可作为 input 路径。
